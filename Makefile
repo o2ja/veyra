@@ -5,6 +5,13 @@ include .env
 export
 endif
 
+# Windows: `python3` is usually the Microsoft Store stub. Override with `make env PYTHON=...`.
+ifeq ($(OS),Windows_NT)
+PYTHON ?= python
+else
+PYTHON ?= python3
+endif
+
 COMPOSE := docker compose --env-file .env -f infra/docker/compose.dev.yml
 API_RUN := $(COMPOSE) run --rm --no-deps -T -e POSTGRES_PASSWORD -e REBATE_OWNER_PASSWORD -e REBATE_APP_PASSWORD api
 FE_RUN := $(COMPOSE) run --rm --no-deps -T frontend
@@ -14,7 +21,7 @@ OWNER_URL := postgresql+psycopg://rebate_owner:$$REBATE_OWNER_PASSWORD@postgres:
 .PHONY: env up down db-init migrate test test-backend test-frontend test-isolation lint gen-client check-client
 
 env: ## create .env with generated local-only secrets (refuses to overwrite)
-	python3 infra/scripts/make-env.py
+	$(PYTHON) infra/scripts/make-env.py
 
 up: ## start postgres, mailpit, api, frontend (clamav: `--profile s2`, from S2)
 	$(COMPOSE) up -d --wait postgres
