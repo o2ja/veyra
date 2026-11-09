@@ -54,7 +54,7 @@ Prerequisites: Docker with Compose, GNU make, a POSIX shell (on Windows use Git 
 
 ```bash
 make env        # creates .env with random local-only secrets (edit POSTGRES_HOST_PORT if 5432 is taken)
-make up         # postgres, mailpit, api (:8000), frontend (:5173)
+make up         # postgres (+ db-init), mailpit, api (:8000), frontend (:5173)
 make db-init    # roles, database, extensions (idempotent)
 make migrate    # alembic upgrade head as rebate_owner
 make test       # backend (fresh rebate_test DB) + frontend tests

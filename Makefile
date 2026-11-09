@@ -17,6 +17,8 @@ env: ## create .env with generated local-only secrets (refuses to overwrite)
 	python3 infra/scripts/make-env.py
 
 up: ## start postgres, mailpit, api, frontend (clamav: `--profile s2`, from S2)
+	$(COMPOSE) up -d --wait postgres
+	$(MAKE) db-init # api's startup role check needs rebate_app to exist
 	$(COMPOSE) up -d --build --wait
 
 down:
