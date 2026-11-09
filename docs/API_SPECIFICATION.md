@@ -44,7 +44,8 @@ All errors:
 | 404 | `not_found` (also returned for other tenants' resources) |
 | 405 | `method_not_allowed` |
 | 409 | `conflict`, `already_claimed`, `idempotency_conflict`, `version_overlap`, `run_in_progress`, `invalid_state` |
-| 410 | `invitation_expired` |
+| 410 | `invitation_expired`, `link_expired` (verify/reset/email-change links: expired, used or unknown; one generic answer) |
+| 412 | `precondition_failed` (`If-Match` mismatch, §4) |
 | 413 | `payload_too_large` |
 | 422 | `validation_error`, `password_too_common` |
 | 423 | `account_locked` |

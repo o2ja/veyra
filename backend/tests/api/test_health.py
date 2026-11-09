@@ -13,12 +13,18 @@ from rebate.api.app import create_app
 from rebate.core.config import Settings
 from rebate.core.db import UnsafeDatabaseRole
 from tests.conftest import DbUrls
+from tests.support import make_settings
 
 SECRET = SecretStr("x" * 40)
 
 
 def _app(url: str, env: str = "ci") -> FastAPI:
-    return create_app(Settings(app_env=env, secret_key=SECRET, database_url=SecretStr(url)))
+    if env == "production":
+        # In S1 a production Settings object cannot be validated at all: the temporary email sender
+        # refuses non-local environments (K-9). Build it unvalidated only to test docs exposure.
+        valid = make_settings(url)
+        return create_app(Settings.model_construct(**{**valid.model_dump(), "app_env": "production"}))
+    return create_app(make_settings(url, app_env=env))
 
 
 @pytest.fixture
@@ -91,7 +97,7 @@ def test_request_log_is_json_with_request_id_and_no_query(
     lines = [json.loads(line) for line in capsys.readouterr().out.splitlines() if line.startswith("{")]
     entry = next(e for e in lines if e.get("event") == "request")
     assert entry["request_id"] == r.headers["X-Request-Id"]
-    assert entry["path"] == "/api/v1/health/live"
+    assert entry["route"] == "/api/v1/health/live"
     assert entry["status"] == 200
     assert "should-not-be-logged" not in json.dumps(lines)
 

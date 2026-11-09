@@ -1,12 +1,11 @@
 """422 envelope for invalid bodies, and money floats rejected at the HTTP boundary."""
 
 from fastapi.testclient import TestClient
-from pydantic import BaseModel, ConfigDict, SecretStr
+from pydantic import BaseModel, ConfigDict
 
-from rebate.api.app import create_app
-from rebate.core.config import Settings
 from rebate.core.money import Money
 from tests.conftest import DbUrls
+from tests.support import make_app
 
 
 class _Body(BaseModel):
@@ -15,9 +14,7 @@ class _Body(BaseModel):
 
 
 def test_invalid_body_returns_validation_envelope(migrated_db: DbUrls) -> None:
-    app = create_app(
-        Settings(app_env="ci", secret_key=SecretStr("x" * 40), database_url=SecretStr(migrated_db.app))
-    )
+    app = make_app(migrated_db.app)
 
     def echo(body: _Body) -> _Body:
         return body

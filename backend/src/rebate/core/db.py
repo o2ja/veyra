@@ -34,16 +34,38 @@ def make_engine(url: str) -> Engine:
     return create_engine(url, pool_pre_ping=True)
 
 
+def set_tenant(session: Session, tenant_id: UUID | None) -> None:
+    """Set (or clear) ``app.tenant_id`` for the rest of the current transaction only (SET LOCAL)."""
+    session.execute(
+        text("SELECT set_config('app.tenant_id', :tenant_id, true)"),
+        {"tenant_id": "" if tenant_id is None else str(tenant_id)},
+    )
+
+
+def current_tenant(session: Session) -> UUID | None:
+    value = session.execute(text("SELECT NULLIF(current_setting('app.tenant_id', true), '')")).scalar_one()
+    return None if value is None else UUID(str(value))
+
+
 @contextmanager
 def transaction(engine: Engine, tenant_id: UUID | None = None) -> Iterator[Session]:
     """One transaction. ``app.tenant_id`` is set with SET LOCAL semantics, so it never outlives it."""
     with Session(engine) as session, session.begin():
         if tenant_id is not None:
-            session.execute(
-                text("SELECT set_config('app.tenant_id', :tenant_id, true)"),
-                {"tenant_id": str(tenant_id)},
-            )
+            set_tenant(session, tenant_id)
         yield session
+
+
+@contextmanager
+def tenant_scope(session: Session, tenant_id: UUID) -> Iterator[None]:
+    """Temporarily act in another tenant inside the same transaction, then restore the previous one.
+    Used only for the sanctioned cross-tenant writes (per-membership auth audit rows, D-7)."""
+    previous = current_tenant(session)
+    set_tenant(session, tenant_id)
+    try:
+        yield
+    finally:
+        set_tenant(session, previous)
 
 
 _ROLE_CHECK = text(

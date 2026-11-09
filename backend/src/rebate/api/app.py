@@ -12,15 +12,21 @@ from fastapi.responses import JSONResponse
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from rebate.api import health
+from rebate.api.deps import RequestContextDep
+from rebate.api.paths import API_PREFIX, route_template
 from rebate.core.config import Settings, get_settings
 from rebate.core.db import assert_safe_role, make_engine
 from rebate.core.errors import DomainError, error_body
 from rebate.core.ids import new_id
 from rebate.core.logging import configure_logging
+from rebate.modules import audit, identity, tenancy
 
 log = structlog.get_logger("rebate.api")
 
-API_PREFIX = "/api/v1"
+# Every API router, in one place: the route-access meta-test walks exactly these.
+MODULE_ROUTERS = (identity.router, tenancy.router, audit.router)
+PUBLIC_ROUTERS = (health.router,)
+
 _HTTP_CODES = {404: "not_found", 405: "method_not_allowed", 413: "payload_too_large"}
 
 
@@ -42,21 +48,34 @@ async def _request_context(request: Request, call_next: Callable[[Request], Awai
             error_body("internal_error", "An unexpected error occurred.", request_id), 500
         )
     response.headers["X-Request-Id"] = request_id
+    _security_headers(request, response)
     log.info(
         "request",
         method=request.method,
-        path=request.url.path,  # path only: no query strings in logs
+        # route template, never the raw path: paths may carry ids, and must never carry tokens
+        route=route_template(request),
         status=response.status_code,
         latency_ms=round((time.perf_counter() - started) * 1000, 1),
     )
     return response
 
 
+def _security_headers(request: Request, response: Response) -> None:
+    """API responses (API_SPECIFICATION.md §5, SECURITY.md §6). CSP/HSTS for the SPA are set by Caddy."""
+    h = response.headers
+    h.setdefault("X-Content-Type-Options", "nosniff")
+    h.setdefault("Referrer-Policy", "strict-origin-when-cross-origin")
+    h.setdefault("X-Frame-Options", "DENY")
+    h.setdefault("Cache-Control", "no-store")
+    if not request.url.path.startswith(f"{API_PREFIX}/docs"):
+        h.setdefault("Content-Security-Policy", "default-src 'none'; frame-ancestors 'none'")
+
+
 def _register_error_handlers(app: FastAPI) -> None:
     @app.exception_handler(DomainError)
     async def domain_error(request: Request, exc: DomainError) -> JSONResponse:
         body = error_body(exc.code, exc.message, _request_id(request), exc.details)
-        return JSONResponse(body, exc.status_code)
+        return JSONResponse(body, exc.status_code, headers=exc.headers or None)
 
     @app.exception_handler(RequestValidationError)
     async def validation_error(request: Request, exc: RequestValidationError) -> JSONResponse:
@@ -101,7 +120,10 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         lifespan=lifespan,
     )
     app.state.engine = engine
+    app.state.settings = settings
     app.middleware("http")(_request_context)
     _register_error_handlers(app)
     app.include_router(health.router, prefix=API_PREFIX)
+    for router in MODULE_ROUTERS:
+        app.include_router(router, prefix=API_PREFIX, dependencies=[RequestContextDep])
     return app

@@ -8,8 +8,14 @@ from pydantic import ValidationError
 from rebate.core import clock
 from rebate.core.config import Settings
 from rebate.core.ids import new_id
+from tests.support import TEST_KEYS
 
-VALID = {"APP_ENV": "ci", "SECRET_KEY": "k" * 40, "DATABASE_URL": "postgresql+psycopg://a@b/c"}
+VALID = {
+    "APP_ENV": "ci",
+    "SECRET_KEY": "k" * 40,
+    "DATABASE_URL": "postgresql+psycopg://a@b/c",
+    "ENCRYPTION_KEYS": TEST_KEYS,
+}
 
 
 @pytest.fixture

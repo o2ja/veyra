@@ -28,7 +28,12 @@ jobs:
         ports: ["5432:5432"]
         options: >-
           --health-cmd "pg_isready -U postgres" --health-interval 2s --health-timeout 3s --health-retries 30
+      mailpit:  # integration tests check email delivery through Mailpit's API (S1, K-9)
+        image: axllent/mailpit:v1.33.1@sha256:aef2aacc11f075ec0fb6874275ee4a421e688e11a96ebb296134d1735c7761ce
+        ports: ["1025:1025", "8025:8025"]
     env:
+      TEST_MAILPIT_URL: http://localhost:8025
+      TEST_SMTP_HOST: localhost
       PGHOST: localhost
       PGUSER: postgres
       PGPASSWORD: ci-postgres

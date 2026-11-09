@@ -2,14 +2,15 @@
 
 from typing import Literal
 
-from fastapi import APIRouter, Request
+from fastapi import APIRouter, Depends, Request
 from pydantic import BaseModel
 from sqlalchemy import text
 from sqlalchemy.exc import SQLAlchemyError
 
+from rebate.core.access import public
 from rebate.core.errors import Unavailable
 
-router = APIRouter(prefix="/health", tags=["health"])
+router = APIRouter(prefix="/health", tags=["health"], dependencies=[Depends(public())])
 
 
 class HealthStatus(BaseModel):
