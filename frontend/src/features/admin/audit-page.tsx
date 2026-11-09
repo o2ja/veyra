@@ -106,7 +106,16 @@ export function AuditPage() {
                 <tr key={r.id} className="border-t border-line align-top">
                   <td className="py-2 whitespace-nowrap">{r.occurred_at.replace("T", " ").slice(0, 19)}</td>
                   <td className="font-mono">{r.action}</td>
-                  <td className="font-mono text-xs">{r.actor_user_id ?? r.actor_type}</td>
+                  <td className="text-xs">
+                    {r.actor_name ? (
+                      <>
+                        {r.actor_name}
+                        <span className="block text-muted">{r.actor_email}</span>
+                      </>
+                    ) : (
+                      r.actor_type
+                    )}
+                  </td>
                   <td>{r.entity_type}</td>
                   <td className="text-xs">{changes(r.before, r.after)}</td>
                 </tr>

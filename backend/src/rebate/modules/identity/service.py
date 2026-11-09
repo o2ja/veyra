@@ -611,3 +611,11 @@ def change_member(
     if view is None:
         raise NotFound()
     return view
+
+
+def actor_labels(db: Session, user_ids: set[UUID]) -> dict[UUID, tuple[str, str]]:
+    """(full_name, email) for audit display. Callers pass ids taken from their own tenant's audit rows."""
+    if not user_ids:
+        return {}
+    rows = db.execute(select(User.id, User.full_name, User.email).where(User.id.in_(user_ids)))
+    return {r.id: (r.full_name, r.email) for r in rows}

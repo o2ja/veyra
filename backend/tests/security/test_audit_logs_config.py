@@ -153,7 +153,7 @@ def test_permission_denials_are_audited_and_rate_limited(app: FastAPI, api: Api)
 
 
 def test_audit_search_filters_and_pagination(api: Api) -> None:
-    full_admin(api, unique_email("search"))
+    admin = full_admin(api, unique_email("search"))
     first = api.get("/audit-log", params={"limit": 2}).json()
     assert len(first["data"]) == 2 and first["page"]["has_more"] is True
     second = api.get("/audit-log", params={"limit": 2, "cursor": first["page"]["next_cursor"]}).json()
@@ -162,6 +162,7 @@ def test_audit_search_filters_and_pagination(api: Api) -> None:
     assert api.get("/audit-log", params={"cursor": "%%%"}).status_code == 422
     created = api.get("/audit-log", params={"action": "tenant.created"}).json()["data"]
     assert len(created) == 1 and created[0]["entity_type"] == "tenant"
+    assert (created[0]["actor_email"], created[0]["actor_name"]) == (admin.email, "Test User")
 
 
 def test_secrets_never_reach_the_logs(

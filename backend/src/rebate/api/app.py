@@ -121,6 +121,8 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     )
     app.state.engine = engine
     app.state.settings = settings
+    # audit cannot import identity (identity -> audit); the API layer wires the lookup in
+    app.state.actor_labels = identity.actor_labels
     app.middleware("http")(_request_context)
     _register_error_handlers(app)
     app.include_router(health.router, prefix=API_PREFIX)

@@ -497,6 +497,10 @@ export interface components {
         AuditEntry: {
             /** Action */
             action: string;
+            /** Actor Email */
+            actor_email: string | null;
+            /** Actor Name */
+            actor_name: string | null;
             /** Actor Type */
             actor_type: string;
             /** Actor User Id */
