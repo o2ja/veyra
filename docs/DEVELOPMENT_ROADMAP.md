@@ -42,7 +42,7 @@ flowchart TD
 - **Infra:** Docker Compose dev stack, Dockerfiles, Makefile, `.env.example`, pre-commit.
 - **Dependencies:** none.
 - **Testing:** smoke tests; migration from empty; lint gates; schema-lint tests (float ban, RLS meta-test scaffolding).
-- **Definition of Done:** `make up && make migrate && make test` passes on a clean machine; CI green; `import-linter` fails on a deliberate violation; docs `README.md` run instructions verified.
+- **Definition of Done:** `make up && make db-init && make migrate && make test` passes on a clean machine; CI green; `import-linter` fails on a deliberate violation; docs `README.md` run instructions verified.
 
 ### S1 Identity, tenancy, RBAC, audit — size L
 - **Objectives:** secure multi-tenant foundation (FR-ID-*, FR-AU-*, NFR-03).

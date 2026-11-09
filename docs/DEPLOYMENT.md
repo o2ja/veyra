@@ -16,21 +16,21 @@ Real customer data never exists in `local`, `ci`, or `staging`.
 ## 2. Local development
 
 ### 2.1 Prerequisites
-Docker + Docker Compose; Python 3.12+ with `uv`; Node 20 LTS+ with npm/pnpm. (A native PostgreSQL 16 install is acceptable instead of the container: use the same `init-db.sh` against it.)
+Docker + Docker Compose; GNU make and a POSIX shell (on Windows: Git Bash); Python 3.14 with `uv`; Node 24 LTS with npm (ADR-027). Tests and tools run inside the `api`/`frontend` containers, so local Python/Node are only needed for editor tooling. (A native PostgreSQL 16+ install is acceptable instead of the container: use the same `init-db.sh` against it.)
 
 ### 2.2 Services (`infra/docker/compose.dev.yml`)
 
 | Service | Image | Ports (host) | Purpose |
 |---|---|---|---|
-| `postgres` | `postgres:16` | 5432 | Database (volume `pgdata`) |
-| `minio` | `minio/minio` | 9000/9001 | S3-compatible storage |
-| `clamav` | `clamav/clamav` | 3310 | Malware scanning |
-| `mailpit` | `axllent/mailpit` | 1025/8025 | Local SMTP + inbox UI |
+| `postgres` | `postgres:16.15` (pinned by digest) | `${POSTGRES_HOST_PORT:-5432}` | Database (volume `pgdata`). Host port is configurable for machines that already run Postgres |
+| `minio` | **Not in the stack yet**: `minio/minio` is no longer publicly pullable (`PROJECT_STATUS.md` K-6). Decide the image before S2 | 9000/9001 | S3-compatible storage |
+| `clamav` | `clamav/clamav:1.4.6` (digest); Compose profile `s2`, not started by default until S2 | 3310 | Malware scanning |
+| `mailpit` | `axllent/mailpit:v1.33.1` (digest) | 1025/8025 | Local SMTP + inbox UI |
 | `api` | built from `backend/` | 8000 | FastAPI (reload in dev) |
-| `worker` | built from `backend/` | — | Job worker |
+| `worker` | built from `backend/`; **added in S2** with the job queue | — | Job worker |
 | `frontend` | built from `frontend/` | 5173 | Vite dev server (proxy `/api` → `api`) |
 
-Convenience commands (`Makefile` or `justfile`): `make up`, `make down`, `make db-init`, `make migrate`, `make seed-synthetic`, `make test`, `make test-isolation`, `make lint`, `make e2e`, `make gen-client`.
+Convenience commands (`Makefile`): `make env`, `make up`, `make down`, `make db-init`, `make migrate`, `make test`, `make test-isolation`, `make lint`, `make gen-client`, `make check-client`. Later stages add `make seed-synthetic` and `make e2e`. All dev ports bind to `127.0.0.1` only.
 
 ### 2.3 Database setup from scratch
 
@@ -68,7 +68,7 @@ The frontend receives only public build-time config (`VITE_API_BASE=/api/v1`); n
 
 ### 2.5 Docker images
 
-- `backend/Dockerfile`: multi-stage (builder with `uv` → slim runtime), non-root user, read-only root filesystem where possible, no build tools in the final image, healthcheck on `/api/v1/health/live`, pinned base image by digest. One image runs as `api` (`gunicorn -k uvicorn.workers.UvicornWorker`) or `worker` (`python -m rebate.workers`) by command.
+- `backend/Dockerfile`: multi-stage (builder with `uv` → slim runtime), non-root user, read-only root filesystem where possible, no build tools in the final image, healthcheck on `/api/v1/health/live`, pinned base image by digest. Targets: `dev` (all deps, source bind-mounted) and `runtime`. One image runs as `api` (`gunicorn -k uvicorn.workers.UvicornWorker`) or `worker` (`python -m rebate.workers`) by command.
 - OCR tooling (Tesseract/OCRmyPDF) is included in the **worker** image only.
 - `frontend/Dockerfile`: build stage (`npm ci && npm run build`) → static files copied into the Caddy image (or served from a volume).
 

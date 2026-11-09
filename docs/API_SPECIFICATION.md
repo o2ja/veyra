@@ -42,6 +42,7 @@ All errors:
 | 401 | `unauthenticated`, `session_expired`, `mfa_required` |
 | 403 | `forbidden`, `csrf_failed`, `four_eyes_violation` |
 | 404 | `not_found` (also returned for other tenants' resources) |
+| 405 | `method_not_allowed` |
 | 409 | `conflict`, `already_claimed`, `idempotency_conflict`, `version_overlap`, `run_in_progress`, `invalid_state` |
 | 410 | `invitation_expired` |
 | 413 | `payload_too_large` |
@@ -214,7 +215,7 @@ Legend: **R** = roles allowed (A admin, P approver, N analyst, V viewer). Writes
 | `GET /jobs/{id}` | Job status/progress/result | creator, A |
 | `GET /jobs?status=failed` | Failed/dead jobs | A |
 | `POST /jobs/{id}/retry` | Retry failed job | A |
-| `GET /health/live`, `GET /health/ready` | Unauthenticated; no sensitive data | — |
+| `GET /health/live`, `GET /health/ready` (full path `/api/v1/health/*`) | Unauthenticated; no sensitive data. `ready` checks the database (503 `unavailable` when down) | — |
 
 ## 3. Representative payloads
 

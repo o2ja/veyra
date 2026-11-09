@@ -75,7 +75,7 @@ Status labels used in docs: **APPROVED**, **PROPOSED** (awaiting owner), **ASSUM
 
 ## 6. Technology (approved; see `TECH_STACK.md`)
 
-Backend: Python 3.12+, FastAPI (sync handlers), SQLAlchemy 2.0 + psycopg 3, Alembic, Pydantic v2, Procrastinate (pending S2 spike), structlog. Frontend: React 18, TypeScript, Vite, React Router, TanStack Query/Table, React Hook Form + Zod, Tailwind + Radix, generated OpenAPI client. Tooling: uv, ruff, mypy, pytest, hypothesis, Vitest, Playwright, import-linter, bandit, pip-audit, gitleaks.
+Backend: Python 3.14 (one version locally, in Docker and CI; ADR-027), FastAPI (sync handlers), SQLAlchemy 2.x + psycopg 3, Alembic, Pydantic v2, Procrastinate (pending S2 spike), structlog. Frontend: React 18, TypeScript, Vite, React Router, TanStack Query/Table, React Hook Form + Zod, Tailwind + Radix, generated OpenAPI client. Tooling: uv, ruff, mypy, pytest, hypothesis, Vitest, Playwright, import-linter, bandit, pip-audit, gitleaks.
 
 Not approved (ask first): BaaS, microservices/Kubernetes, Redis/Kafka/RabbitMQ, GraphQL, Next.js, Redux, JWT in localStorage, NoSQL for financial data, PyMuPDF (AGPL), LLM-computed numbers, a rules scripting DSL, floats for money, `create_all`.
 
@@ -87,21 +87,22 @@ Not approved (ask first): BaaS, microservices/Kubernetes, Redis/Kafka/RabbitMQ, 
 ├─ docs/                      all design docs (source of truth)
 ├─ testdata/                  synthetic generator, verifier, generated files, ground truth
 ├─ backend/
-│  ├─ pyproject.toml  importlinter.ini
+│  ├─ pyproject.toml  uv.lock  alembic.ini  importlinter.ini  Dockerfile
 │  ├─ migrations/             Alembic (owner role)
 │  ├─ src/rebate/
-│  │  ├─ core/                config, db, errors, ids, money, clock, jobs, logging
+│  │  ├─ core/                config, db, errors, ids, money, clock, logging (jobs from S2)
 │  │  ├─ api/                 app factory, deps, middleware, router registry
 │  │  ├─ modules/<name>/      models, schemas, repository, service, policies, router, jobs
 │  │  └─ workers/             worker entrypoint
 │  ├─ src/rebate_engine/      pure calculation package
 │  ├─ src/rebate_matching/    pure matching package
-│  └─ tests/                  unit, integration, isolation, engine_golden, e2e-api
-├─ frontend/src/              features/<name>, components, api (generated), lib
-├─ infra/                     docker, caddy, scripts, runbooks
+│  └─ tests/                  unit, integration, api, db, isolation, engine_golden, extraction, security, performance
+├─ frontend/                  src/ (app, features/<name>, components, api (generated), lib), e2e/
+├─ infra/                     docker (compose.dev.yml), caddy, scripts, runbooks
+├─ Makefile  .env.example  .pre-commit-config.yaml
 └─ .github/workflows/
 ```
-Modules: `identity, tenancy, audit, files, masterdata, ingestion, agreements, extraction, claims, remittance, recovery, reporting, notifications`.
+Modules (authoritative list: `docs/ARCHITECTURE.md` §3): `identity, tenancy, audit, files, masterdata, ingestion, agreements, extraction, claims, reconciliation, recovery, reporting`. Remittance tables belong to `reconciliation`; notifications to `recovery`. Test-folder layout: `ARCHITECTURE.md` §2.
 
 ## 8. Naming conventions
 
@@ -134,6 +135,7 @@ Modules: `identity, tenancy, audit, files, masterdata, ingestion, agreements, ex
 ## 11. Database and migration rules
 
 - Alembic only; never `create_all`, never manual DDL outside migrations.
+- **Exception (tests only):** a test may run DDL solely inside a transaction that is always rolled back, in a scratch schema (never `public`), to prove that schema lints and migration helpers detect or enforce what they claim.
 - Every tenant table: `tenant_id`, `UNIQUE (tenant_id, id)`, composite FKs, RLS enabled and forced, policy via the shared helper. The schema-lint tests enforce this.
 - Invariants in constraints/triggers, not only in code. Frozen data has immutability triggers.
 - Destructive migrations need a note in the kickoff report and owner approval.

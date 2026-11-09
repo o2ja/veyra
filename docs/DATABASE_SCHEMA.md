@@ -34,12 +34,12 @@ RLS pattern applied to **every** tenant table by the helper `enable_tenant_rls('
 ALTER TABLE t ENABLE ROW LEVEL SECURITY;
 ALTER TABLE t FORCE ROW LEVEL SECURITY;
 CREATE POLICY tenant_isolation ON t
-  USING      (tenant_id = current_setting('app.tenant_id', true)::uuid)
-  WITH CHECK (tenant_id = current_setting('app.tenant_id', true)::uuid);
+  USING      (tenant_id = NULLIF(current_setting('app.tenant_id', true), '')::uuid)
+  WITH CHECK (tenant_id = NULLIF(current_setting('app.tenant_id', true), '')::uuid);
 ```
 
-- `app.tenant_id` is set with `SET LOCAL` at the start of each transaction (`core/db.py`). If unset, `current_setting(..., true)` is NULL and no rows match (fail closed).
-- `tenants` policy: `id = current_setting('app.tenant_id', true)::uuid`.
+- `app.tenant_id` is set with `SET LOCAL` semantics (`set_config(..., true)`) at the start of each transaction (`core/db.py`). If unset, `current_setting(..., true)` is NULL, or `''` once the session has used the setting before; `NULLIF` turns both into NULL, so no rows match (fail closed, no error).
+- `tenants` policy: the same expression on `id` (`enable_tenant_rls('tenants', column='id')`).
 - Global tables (no RLS): `users`, `sessions`, `user_tokens`, `mfa_recovery_codes`, `reason_codes` (reference list), Procrastinate tables.
 - Pre-tenant lookups (login → list my workspaces) use `SECURITY DEFINER` functions owned by `rebate_owner` (`fn_user_memberships(user_id)`), which return only that user's rows.
 - A CI test asserts every table with a `tenant_id` column has RLS enabled and forced, and has `UNIQUE (tenant_id, id)`.
@@ -301,7 +301,8 @@ Expected: 1–10M sales lines/year/tenant. Indexes lead with `tenant_id`. Partit
 - Alembic in `backend/migrations`, one revision per logical change, human-readable `message`, never edited after merge to a shared branch.
 - Revision naming: `YYYYMMDD_HHMM_<slug>`. A `downgrade` is **optional** and only written when safe; production is forward-only (restore from backup is the rollback).
 - Expand → migrate → contract for breaking changes (add nullable column, backfill, switch code, then constrain/drop in a later release).
-- Helpers in `migrations/_rls.py` (enable RLS), `_immutable.py` (create immutability trigger), `_audit.py`.
+- Helpers in `migrations/_rls.py` (enable RLS), `_immutable.py` (append-only trigger via `fn_forbid_mutation()` plus revoking UPDATE/DELETE/TRUNCATE from `rebate_app`), `_audit.py` (added in S1 with `audit_log`).
 - CI: (1) `alembic upgrade head` on empty DB; (2) schema-drift check (`alembic check` / compare metadata); (3) lint: no float types, every tenant table has RLS + composite unique, every FK between tenant tables is composite; (4) migration on a seeded realistic dataset from `testdata/`.
+- Extensions (`btree_gist`, `pg_trgm`, `citext`) are created by `init-db.sh` **and** by the baseline migration (`IF NOT EXISTS`; all three are trusted extensions), so migrations also work on managed Postgres.
 - Seed data (reference `reason_codes`, roles) is applied by migrations (idempotent), not by app startup.
 - Local DB: created from scratch by `infra/scripts/init-db.sh` (creates roles, database, extensions) followed by `alembic upgrade head`. See `DEPLOYMENT.md`.

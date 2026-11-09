@@ -9,7 +9,7 @@
 |---|---|---|
 | Architecture | Modular monolith, two runtime processes (API, worker) from one codebase | Strong consistency, one deployable, enforceable boundaries |
 | Backend language/framework | Python 3.12+, FastAPI | Decimal math, document parsing, matching, LLM SDKs, typed API with OpenAPI |
-| ORM / migrations | SQLAlchemy 2.0 (sync) + psycopg 3, Alembic | Explicit SQL control, Postgres features |
+| ORM / migrations | SQLAlchemy 2.x (sync) + psycopg 3, Alembic | Explicit SQL control, Postgres features |
 | Validation | Pydantic v2 | Request/response models, rules schema, AI output schema |
 | Database | PostgreSQL 16+ | System of record, constraints, RLS, job queue |
 | Job queue | Procrastinate (Postgres-backed) | Transactional enqueue, no extra infrastructure |
@@ -24,10 +24,10 @@
 
 | Technology | Purpose | Notes / constraints |
 |---|---|---|
-| Python 3.12+ | Runtime | `Decimal` is the money type |
+| Python 3.14 (single version everywhere; ADR-027) | Runtime | `Decimal` is the money type |
 | FastAPI | HTTP API | **Sync route handlers** (threadpool). OpenAPI generated and consumed by the frontend client |
 | Uvicorn (+ Gunicorn workers in prod) | ASGI server | |
-| SQLAlchemy 2.0, `psycopg[binary]` 3 | ORM/Core | Sync engine. Use Core/SQL for bulk loads (`COPY`, `INSERT … ON CONFLICT`) |
+| SQLAlchemy 2.x, `psycopg[binary]` 3 | ORM/Core | Sync engine. Use Core/SQL for bulk loads (`COPY`, `INSERT … ON CONFLICT`) |
 | Alembic | Migrations | Forward-only in shared environments |
 | Pydantic v2, pydantic-settings | Schemas and config | Strict mode for money fields |
 | Procrastinate | Job queue and periodic tasks | Uses Postgres `LISTEN/NOTIFY` and `FOR UPDATE SKIP LOCKED`. Spike in S2; fallback is a minimal in-house `SKIP LOCKED` queue (ADR-005) |
@@ -71,7 +71,7 @@ Not approved: MySQL, MongoDB or any document store for financial data, SQLite (e
 |---|---|
 | React 18 + TypeScript (strict) | UI |
 | Vite | Build/dev server |
-| React Router | Routing |
+| React Router 7 (library/data mode only; no framework mode or SSR) | Routing |
 | TanStack Query | Server state, caching, polling jobs |
 | TanStack Table (+ `@tanstack/react-virtual`) | Data grids with large row counts |
 | React Hook Form + Zod | Forms and client-side validation (never a substitute for server validation) |

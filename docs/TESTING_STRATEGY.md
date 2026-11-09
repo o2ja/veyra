@@ -143,4 +143,4 @@ Targets (NFR-04, to be confirmed with evidence): 1M-line import < 30 min; calcul
 
 ## 12. CI pipeline (summary)
 
-`lint → type-check → unit → db/integration → api → isolation → golden → frontend unit → build images → e2e (PR labelled or main) → security scans`. Failing any gate blocks merge. Coverage and test counts are published as CI artefacts. Details in `DEPLOYMENT.md` §CI/CD.
+`lint → type-check → unit → db/integration → api → isolation → golden → frontend unit → build images → e2e (PR labelled or main) → security scans`. Failing any gate blocks merge. **Skipped tests fail CI** (`infra/scripts/check-no-skips.py` over the JUnit reports). Coverage and test counts are published as CI artefacts. Details in `DEPLOYMENT.md` §CI/CD.

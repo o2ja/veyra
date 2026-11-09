@@ -8,7 +8,7 @@
 | ADR-001 | Modular monolith, two processes | Accepted |
 | ADR-002 | Python 3.12 + FastAPI backend | Accepted |
 | ADR-003 | PostgreSQL as the only datastore (+ object storage) | Accepted |
-| ADR-004 | SQLAlchemy 2.0 sync + psycopg 3 | Accepted |
+| ADR-004 | SQLAlchemy 2.x sync + psycopg 3 | Accepted |
 | ADR-005 | Postgres-backed job queue (Procrastinate) | Accepted (spike in S2) |
 | ADR-006 | Multi-tenancy: shared schema, composite FKs, RLS | Accepted |
 | ADR-007 | Server-side sessions, TOTP MFA | Accepted |
@@ -31,6 +31,7 @@
 | ADR-024 | Single currency (USD) in Release 1 | Accepted (assumption A-08) |
 | ADR-025 | Time and date handling | Accepted |
 | ADR-026 | Audit log design and sealing | Accepted |
+| ADR-027 | Toolchain versions (S0) | Accepted |
 
 ---
 
@@ -54,7 +55,7 @@
 - **Alternatives:** MySQL (weaker constraints, no range exclusion/RLS), document stores (no integrity).
 - **Consequences:** One system to back up and reason about. Caching/queue needs are met by Postgres until measured otherwise (new ADR required to add Redis).
 
-## ADR-004 SQLAlchemy 2.0 sync + psycopg 3
+## ADR-004 SQLAlchemy 2.x sync + psycopg 3
 - **Context:** Tenant context is set per transaction (`SET LOCAL`); batch work dominates; simplicity matters.
 - **Decision:** Sync SQLAlchemy with psycopg 3; FastAPI sync handlers (threadpool). Bulk loads via Core/`COPY`.
 - **Alternatives:** Async SQLAlchemy + asyncpg: more concurrency per process, but more footguns (lazy loading, session scoping, mixing with CPU-bound parsing).
@@ -178,3 +179,9 @@
 - **Decision:** Inline append-only inserts in the same transaction as the change; per-tenant monotonic `seq`; periodic `audit_seal` job chains entries (`entry_hash = H(prev_hash || canonical_entry)`), written to a separate `audit_seals` table. App role has INSERT/SELECT only; triggers reject UPDATE/DELETE.
 - **Alternatives:** Inline hashing (serialises writes per tenant); external immutable store (later).
 - **Consequences:** Low write contention; tamper-evidence with a small delay.
+
+## ADR-027 Toolchain versions (S0)
+- **Context:** S0 pins the toolchain. The owner asked for one Python version across local, Docker and CI, verified against every planned dependency (S0 kickoff approval, 2026-11-09).
+- **Decision:** Python **3.14** (image `python:3.14.10-slim-trixie`, CI 3.14.10, local 3.14.x). All planned dependencies, including later-stage ones (procrastinate, scipy, rapidfuzz, pdfplumber, pypdfium2, ocrmypdf, boto3, clamd, python-magic, python-calamine, openpyxl, XlsxWriter, argon2-cffi, pyotp, sentry-sdk, anthropic), install on 3.14; every compiled one publishes CPython 3.14 or abi3 manylinux x86_64 wheels. `python-magic` needs the system libmagic, which only the Linux image has; it does not load on a bare Windows host (irrelevant: workers run in Linux). Node **24 LTS** (24.22.1) with npm. TypeScript **5.9** (TypeScript 7 is current, but `typescript-eslint` and `openapi-typescript` do not support it yet). React **18** (ADR-016). React Router **7** in library/data mode. Tailwind **4**. `uv` 0.13.7. Exact pins: `backend/pyproject.toml` + `uv.lock`, `frontend/package.json` + `package-lock.json`, Dockerfiles and Compose (by digest), `.github/workflows/ci.yml`.
+- **Alternatives:** Python 3.13 (the fallback if any dependency had failed on 3.14; none did). TypeScript 7 (blocked by tooling).
+- **Consequences:** Re-verify wheels before adding a compiled dependency. Revisit TypeScript when the lint/codegen tools support 7.

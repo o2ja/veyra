@@ -6,9 +6,9 @@
 
 | Item | State |
 |---|---|
-| Phase | **Documentation complete, awaiting owner review and approval** |
-| Current stage | None started. Next stage: **S0 Foundation and tooling** (needs kickoff report and owner approval) |
-| Application code | **None written** (by instruction) |
+| Phase | **Release 1 build** |
+| Current stage | **S0 Foundation and tooling: in progress** (kickoff approved 2026-11-09). Blocked on a Windows reboot to activate WSL2/Docker for the Compose-based acceptance checks |
+| Application code | S0 skeleton: backend core + baseline migration, frontend shell, CI, Compose, Makefile (see §3) |
 | Synthetic test data | Generated and self-checked (`testdata/`) |
 
 ## 2. Completed
@@ -21,7 +21,7 @@
 
 ## 3. In progress
 
-Nothing. Waiting for owner review of the documentation.
+S0. Done and tested: backend core, health endpoints, init-db, baseline migration and helpers, schema lint, import contracts, frontend shell, gitleaks planted-secret check (tests run against a scratch PostgreSQL 17 cluster; CI uses 16.15). Not yet verified: Compose stack, Dockerfiles, Makefile targets, CI on GitHub, README clean-checkout run, SPA-through-proxy in a browser.
 
 ## 4. Pending
 
@@ -46,6 +46,8 @@ Stages S0–S11 per `DEVELOPMENT_ROADMAP.md` / `IMPLEMENTATION_PLAN.md`. Release
 | K-3 | Market sizing, pricing and cost figures in the docs are estimates, not verified | Business planning only | Validate with customer interviews |
 | K-4 | Procrastinate suitability for sync handlers and tenant context is unproven | Job system choice | S2 spike; fallback in ADR-005 |
 | K-5 | Legal/commercial review (terms, DPA, data retention) not done | Needed before a paid pilot | Owner to engage counsel |
+| K-6 | `minio/minio` images are no longer publicly pullable (Docker Hub: not found; quay.io: 401) | No local S3 service until resolved | Owner decision on the local S3-compatible image before S2 |
+| K-7 | Starlette deprecates `httpx` for `TestClient` (warning; suggests `httpx2`) | Test-only warning | Swap the test dependency when convenient |
 
 ## 7. Risks being watched
 
@@ -58,7 +60,7 @@ Top items only; full list in the analysis and `SECURITY.md` §12.
 
 | Stage | Kickoff approved | Completed | Owner sign-off | Notes |
 |---|---|---|---|---|
-| S0 | – | – | – | Not started |
+| S0 | 2026-11-09 | – | – | In progress |
 | S1–S11 | – | – | – | Not started |
 
 ## 9. Change log
@@ -67,3 +69,4 @@ Top items only; full list in the analysis and `SECURITY.md` §12.
 |---|---|
 | 2026-11-09 | Initial documentation package produced |
 | 2026-11-09 | Product named "Veyra Recover", company "Veyra AI" (README, CLAUDE.md, PROJECT_OVERVIEW) |
+| 2026-11-09 | S0 kickoff approved; doc corrections C-1..C-15 applied (CLAUDE.md, roadmap, schema, API, deployment, tech stack, testing); ADR-027 toolchain versions |
