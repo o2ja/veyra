@@ -4,7 +4,7 @@
 
 Multi-tenant SaaS that helps distributors find, claim and recover money owed by manufacturers: SPA / ship-and-debit claims, volume rebates, remittance reconciliation and a recovery queue. Calculations are deterministic and traceable; AI only assists with reading documents and never decides eligibility or amounts.
 
-> **Status:** documentation complete and awaiting owner approval. **No application code exists yet.** See `docs/PROJECT_STATUS.md`.
+> **Status:** Stage S0 (foundation and tooling) in progress. See `docs/PROJECT_STATUS.md`.
 
 ## Start here
 
@@ -47,6 +47,24 @@ All files in `testdata/generated/` are **fabricated** and labelled as such.
 python3 -I testdata/verify_business_logic_examples.py     # independent check of the worked examples
 python3 -I testdata/generate.py --volume 2000 [--out DIR] # regenerate (needs openpyxl, reportlab)
 ```
+
+## Run it locally
+
+Prerequisites: Docker with Compose, GNU make, a POSIX shell (on Windows use Git Bash), Python 3.14 with `uv`, Node 24 LTS (details: `docs/DEPLOYMENT.md` §2). Tests and tools run inside the containers.
+
+```bash
+make env        # creates .env with random local-only secrets (edit POSTGRES_HOST_PORT if 5432 is taken)
+make up         # postgres, mailpit, api (:8000), frontend (:5173)
+make db-init    # roles, database, extensions (idempotent)
+make migrate    # alembic upgrade head as rebate_owner
+make test       # backend (fresh rebate_test DB) + frontend tests
+make lint       # ruff, mypy, import-linter, bandit, pip-audit, ESLint, tsc, npm audit, gitleaks
+```
+
+Open http://localhost:5173: the shell shows "API: live" once the API answers through the Vite proxy.
+`uv run --directory backend pre-commit install` enables the ruff and gitleaks hooks.
+
+> These instructions are **not yet verified on a clean checkout** (S0.6 is pending Docker on the development machine). CI (`.github/workflows/ci.yml`) runs the same gates on every push to `main` and every pull request.
 
 ## How development will run
 

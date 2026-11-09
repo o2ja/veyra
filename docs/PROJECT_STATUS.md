@@ -21,7 +21,7 @@
 
 ## 3. In progress
 
-S0. Done and tested: backend core, health endpoints, init-db, baseline migration and helpers, schema lint, import contracts, frontend shell, gitleaks planted-secret check (tests run against a scratch PostgreSQL 17 cluster; CI uses 16.15). Not yet verified: Compose stack, Dockerfiles, Makefile targets, CI on GitHub, README clean-checkout run, SPA-through-proxy in a browser.
+S0. Done and tested: backend core, health endpoints, init-db, baseline migration and helpers, schema lint, import contracts, frontend shell, gitleaks planted-secret check (tests run against a scratch PostgreSQL 17 cluster; CI uses 16.15). CI on GitHub (`o2ja/veyra`, private) is green on `main`: backend, frontend, api-contract (client drift), secrets (gitleaks), images (runtime image non-root, Caddyfile valid). A probe PR proved CI fails on a skipped test. Deferred by the owner until later: local Docker (WSL2 reboot), hence not yet verified locally: `make up/db-init/migrate/test/lint`, SPA-through-proxy in a browser, README clean-checkout run.
 
 ## 4. Pending
 
@@ -48,6 +48,7 @@ Stages S0–S11 per `DEVELOPMENT_ROADMAP.md` / `IMPLEMENTATION_PLAN.md`. Release
 | K-5 | Legal/commercial review (terms, DPA, data retention) not done | Needed before a paid pilot | Owner to engage counsel |
 | K-6 | `minio/minio` images are no longer publicly pullable (Docker Hub: not found; quay.io: 401) | No local S3 service until resolved | Owner decision on the local S3-compatible image before S2 |
 | K-7 | Starlette deprecates `httpx` for `TestClient` (warning; suggests `httpx2`) | Test-only warning | Swap the test dependency when convenient |
+| K-8 | `minimatch` 10.x advisory GHSA-g3hv-75wg-m249 in ESLint tooling (dev only) | None at runtime | npm `overrides` pins minimatch 11.0.5; remove the override once ESLint ships it |
 
 ## 7. Risks being watched
 
