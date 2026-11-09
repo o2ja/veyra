@@ -7,7 +7,7 @@
 | Item | State |
 |---|---|
 | Phase | **Release 1 build** |
-| Current stage | **S1 Identity, tenancy, RBAC, audit: implementation complete, awaiting owner sign-off** (`docs/reports/S1_COMPLETION_REPORT.md`) |
+| Current stage | **S1 signed off 2026-11-10**; S2 not started (kickoff report next) |
 | Application code | S0 skeleton + S1: identity, tenancy, audit modules; auth/MFA/sessions/CSRF; admin UI; isolation suite with negative control |
 | Synthetic test data | Generated and self-checked (`testdata/`) |
 
@@ -22,7 +22,7 @@
 
 ## 3. In progress
 
-S1 implemented and verified; awaiting owner sign-off. Evidence and open points: `docs/reports/S1_COMPLETION_REPORT.md`. CI green on `main` (jobs: backend incl. isolation negative control, frontend, e2e (Playwright W1–W2 + axe), api-contract, secrets, images).
+S1 signed off by the owner 2026-11-10. Evidence and open points: `docs/reports/S1_COMPLETION_REPORT.md`. CI green on `main` (jobs: backend incl. isolation negative control, frontend, e2e (Playwright W1–W2 + axe), api-contract, secrets, images).
 
 ## 4. Pending
 
@@ -65,7 +65,7 @@ Top items only; full list in the analysis and `SECURITY.md` §12.
 | Stage | Kickoff approved | Completed | Owner sign-off | Notes |
 |---|---|---|---|---|
 | S0 | 2026-11-09 | 2026-11-09 | 2026-11-09 | Approved |
-| S1 | 2026-11-09 | 2026-11-10 | – | Awaiting owner sign-off |
+| S1 | 2026-11-09 | 2026-11-10 | 2026-11-10 | Approved |
 | S2–S11 | – | – | – | Not started |
 
 ## 9. Change log

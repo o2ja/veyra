@@ -1,7 +1,7 @@
 # S1 Identity, tenancy, RBAC, audit: completion report
 
 ## Owner decisions needed
-1. **Sign off S1** (S1 needs your personal approval, CLAUDE.md §18). Recommendation: approve; nothing below blocks S2.
+1. **S1 signed off by the owner on 2026-11-10** ("I approve everything"). Nothing open.
 2. No other decisions are open. Rule-4 items (product, spending, legal, hosting, destructive, weakened security): none.
 3. For later, not now: the `rebate_lookup` role needs `BYPASSRLS`; check that the managed Postgres chosen under OD-3 allows creating it.
 4. –
@@ -13,7 +13,7 @@ Date: 2026-11-10. Kickoff: `docs/reports/S1_KICKOFF_REPORT.md` (approved 2026-11
 
 All S1.1–S1.8 tasks are done (`IMPLEMENTATION_PLAN.md`, ticked with notes).
 
-- **Schema (2 + 1 migrations):** global `users`, `sessions`, `user_tokens`, `mfa_recovery_codes`, `pending_registrations`, `rate_limit_counters`; tenant tables `tenants`, `tenant_settings`, `memberships`, `invitations`, `audit_log` (append-only), `idempotency_keys` (table only), all with RLS enabled + forced via the helper. Cross-tenant lookups `fn_user_memberships`, `fn_invitation_by_token` are `SECURITY DEFINER`, owned by the NOLOGIN `BYPASSRLS` role `rebate_lookup`, `search_path` pinned. `rebate_readonly` has no access to credential tables. Migration `20261110_0900` restores `rebate_owner`'s `EXECUTE` on `fn_user_memberships` (found by the runbook dry run, §4).
+- **Schema (2 + 2 migrations):** global `users`, `sessions`, `user_tokens`, `mfa_recovery_codes`, `pending_registrations`, `rate_limit_counters`; tenant tables `tenants`, `tenant_settings`, `memberships`, `invitations`, `audit_log` (append-only), `idempotency_keys` (table only), all with RLS enabled + forced via the helper. Cross-tenant lookups `fn_user_memberships`, `fn_invitation_by_token` are `SECURITY DEFINER`, owned by the NOLOGIN `BYPASSRLS` role `rebate_lookup`, `search_path` pinned. `rebate_readonly` has no access to credential tables. Migration `20261110_0900` restores `rebate_owner`'s `EXECUTE` on `fn_user_memberships` (found by the runbook dry run, §4); `20261110_1000` adds `users.last_failed_at` (review F5).
 - **identity:** registration held as a pending row until the email link is used (no pre-account takeover); Argon2id login with progressive, decaying lockout that behaves identically for unknown emails; TOTP (replay guard: step must be newer than the last) and 10 hashed recovery codes; server-side sessions (only the SHA-256 is stored; rotation on login, MFA, MFA enable and tenant switch; idle 30 min, absolute 12 h; revocation on logout, password change/reset, deactivation, email change, operator MFA reset); step-up (5 min) for password/MFA changes and admin promotion; password reset; email change (password **and** MFA, D-5); invitation acceptance.
 - **tenancy:** workspace creation, settings with `If-Match`, memberships (role/status per workspace only, last-admin guard), invitations (create/list/revoke/accept/expire), permission registry from SECURITY §3, four-eyes helper (used from S4).
 - **audit:** writer in the caller's transaction with per-entity field allow-lists, event catalogue, `GET /audit-log` (filters, cursor pages) now showing actor **name and email**; denials audited (rate-limited) in a separate transaction.
@@ -26,15 +26,15 @@ All S1.1–S1.8 tasks are done (`IMPLEMENTATION_PLAN.md`, ticked with notes).
 
 | Suite | Result |
 |---|---|
-| Backend `make test-backend` (real Postgres 16, Mailpit) | **245 passed**, 0 skipped, coverage **94.7 %** |
-| Isolation + schema lint (`tests/isolation`, `test_schema_lint.py`) | **61 passed** |
+| Backend `make test-backend` (real Postgres 16, Mailpit) | **253 passed**, 0 skipped, coverage **94.7 %** |
+| Isolation suite (`tests/isolation`) | **59 passed** (+ schema meta-test in `tests/db`) |
 | Negative control (RLS disabled in throwaway DB `rebate_negctl`) | **OK**: all 20 RLS-dependent tests fail with an `ISOLATION-BREACH` assertion; all independent tests (grants, lookup shape, route-level R1–R11) still pass |
 | Frontend Vitest | 7 passed |
-| Playwright (local Chrome; CI Chromium) | W1–W2 passed; axe WCAG 2.1 AA on 10 S1 pages: 0 violations (after one fix, §4) |
+| Playwright (local Chrome; CI Chromium) | W1–W2 passed (with the new verify-with-password step); axe WCAG 2.1 AA on 10 S1 pages: 0 violations (after one fix, §4) |
 | Lint gates (`make lint`) | ruff, mypy, import-linter (7 contracts), bandit, pip-audit, ESLint, tsc, npm audit, gitleaks: clean |
-| CI on `main` | green on `70d92b7`; the final commits are listed in §8 |
+| CI on `main` | see §10 |
 
-**Do the tests fail when the code is broken?** Spot-checked by temporarily breaking the code, then restoring it:
+**Do the tests fail when the code is broken?** Spot-checked by temporarily breaking the code, then restoring it (plus the review fixes F3 and F4: their new tests fail on the old code):
 - Resetting the failure counter on a correct password → `test_correct_password_with_wrong_totp_cycles_still_lock` fails.
 - Disabling the CSRF check → all 3 CSRF tests fail.
 - RLS disabled → the negative control above.
@@ -103,12 +103,35 @@ The negative control shows which tests depend on RLS and which on the applicatio
 - Audit read is admin, approver and viewer, not analyst (SECURITY §3 conflict resolved to the narrower rule).
 - New error codes `link_expired` and `precondition_failed`; settings `PATCH` requires `If-Match`.
 - `api/middleware.py` not created; the small middleware stays in `api/app.py`.
+- The negative control runs as a step of the `backend` CI job, not as a separate job (kickoff §6.4).
+- Timing test: 15 samples, 25 % tolerance (kickoff said 50 / 20 %); review F7.
+- `POST /auth/verify-email` also requires the registration password (review F8).
 - The forgot-password work runs in the temporary background pool (K-9), not in the request.
 - "Rotation on role change" (SECURITY §1): roles are read on every request and sessions carry no role, so a role change takes effect on the next request without rotating; deactivation revokes that workspace's sessions.
 
 ## 7. Independent review
 
-_Filled in below after the reviewer runs on the code diff and on this report._
+The reviewer (`.claude/agents/reviewer.md`, read-only, security focus) reviewed the full S1 code diff (`a5fd2df..70d92b7`) and the working tree. It ran as a general-purpose agent loaded with that definition, because the `reviewer` type is not registered when the session starts outside the repo folder. Verdict: **1 blocker, 4 serious, 8 minor, 4 nit.** Of the 17, 13 are fixed (`29f9c21`), 2 are partly fixed or corrected in the docs, 2 are not fixed, and the blocker was not a code defect. Of the kickoff review's §10 responses, it confirmed 18 as implemented, found 2 only partly done (now completed as F4 and F7 below), and did not verify 1 (the runbook, done in §4).
+
+| # | Sev | Finding | Response |
+|---|---|---|---|
+| 1 | blocker | `deps.py` had CSRF switched off (`MUTATION` line) | **Not a code defect.** The reviewer read the working tree during my deliberate breakage spot-check (§2); the line was restored minutes later, and HEAD never contained it (`git grep MUTATION` empty). Guard added anyway: a test fails if any `MUTATION` marker is in `src/` |
+| 2 | serious | A stolen session of a user without MFA can enrol the attacker's authenticator without step-up, and the new session counted as a fresh step-up | **Fixed.** `/auth/mfa/setup` and `/enable` require a recent step-up; enabling MFA no longer grants one. The UI routes this through the step-up dialog. Test `test_mfa_setup_and_enable_need_a_recent_step_up` |
+| 3 | serious | A password reset left a pending email-change token valid | **Fixed.** Setting a password voids every open token of the user. Test `test_password_reset_voids_a_pending_email_change` (fails on the old code; checked) |
+| 4 | serious | Rate-limit hits were rolled back with failing requests, so bad tokens were never limited | **Fixed.** Hits commit in their own short transaction. Test: 11 bad reset tokens → 10× 410, then 429 (fails on the old code; checked) |
+| 5 | serious | A real account's failure counter never expired, while the unknown-email counter expired after 24 h, which reveals that the account exists | **Fixed.** New column `users.last_failed_at`; failures older than the 24 h window are forgotten, the same as for unknown emails. Test: 4 failures, 25 h, 1 failure → both 401 |
+| 6 | minor | Three tests checked less than their names claim | **Fixed.** After-commit callbacks are tested through the real pipeline (a failing request does not run them); the log test flushes the pool first; the rotation test shows the pre-MFA cookie is replaced and dead afterwards |
+| 7 | minor | Timing test uses 15 samples and 25 % tolerance, not the planned 50 / 20 %; no accept-invite timing test | **Recorded, not changed.** 15 interleaved samples keep the test under 15 s; 25 % catches the 44 % leak the test found in forgot-password. Accept-invite timing: **not tested**. Both branches run one Argon2 operation, but there is no measurement. Listed in §8 |
+| 8 | minor | The owner of an address could complete the attacker's registration by clicking the attacker-triggered link | **Fixed.** Verify needs the registration password as well (API and UI). Test `test_victim_cannot_complete_an_attackers_registration` |
+| 9 | minor | Docs promise rotation on role change and revocation of all sessions on password change | **Docs corrected** (SECURITY §1): roles are read per request (no rotation needed); a password change keeps the current, just re-authenticated session and revokes all others |
+| 10 | minor | The negative control could pass on an empty or short run; D11 is not run in it; it runs as a step, not a separate job | **Fixed:** it now fails if any RLS-dependent prefix matched no test, or if fewer than 59 tests ran. D11 (schema meta-test) runs in the normal suite; it inspects the catalogue, so running it with RLS off proves nothing. "Step not job" recorded as a deviation (§6) |
+| 11 | minor | Mail header errors were swallowed; background logs had no request id | **Fixed.** The message is built inside the `try`, failures are logged by class only, and the request id is carried into pool logs. Names reject control characters (no CR/LF in headers) |
+| 12 | minor | Garbage `X-Forwarded-For` → all such clients shared one `None` bucket | **Fixed.** Falls back to the proxy peer; test updated |
+| 13 | minor | Rehash on login was not tested | **Fixed.** Test: hash made with `t=1`, login under `t=2`, stored hash has `t=2` |
+| 14 | nit | Email change consumed the TOTP step before validating the new address | **Fixed.** Validates first |
+| 15 | nit | `create_workspace` / `open_invitation` switch tenant context without restoring it; `tenant_id` not bound into request logs | **Not fixed (accepted).** Both switches are deliberate: the rest of the request then works in that new tenant, and nothing reads the old context. Binding `tenant_id` into the request log line: **not done**, listed in §8 |
+| 16 | nit | Reactivating a disabled admin bypassed the step-up that promotion needs | **Fixed.** Any change to `status=active` needs step-up; test added |
+| 17 | nit | Shutdown did not flush the background pool | **Fixed.** Flushed in the lifespan exit |
 
 ## 8. Known issues and not tested
 
@@ -121,6 +144,8 @@ _Filled in below after the reviewer runs on the code diff and on this report._
 - **Idle/absolute expiry by hand:** idle was checked by hand with a 2-minute setting. Absolute was simulated by editing the session row in the DB, not by waiting 12 h; the automated tests use a fake clock.
 - **Users lost the authenticator and all codes:** only the operator runbook helps (D-6, by design).
 - **K-7:** Starlette's `httpx` deprecation warning in tests (unchanged).
+- **Accept-invite timing:** not measured (review F7). `tenant_id` is not in the request log line (review F15).
+- **Rate limits:** each hit uses an extra pooled connection; fine at this scale, revisit in S11 load tests.
 
 ## 9. Readiness for S2
 
@@ -128,3 +153,9 @@ Nothing blocks S2. S2 must:
 - replace the K-9 pool (email and forgot-password work) with jobs;
 - settle the token-in-job-payload question (kickoff §5);
 - extend the isolation suite to files and jobs.
+
+## 10. CI and closure
+
+- CI green on `29f9c21` (all jobs: backend with negative control, frontend, e2e, api-contract, secrets, images). Final closing commit adds `SKIP LOCKED` to the rate-limit prune (no wait on rows held by the request's own transaction); security/API tests 145 passed locally.
+- The second reviewer pass (on this report and the fix diff) was **stopped before it finished**, at the owner's instruction to close S1. Its findings were not seen; re-run it at the start of S2 if wanted.
+- Owner sign-off: 2026-11-10.

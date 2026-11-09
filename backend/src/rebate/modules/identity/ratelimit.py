@@ -7,13 +7,12 @@ though the request fails). Expired rows are pruned on write.
 import math
 from datetime import datetime, timedelta
 
-from sqlalchemy import Engine, delete, text
+from sqlalchemy import Engine, text
 from sqlalchemy.orm import Session
 
 from rebate.core import clock
 from rebate.core.db import transaction
 from rebate.core.errors import RateLimited
-from rebate.modules.identity.models import RateLimitCounter
 
 _UPSERT = text(
     """
@@ -25,6 +24,13 @@ _UPSERT = text(
         expires_at = CASE WHEN c.expires_at > :now THEN c.expires_at ELSE :expires END
     RETURNING count AS n, expires_at
     """
+)
+
+# SKIP LOCKED: never wait on a row another transaction holds, including the caller's own request
+# transaction (two connections in one thread would otherwise wait on each other undetected).
+_PRUNE = text(
+    "DELETE FROM rate_limit_counters WHERE key IN ("
+    " SELECT key FROM rate_limit_counters WHERE expires_at < :cutoff LIMIT 100 FOR UPDATE SKIP LOCKED)"
 )
 
 _GET = text(
@@ -49,7 +55,7 @@ def hit(db: Session, key: str, *, limit: int, window_seconds: int) -> int:
     params = {"key": key[:200], "now": now, "expires": now + timedelta(seconds=window_seconds)}
     # ponytail: one extra pooled connection per hit; fine at S1 scale, revisit with load tests (S11)
     with transaction(bind) as own:
-        own.execute(delete(RateLimitCounter).where(RateLimitCounter.expires_at < now - timedelta(minutes=5)))
+        own.execute(_PRUNE, {"cutoff": now - timedelta(minutes=5)})
         row = own.execute(_UPSERT, params).mappings().one()
     count = int(row["n"])
     if count > limit:
