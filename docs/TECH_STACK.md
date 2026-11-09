@@ -13,7 +13,7 @@
 | Validation | Pydantic v2 | Request/response models, rules schema, AI output schema |
 | Database | PostgreSQL 16+ | System of record, constraints, RLS, job queue |
 | Job queue | Procrastinate (Postgres-backed) | Transactional enqueue, no extra infrastructure |
-| Object storage | S3-compatible (MinIO locally) via boto3 | Raw files and exports |
+| Object storage | S3-compatible via boto3 (SeaweedFS locally and in CI; ADR-017) | Raw files and exports |
 | Frontend | React 18 + TypeScript + Vite SPA | Back-office app; no SEO need |
 | Reverse proxy / TLS | Caddy | Automatic HTTPS, simple config |
 | Containers | Docker, Docker Compose | Reproducible local and production |
@@ -105,7 +105,7 @@ See `AI_PROCESSING.md`.
 
 | Concern | Choice |
 |---|---|
-| Local | Docker Compose: `postgres`, `minio`, `clamav`, `mailpit`, `api`, `worker`, `frontend` (dev server) |
+| Local | Docker Compose: `postgres`, `mailpit`, `api`, `frontend` (dev server); from S2: `seaweedfs`, `clamav` (profile `s2`), `worker` |
 | Production (initial) | Single-host Docker Compose (VPS) behind Caddy; separate staging host; S3-compatible object storage; Postgres hosting per OD-3 |
 | CI/CD | GitHub Actions (or equivalent): lint, type-check, tests (real Postgres service), isolation suite, image build, deploy by SSH + `docker compose pull` |
 | Monitoring | Sentry (errors), uptime check, structured logs shipped to a log store, Postgres metrics, failed-job alerts |

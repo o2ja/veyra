@@ -23,7 +23,7 @@ Docker + Docker Compose; GNU make and a POSIX shell (on Windows: Git Bash); Pyth
 | Service | Image | Ports (host) | Purpose |
 |---|---|---|---|
 | `postgres` | `postgres:16.15` (pinned by digest) | `${POSTGRES_HOST_PORT:-5432}` | Database (volume `pgdata`). Host port is configurable for machines that already run Postgres |
-| `minio` | **Not in the stack yet**: `minio/minio` is no longer publicly pullable (`PROJECT_STATUS.md` K-6). Decide the image before S2 | 9000/9001 | S3-compatible storage |
+| `seaweedfs` | `chrislusf/seaweedfs` (ADR-017), **added in S2** behind profile `s2`, pinned by digest | 8333 (S3) | S3-compatible storage (replaces MinIO, whose images are no longer published) |
 | `clamav` | `clamav/clamav:1.4.6` (digest); Compose profile `s2`, not started by default until S2 | 3310 | Malware scanning |
 | `mailpit` | `axllent/mailpit:v1.33.1` (digest) | 1025/8025 | Local SMTP + inbox UI |
 | `api` | built from `backend/` | 8000 | FastAPI (reload in dev) |
@@ -54,7 +54,7 @@ Defined by `core/config.py` (pydantic-settings). `.env.example` contains placeho
 | `DATABASE_URL` | `postgresql+psycopg://rebate_app:***@postgres:5432/rebate` | Runtime role |
 | `DATABASE_URL_OWNER` | `…rebate_owner…` | Migrations only; not present in the running API container |
 | `DATABASE_URL_AI` | `…rebate_ai_writer…` | AI gateway sessions |
-| `S3_ENDPOINT_URL`, `S3_REGION`, `S3_BUCKET`, `S3_ACCESS_KEY_ID`, `S3_SECRET_ACCESS_KEY` | | MinIO locally |
+| `S3_ENDPOINT_URL`, `S3_REGION`, `S3_BUCKET`, `S3_ACCESS_KEY_ID`, `S3_SECRET_ACCESS_KEY` | | SeaweedFS locally |
 | `CLAMD_HOST`, `CLAMD_PORT` | `clamav`, `3310` | |
 | `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASSWORD`, `MAIL_FROM` | | Mailpit locally |
 | `LLM_PROVIDER`, `LLM_API_KEY`, `LLM_MODEL_PRIMARY`, `LLM_MODEL_SECONDARY`, `AI_DAILY_COST_CAP_USD` | | **Unset by default; AI disabled** until OD-2 approval |
@@ -94,7 +94,7 @@ flowchart LR
 
 - One production host (VPS or cloud VM, e.g. 4 vCPU / 8 GB to start) running Compose: `caddy`, `api`, `worker`, `clamav`, and (if self-run) `postgres`. A separate staging host.
 - **Postgres (OD-3):** (a) self-run in Compose on a dedicated volume/host with `pgBackRest` or WAL-G; or (b) managed standard Postgres from a plain cloud provider. App connects over TLS (`sslmode=verify-full` when remote). Either way: backups, PITR, tested restores.
-- Network: only Caddy exposes 80/443; Postgres/ClamAV/MinIO are not exposed publicly; host firewall default-deny; SSH key-only, no root login, fail2ban; automatic security updates.
+- Network: only Caddy exposes 80/443; Postgres/ClamAV/object storage are not exposed publicly; host firewall default-deny; SSH key-only, no root login, fail2ban; automatic security updates.
 - Scale-up path: bigger instance → move worker to its own host → managed/dedicated Postgres with a read replica for reporting → multiple API replicas behind Caddy/load balancer. Kubernetes only with an ADR and a measured need.
 
 ### 3.1 Reverse proxy and SSL (Caddy)

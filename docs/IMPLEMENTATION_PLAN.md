@@ -38,7 +38,7 @@ Common items for **every** stage (copy into each stage's kickoff/completion):
   - [ ] CI workflow running all gates against a Postgres service container
   - [ ] OpenAPI → TypeScript client generation + CI diff check
 - [ ] S0.5 Docker/dev stack
-  - [ ] Compose dev stack (postgres, minio, clamav, mailpit, api, worker, frontend)
+  - [ ] Compose dev stack (postgres, mailpit, api, frontend; clamav behind profile `s2`; storage and worker in S2)
   - [ ] Dockerfiles (non-root, multi-stage), `make up/down/db-init/migrate/test/lint`
 - [ ] S0.6 Docs: `README.md` run instructions verified on a clean checkout
 
@@ -90,12 +90,13 @@ Common items for **every** stage (copy into each stage's kickoff/completion):
   - [ ] Worker entrypoint, job registry, retry/backoff/dead-letter policy, per-job tenant context, admin endpoints (`/jobs`)
   - [ ] Move S1 email sending onto the queue
 - [ ] S2.2 `files` module
-  - [ ] S3 client wrapper (MinIO locally), quarantine → clean key promotion, presigned downloads (≤ 5 min, audited)
+  - [ ] S3 client wrapper in `files/storage.py` (SeaweedFS locally/CI, ADR-017; add the pinned image behind profile `s2`), quarantine → clean key promotion, presigned downloads (≤ 5 min, audited). Any boto3 checksum-header workaround lives only in this client config and is noted
   - [ ] Streaming upload with size limits, SHA-256, extension + MIME + magic-byte agreement, allow-list
   - [ ] ClamAV scan job; statuses; admin notification on infected
   - [ ] Duplicate detection by `(tenant, kind, sha256)`
 - [ ] S2.3 Frontend: upload component (progress, scan status polling), file detail, Jobs admin page (failed jobs, retry)
-- [ ] S2.4 Tests: EICAR, `.xlsm`, renamed exe, MIME mismatch, oversized, zip bomb, quarantine promotion, job idempotency/retry/dead-letter, worker without tenant context fails, cross-tenant file/job access (isolation suite extended)
+- [ ] S2.4 Tests against the **real** storage service: presigned URLs with short expiry (valid, then expired), bucket versioning, server-side encryption, quarantine → clean copy. A failing required feature is reported to the owner before any switch (ADR-017)
+- [ ] S2.5 Tests: EICAR, `.xlsm`, renamed exe, MIME mismatch, oversized, zip bomb, quarantine promotion, job idempotency/retry/dead-letter, worker without tenant context fails, cross-tenant file/job access (isolation suite extended)
 
 **Acceptance:** upload ends `clean` or `infected`; no reader accepts non-clean files; failed jobs visible and retryable; isolation suite covers files and jobs.
 **Expected files:** `core/jobs.py`, `workers/*`, `modules/files/*`, migration `*_files_jobs.py`.

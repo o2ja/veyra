@@ -1,6 +1,6 @@
 # Local development stack (DEPLOYMENT.md §2.2). Secrets come from ../../.env (never committed).
 # Default services: postgres, mailpit, api, frontend.
-# Profile `s2` (not started by default until S2): clamav. MinIO: see PROJECT_STATUS.md (image unavailable).
+# Profile `s2` (not started by default until S2): clamav. Object storage (SeaweedFS, ADR-017) is added in S2.
 # The worker service is added in S2 together with the job queue.
 name: veyra-recover
 

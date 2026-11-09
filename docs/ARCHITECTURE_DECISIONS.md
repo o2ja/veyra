@@ -124,8 +124,11 @@
 - **Consequences:** Clear front/back separation; API drift breaks the build.
 
 ## ADR-017 S3-compatible object storage
-- **Decision:** Use the S3 API; MinIO locally; any S3-compatible provider in production.
-- **Consequences:** Portable; presigned URLs; lifecycle and versioning policies.
+- **Decision:** Use the S3 API through boto3 only; any S3-compatible provider in production (OD-3/OD-4). **Local development and CI use SeaweedFS** (`chrislusf/seaweedfs`, Apache 2.0), owner-approved 2026-11-09; it replaces MinIO, whose free community images stopped in October 2025 (source-only distribution, repository archived). The image is added in S2 behind the Compose profile `s2`, pinned by digest.
+- **Alternatives considered (2026-11-09):** RustFS (Apache 2.0; versioning and SSE, presigned URLs not documented; 1.0 only in Sept 2026, second choice); Garage (AGPLv3; no bucket versioning; 3-node minimum); MinIO built from source or the Chainguard image (unmaintained upstream; Chainguard free tier is `latest`-only).
+- **Conditions (owner):** S2 tests run against the real service and cover presigned URLs with short expiry, bucket versioning, server-side encryption, and the copy from quarantine to clean keys. If boto3's default checksum headers break against SeaweedFS, handle it in one place (client config in `files/storage.py`) and note it. If any required feature fails, report to the owner **before** switching to RustFS. Dev/prod parity is a known risk (`PROJECT_STATUS.md` R-1).
+- **Consequences:** Portable; presigned URLs; lifecycle and versioning policies. The app depends on the S3 API, not on a vendor.
+- **Sources:** [MinIO archived, alternatives (pinggy)](https://pinggy.io/blog/minio_archived_self_hosted_s3_alternatives/) · [Self-hosted S3 alternatives 2026 (glukhov.org)](https://www.glukhov.org/data-infrastructure/object-storage/self-hosted-s3-alternatives/) · [RustFS, SeaweedFS, Garage or Ceph (rilavek)](https://rilavek.com/resources/self-hosted-s3-compatible-object-storage-2026) · [MinIO alternatives compared (lowcloud)](https://lowcloud.io/en/blog/minio-alternatives) · [Thanks for all the buckets (madewithlove)](https://madewithlove.com/blog/thanks-for-all-the-buckets/) · [Chainguard MinIO containers](https://www.chainguard.dev/unchained/secure-and-free-minio-chainguard-containers) · [SeaweedFS S3 API](https://github.com/seaweedfs/seaweedfs/wiki/Amazon-S3-API) · [RustFS](https://github.com/rustfs/rustfs)
 
 ## ADR-018 Docker Compose + Caddy
 - **Decision:** Compose for local and initial production; Caddy for TLS and reverse proxy. Kubernetes deferred until justified.
