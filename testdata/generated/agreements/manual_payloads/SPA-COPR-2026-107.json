@@ -1,0 +1,69 @@
+{
+  "customers": [
+    {
+      "customer_code": "DELTA",
+      "scope": "include"
+    },
+    {
+      "customer_code": "EVERG",
+      "scope": "include"
+    }
+  ],
+  "header": {
+    "agreement_type": "spa",
+    "external_number": "SPA-COPR-2026-107",
+    "manufacturer_code": "COPR",
+    "name": "Coppermark wire SPA (SYNTHETIC)",
+    "priority": 0,
+    "valid_from": "2026-01-01",
+    "valid_to": "2026-12-31"
+  },
+  "items": [
+    {
+      "claim_uom": "FT",
+      "flat_amount": "0.04",
+      "max_quantity": null,
+      "sku": "WIRE-12-2-RL"
+    },
+    {
+      "claim_uom": "FT",
+      "flat_amount": "0.07",
+      "max_quantity": null,
+      "sku": "WIRE-10-3-RL"
+    }
+  ],
+  "payload_schema_version": 1,
+  "rules": {
+    "adapter": null,
+    "calculation": {
+      "basis": "flat_per_unit",
+      "cost_source": "agreement_reference"
+    },
+    "claim_uom": "FT",
+    "customer_scope": {
+      "mode": "listed"
+    },
+    "date_basis": "invoice_date",
+    "price_check": {
+      "mode": "ignore",
+      "tolerance": "0.005"
+    },
+    "product_scope": {
+      "mode": "listed"
+    },
+    "quantity": {
+      "cap_scope": "per_item"
+    },
+    "rounding": {
+      "mode": "half_up",
+      "scale": 2,
+      "timing": "per_line"
+    },
+    "schema_version": 1,
+    "spa_reference": {
+      "required": false
+    },
+    "type": "spa"
+  },
+  "tiers": []
+}

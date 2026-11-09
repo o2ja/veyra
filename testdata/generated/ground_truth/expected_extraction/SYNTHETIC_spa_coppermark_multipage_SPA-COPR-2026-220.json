@@ -1,0 +1,224 @@
+{
+  "customers": [
+    {
+      "customer_code": "DELTA",
+      "scope": "include"
+    },
+    {
+      "customer_code": "EVERG",
+      "scope": "include"
+    }
+  ],
+  "header": {
+    "agreement_type": "spa",
+    "external_number": "SPA-COPR-2026-220",
+    "manufacturer_code": "COPR",
+    "name": null,
+    "priority": 0,
+    "valid_from": "2026-01-01",
+    "valid_to": "2026-12-31"
+  },
+  "items": [
+    {
+      "flat_amount": "0.021",
+      "sku": "WIRE-01-CU"
+    },
+    {
+      "flat_amount": "0.022",
+      "sku": "WIRE-02-CU"
+    },
+    {
+      "flat_amount": "0.023",
+      "sku": "WIRE-03-CU"
+    },
+    {
+      "flat_amount": "0.024",
+      "sku": "WIRE-04-CU"
+    },
+    {
+      "flat_amount": "0.025",
+      "sku": "WIRE-05-CU"
+    },
+    {
+      "flat_amount": "0.026",
+      "sku": "WIRE-06-CU"
+    },
+    {
+      "flat_amount": "0.027",
+      "sku": "WIRE-07-CU"
+    },
+    {
+      "flat_amount": "0.028",
+      "sku": "WIRE-08-CU"
+    },
+    {
+      "flat_amount": "0.029",
+      "sku": "WIRE-09-CU"
+    },
+    {
+      "flat_amount": "0.03",
+      "sku": "WIRE-10-CU"
+    },
+    {
+      "flat_amount": "0.031",
+      "sku": "WIRE-11-CU"
+    },
+    {
+      "flat_amount": "0.032",
+      "sku": "WIRE-12-CU"
+    },
+    {
+      "flat_amount": "0.033",
+      "sku": "WIRE-13-CU"
+    },
+    {
+      "flat_amount": "0.034",
+      "sku": "WIRE-14-CU"
+    },
+    {
+      "flat_amount": "0.035",
+      "sku": "WIRE-15-CU"
+    },
+    {
+      "flat_amount": "0.036",
+      "sku": "WIRE-16-CU"
+    },
+    {
+      "flat_amount": "0.037",
+      "sku": "WIRE-17-CU"
+    },
+    {
+      "flat_amount": "0.038",
+      "sku": "WIRE-18-CU"
+    },
+    {
+      "flat_amount": "0.039",
+      "sku": "WIRE-19-CU"
+    },
+    {
+      "flat_amount": "0.04",
+      "sku": "WIRE-20-CU"
+    },
+    {
+      "flat_amount": "0.041",
+      "sku": "WIRE-21-CU"
+    },
+    {
+      "flat_amount": "0.042",
+      "sku": "WIRE-22-CU"
+    },
+    {
+      "flat_amount": "0.043",
+      "sku": "WIRE-23-CU"
+    },
+    {
+      "flat_amount": "0.044",
+      "sku": "WIRE-24-CU"
+    },
+    {
+      "flat_amount": "0.045",
+      "sku": "WIRE-25-CU"
+    },
+    {
+      "flat_amount": "0.046",
+      "sku": "WIRE-26-CU"
+    },
+    {
+      "flat_amount": "0.047",
+      "sku": "WIRE-27-CU"
+    },
+    {
+      "flat_amount": "0.048",
+      "sku": "WIRE-28-CU"
+    },
+    {
+      "flat_amount": "0.049",
+      "sku": "WIRE-29-CU"
+    },
+    {
+      "flat_amount": "0.05",
+      "sku": "WIRE-30-CU"
+    },
+    {
+      "flat_amount": "0.051",
+      "sku": "WIRE-31-CU"
+    },
+    {
+      "flat_amount": "0.052",
+      "sku": "WIRE-32-CU"
+    },
+    {
+      "flat_amount": "0.053",
+      "sku": "WIRE-33-CU"
+    },
+    {
+      "flat_amount": "0.054",
+      "sku": "WIRE-34-CU"
+    },
+    {
+      "flat_amount": "0.055",
+      "sku": "WIRE-35-CU"
+    },
+    {
+      "flat_amount": "0.056",
+      "sku": "WIRE-36-CU"
+    },
+    {
+      "flat_amount": "0.057",
+      "sku": "WIRE-37-CU"
+    },
+    {
+      "flat_amount": "0.058",
+      "sku": "WIRE-38-CU"
+    },
+    {
+      "flat_amount": "0.059",
+      "sku": "WIRE-39-CU"
+    },
+    {
+      "flat_amount": "0.06",
+      "sku": "WIRE-40-CU"
+    },
+    {
+      "flat_amount": "0.061",
+      "sku": "WIRE-41-CU"
+    },
+    {
+      "flat_amount": "0.062",
+      "sku": "WIRE-42-CU"
+    },
+    {
+      "flat_amount": "0.063",
+      "sku": "WIRE-43-CU"
+    },
+    {
+      "flat_amount": "0.064",
+      "sku": "WIRE-44-CU"
+    },
+    {
+      "flat_amount": "0.065",
+      "sku": "WIRE-45-CU"
+    },
+    {
+      "flat_amount": "0.066",
+      "sku": "WIRE-46-CU"
+    },
+    {
+      "flat_amount": "0.067",
+      "sku": "WIRE-47-CU"
+    },
+    {
+      "flat_amount": "0.068",
+      "sku": "WIRE-48-CU"
+    }
+  ],
+  "payload_schema_version": 1,
+  "rules": {
+    "calculation": {
+      "basis": "flat_per_unit"
+    },
+    "claim_uom": "FT",
+    "date_basis": "invoice_date"
+  },
+  "tiers": []
+}

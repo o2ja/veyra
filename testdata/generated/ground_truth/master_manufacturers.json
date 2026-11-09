@@ -1,0 +1,42 @@
+[
+  {
+    "claim_window_basis": "invoice_date",
+    "claim_window_days": 60,
+    "code": "VOLT",
+    "conflict_policy": "flag",
+    "dispute_window_basis": "remittance_date",
+    "dispute_window_days": 60,
+    "name": "Voltara Electric (SYNTHETIC)",
+    "variance_tolerance": "0.01"
+  },
+  {
+    "claim_window_basis": "ship_date",
+    "claim_window_days": 90,
+    "code": "BRIT",
+    "conflict_policy": "flag",
+    "dispute_window_basis": "remittance_date",
+    "dispute_window_days": 45,
+    "name": "Brightline Lighting (SYNTHETIC)",
+    "variance_tolerance": "0.01"
+  },
+  {
+    "claim_window_basis": "invoice_date",
+    "claim_window_days": 60,
+    "code": "COPR",
+    "conflict_policy": "priority",
+    "dispute_window_basis": "remittance_date",
+    "dispute_window_days": 30,
+    "name": "Coppermark Wire & Cable (SYNTHETIC)",
+    "variance_tolerance": "0.01"
+  },
+  {
+    "claim_window_basis": "invoice_date",
+    "claim_window_days": 120,
+    "code": "NWND",
+    "conflict_policy": "flag",
+    "dispute_window_basis": "remittance_date",
+    "dispute_window_days": 60,
+    "name": "Northwind HVAC (SYNTHETIC)",
+    "variance_tolerance": "0.01"
+  }
+]

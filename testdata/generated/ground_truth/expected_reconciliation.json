@@ -1,0 +1,109 @@
+{
+  "SYNTHETIC": true,
+  "arithmetic_check": "sum(amount_paid) == 7545.00",
+  "channel": "credit_memo",
+  "deadlines": {
+    "basis": "remittance_date 2026-07-31 + 60 days",
+    "dispute_deadline": "2026-09-29",
+    "notifications_at_days_before": [
+      14,
+      7,
+      3
+    ]
+  },
+  "document_total": "7545.00",
+  "expected": [
+    {
+      "claim_reference": "CL-2026-000001",
+      "dispute_assessment": "supported: line unit_price 88.00 equals agreement sell_price 88.00 (manufacturer reason E12 not substantiated by our data)",
+      "method": "invoice_line",
+      "remittance_line": 1,
+      "status": "confirmed",
+      "variance": {
+        "amount": "150.00",
+        "case_type": "short_paid",
+        "golden": "GL-V1",
+        "reason_code": "rejected_price_mismatch"
+      }
+    },
+    {
+      "claim_reference": "CL-2026-000002",
+      "method": "invoice_line",
+      "remittance_line": 2,
+      "status": "confirmed",
+      "variance": null
+    },
+    {
+      "claim_reference": "CL-2026-000003",
+      "dispute_assessment": "supported: eligible qty 40 within cap 100 (consumption 100)",
+      "method": "invoice_line",
+      "remittance_line": 3,
+      "status": "confirmed",
+      "variance": {
+        "amount": "2080.00",
+        "case_type": "rejected",
+        "reason_code": "rejected_quantity_exceeds_authorization"
+      }
+    },
+    {
+      "allocations": [
+        {
+          "amount": "250.00",
+          "claim_reference": "CL-2026-000004"
+        },
+        {
+          "adjustment": "ADJ-2026-0001",
+          "amount": "-50.00"
+        }
+      ],
+      "method": "invoice_line",
+      "remittance_line": 4,
+      "status": "confirmed",
+      "variance": null
+    },
+    {
+      "allocations": [
+        "1000.00",
+        "1100.00"
+      ],
+      "claim_references": [
+        "CL-2026-000005",
+        "CL-2026-000006"
+      ],
+      "golden": "GL-V2",
+      "method": "subset_sum",
+      "note": "unique subset summing to 2100.00; requires human confirmation",
+      "remittance_line": 5,
+      "status": "suggested"
+    },
+    {
+      "method": null,
+      "remittance_line": 6,
+      "status": "unmatched",
+      "variance": {
+        "amount": "75.00",
+        "case_type": "unmatched_payment",
+        "reason_code": "unmatched_payment"
+      }
+    },
+    {
+      "claim_reference": "CL-2026-000007",
+      "not_on_remittance": true,
+      "variance": {
+        "amount": "660.00",
+        "case_type": "unpaid",
+        "reason_code": "unpaid_no_remittance",
+        "when": "after submitted_at + payment_lag_days_expected"
+      }
+    }
+  ],
+  "other_remittances": {
+    "DN-310": "channel=deduction, 60.00 against INV-10032/1 (COPR claim of 60.00): no variance",
+    "RA-5521": "line1 matches CL-2026-000101 by exact_reference; line2 matches by invoice_line after normalising 'inv-10099' (no claim in fixture -> unmatched)"
+  },
+  "reason_code_mappings": {
+    "E07": "rejected_quantity_exceeds_authorization",
+    "E12": "rejected_price_mismatch"
+  },
+  "remittance": "credit_memo_VOLT_CM-7781 (csv and pdf)"
+}

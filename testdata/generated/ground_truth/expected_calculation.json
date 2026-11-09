@@ -1,0 +1,248 @@
+{
+  "SYNTHETIC": true,
+  "as_of": "after all agreements in agreements/manual_payloads are active",
+  "engine_rules_doc": "docs/BUSINESS_LOGIC.md",
+  "run_date": "2026-07-10",
+  "scenarios": [
+    {
+      "claim_amount": "2200.00",
+      "claim_unit_amount": "22.00",
+      "eligible_quantity": "100",
+      "golden": "GL-S1",
+      "id": "SC-01",
+      "invoice_no": "INV-10001",
+      "line_no": 1,
+      "status": "eligible"
+    },
+    {
+      "claim_amount": "0.00",
+      "exception_code": "price_mismatch",
+      "golden": "GL-S11",
+      "id": "SC-02",
+      "invoice_no": "INV-10002",
+      "line_no": 1,
+      "status": "exception"
+    },
+    {
+      "claim_amount": "448.00",
+      "claim_unit_amount": "8.96",
+      "golden": "GL-S3-variant",
+      "id": "SC-03",
+      "invoice_no": "INV-10003",
+      "line_no": 1,
+      "note": "guaranteed margin 12%: 38.00 - 33.00*0.88 = 8.96/unit",
+      "status": "eligible"
+    },
+    {
+      "exception_code": "expired_agreement",
+      "golden": "GL-S10",
+      "id": "SC-04",
+      "invoice_no": "INV-10004",
+      "line_no": 1,
+      "note": "BRIT agreement valid to 2026-08-31, date_basis=ship_date, ship 2026-09-02",
+      "status": "exception"
+    },
+    {
+      "exception_code": "ineligible_customer",
+      "id": "SC-05",
+      "invoice_no": "INV-10005",
+      "line_no": 1,
+      "status": "exception"
+    },
+    {
+      "exception_code": "missing_spa_reference",
+      "id": "SC-06",
+      "invoice_no": "INV-10006",
+      "line_no": 1,
+      "status": "exception"
+    },
+    {
+      "claim_amount": "3120.00",
+      "claim_unit_amount": "52.00",
+      "eligible_quantity": "60",
+      "golden": "GL-S6",
+      "id": "SC-07a",
+      "invoice_no": "INV-10010",
+      "line_no": 1,
+      "status": "eligible"
+    },
+    {
+      "claim_amount": "2080.00",
+      "claim_unit_amount": "52.00",
+      "eligible_quantity": "40",
+      "excess_quantity": "20",
+      "flags": [
+        "partially_eligible"
+      ],
+      "golden": "GL-S6",
+      "id": "SC-07b",
+      "invoice_no": "INV-10011",
+      "line_no": 1,
+      "status": "eligible"
+    },
+    {
+      "claim_amount": "312.50",
+      "claim_unit_amount": "12.50",
+      "eligible_quantity": "25",
+      "golden": "GL-S9",
+      "id": "SC-08",
+      "invoice_no": "INV-10020",
+      "line_no": 1,
+      "note": "unclaimed original, 5 returned by CN-5001 (netted): 25 x 12.50",
+      "status": "eligible"
+    },
+    {
+      "claim_amount": "0.00",
+      "golden": "GL-S9",
+      "id": "SC-08r",
+      "invoice_no": "CN-5001",
+      "line_no": 1,
+      "status": "netted"
+    },
+    {
+      "claim_amount": "250.00",
+      "claim_unit_amount": "12.50",
+      "eligible_quantity": "20",
+      "golden": "GL-S8",
+      "id": "SC-09",
+      "invoice_no": "INV-10021",
+      "line_no": 1,
+      "note": "precondition for SC-09r: this line is already in a submitted claim batch (see claim_batches_fixture.json)",
+      "status": "eligible"
+    },
+    {
+      "claim_amount": "-50.00",
+      "golden": "GL-S8",
+      "id": "SC-09r",
+      "invoice_no": "CN-5002",
+      "line_no": 1,
+      "precondition": "INV-10021/1 claimed (frozen)",
+      "status": "adjustment"
+    },
+    {
+      "exception_code": "ineligible_customer",
+      "id": "SC-10",
+      "invoice_no": "INV-10030",
+      "line_no": 1,
+      "note": "DELTA is not in the VOLT SPA customer list; (product PNL-400A also not an item)",
+      "status": "exception"
+    },
+    {
+      "exception_code": "ineligible_product",
+      "id": "SC-11",
+      "invoice_no": "INV-10031",
+      "line_no": 1,
+      "note": "CEDAR is eligible, PNL-400A is not an agreement item",
+      "status": "exception"
+    },
+    {
+      "claim_amount": "60.00",
+      "claim_unit_amount": "0.04",
+      "eligible_quantity": "1500",
+      "golden": "GL-S5",
+      "id": "SC-12",
+      "invoice_no": "INV-10032",
+      "line_no": 1,
+      "note": "3 RL x 500 FT x 0.04; unit_price per reel; price check ignored",
+      "status": "eligible"
+    },
+    {
+      "exception_code": "missing_uom_conversion",
+      "id": "SC-13",
+      "invoice_no": "INV-10033",
+      "line_no": 1,
+      "note": "no CT->FT conversion exists",
+      "status": "exception"
+    },
+    {
+      "claim_amount": "200.00",
+      "claim_unit_amount": "20.00",
+      "eligible_quantity": "10",
+      "id": "SC-14",
+      "invoice_no": "INV-10034",
+      "line_no": 1,
+      "note": "EVERG is only in SPA-VOLT-2026-901 (ref 100.00, SPA 80.00, sell 90.00): 10 x 20.00 = 200.00. See VARIANTS for conflict tests",
+      "status": "eligible"
+    },
+    {
+      "claim_amount": "220.00",
+      "exception_code": "outside_claim_window",
+      "golden": "GL-D1",
+      "id": "SC-15",
+      "invoice_no": "INV-10035",
+      "line_no": 1,
+      "note": "window = 2026-03-01 + 60d = 2026-04-30; run_date 2026-07-10",
+      "status": "exception"
+    },
+    {
+      "exception_code": "missing_cost",
+      "id": "SC-16",
+      "invoice_no": "INV-10036",
+      "line_no": 1,
+      "note": "guaranteed_margin with cost_source=line_cost and blank unit_cost",
+      "status": "exception"
+    },
+    {
+      "exception_code": "ineligible_product",
+      "id": "SC-17",
+      "invoice_no": "INV-10040",
+      "line_no": 1,
+      "note": "leading-zero SKU '00418' must survive import intact; not an agreement item",
+      "status": "exception"
+    },
+    {
+      "claim_amount": "1000.00",
+      "claim_unit_amount": "12.50",
+      "eligible_quantity": "80",
+      "id": "SC-20",
+      "invoice_no": "INV-10050",
+      "line_no": 1,
+      "status": "eligible"
+    },
+    {
+      "claim_amount": "1100.00",
+      "claim_unit_amount": "22.00",
+      "eligible_quantity": "50",
+      "id": "SC-21",
+      "invoice_no": "INV-10051",
+      "line_no": 1,
+      "status": "eligible"
+    },
+    {
+      "claim_amount": "660.00",
+      "claim_unit_amount": "22.00",
+      "eligible_quantity": "30",
+      "id": "SC-22",
+      "invoice_no": "INV-10060",
+      "line_no": 1,
+      "note": "claimed but never appears on the remittance (unpaid)",
+      "status": "eligible"
+    }
+  ],
+  "variants": [
+    {
+      "claim_amount": "0.00",
+      "exception_code": "conflicting_agreements",
+      "golden": "GL-S12",
+      "id": "SC-14b",
+      "line": "INV-10034/1",
+      "precondition": "add customer EVERG to SPA-VOLT-2026-884 (include); both agreements priority 0; manufacturer conflict_policy=flag",
+      "status": "exception"
+    },
+    {
+      "claim_amount": "200.00",
+      "golden": "GL-S12",
+      "id": "SC-14c",
+      "line": "INV-10034/1",
+      "precondition": "as SC-14b but SPA-VOLT-2026-901 priority 10 and conflict_policy=priority",
+      "status": "eligible",
+      "winner": "SPA-VOLT-2026-901"
+    },
+    {
+      "golden": "GL-A1",
+      "id": "SC-07-roundtrip",
+      "note": "use invoices dated on/after 2026-07-01 to observe an agreement_change adjustment",
+      "precondition": "amend SPA-VOLT-2026-884 BRK-3P-100A deviated cost 78.00 -> 80.00 effective 2026-07-01 (split-supersede); INV-10051 etc are before 07-01 so unchanged"
+    }
+  ]
+}

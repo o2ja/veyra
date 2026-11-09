@@ -1,0 +1,2 @@
+notice,invoice_no,invoice_line,deduction_amount,reason
+DN-310,INV-10032,1,60.00,SPA allowance deducted from payable

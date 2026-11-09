@@ -1,0 +1,69 @@
+{
+  "SYNTHETIC": true,
+  "adjustments": [
+    {
+      "adjustment_ref": "ADJ-2026-0001",
+      "amount": "-50.00",
+      "claim_reference": "CL-2026-000004",
+      "included_in_batch": true,
+      "scenario": "SC-09r",
+      "type": "return_reversal"
+    }
+  ],
+  "batch_number": "CB-VOLT-2026-06",
+  "batch_total": "10360.00",
+  "lines": [
+    {
+      "claim_amount": "2200.00",
+      "claim_reference": "CL-2026-000001",
+      "invoice_no": "INV-10001",
+      "line_no": 1,
+      "scenario": "SC-01"
+    },
+    {
+      "claim_amount": "3120.00",
+      "claim_reference": "CL-2026-000002",
+      "invoice_no": "INV-10010",
+      "line_no": 1,
+      "scenario": "SC-07a"
+    },
+    {
+      "claim_amount": "2080.00",
+      "claim_reference": "CL-2026-000003",
+      "invoice_no": "INV-10011",
+      "line_no": 1,
+      "scenario": "SC-07b"
+    },
+    {
+      "claim_amount": "250.00",
+      "claim_reference": "CL-2026-000004",
+      "invoice_no": "INV-10021",
+      "line_no": 1,
+      "scenario": "SC-09"
+    },
+    {
+      "claim_amount": "1000.00",
+      "claim_reference": "CL-2026-000005",
+      "invoice_no": "INV-10050",
+      "line_no": 1,
+      "scenario": "SC-20"
+    },
+    {
+      "claim_amount": "1100.00",
+      "claim_reference": "CL-2026-000006",
+      "invoice_no": "INV-10051",
+      "line_no": 1,
+      "scenario": "SC-21"
+    },
+    {
+      "claim_amount": "660.00",
+      "claim_reference": "CL-2026-000007",
+      "invoice_no": "INV-10060",
+      "line_no": 1,
+      "scenario": "SC-22"
+    }
+  ],
+  "manufacturer_code": "VOLT",
+  "status": "submitted",
+  "submitted_at": "2026-07-05"
+}

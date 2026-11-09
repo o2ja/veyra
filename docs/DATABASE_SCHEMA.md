@@ -1,0 +1,307 @@
+# Database Schema
+
+> PostgreSQL 16+. Owner: `backend/migrations/` (Alembic). This document is the design; migrations are the implementation. If they diverge, **report the conflict** (see `CLAUDE.md`), do not silently change either.
+> Related: `ARCHITECTURE.md` (modules), `BUSINESS_LOGIC.md` (semantics of calculation fields), `SECURITY.md` (roles, RLS).
+
+## 1. Global conventions
+
+| Topic | Rule |
+|---|---|
+| Primary keys | `id uuid` UUIDv7, generated in the application. Exception: `audit_log.id bigint identity`. |
+| Tenant column | Every tenant-owned table has `tenant_id uuid NOT NULL REFERENCES tenants(id)` and `UNIQUE (tenant_id, id)`. |
+| Foreign keys | Between tenant-owned tables always **composite**: `FOREIGN KEY (tenant_id, parent_id) REFERENCES parent (tenant_id, id)`. A row cannot point to another tenant's row. |
+| Money | Amounts `NUMERIC(18,4)`; unit prices/costs `NUMERIC(18,6)`; quantities `NUMERIC(18,6)`; rates as fractions `NUMERIC(9,6)` (`0.025` = 2.5%); `currency_code char(3)` on monetary rows (CHECK = tenant currency, ADR-024). No `float`, `real`, `double precision`, or `money` type anywhere (CI check on migrations). |
+| Timestamps | `created_at timestamptz NOT NULL DEFAULT now()`; `updated_at` only on tables that are legitimately mutable. Business dates are `date`. |
+| Text | `text` with CHECK length where bounded. Case-insensitive identifiers (email) use `citext`. |
+| Enumerations | `text` + `CHECK (col IN (...))` (easier to evolve than PG enums). Values listed below. |
+| Naming | `snake_case`, plural table names. Constraints: `pk_<t>`, `fk_<t>_<ref>`, `uq_<t>_<cols>`, `ck_<t>_<rule>`, indexes `ix_<t>_<cols>`. |
+| Soft delete | Not used for financial records. State columns instead (`status`, `released_at`, `voided_at`). |
+| JSONB | Only for: rules payloads, traces, extraction results, raw source rows, audit before/after. Anything queried or constrained is a column. |
+| Immutability | Enforced with triggers where stated (§7). |
+
+## 2. Roles and tenant isolation
+
+| DB role | Used by | Privileges |
+|---|---|---|
+| `rebate_owner` | Alembic migrations only | Owns all objects |
+| `rebate_app` | API and worker | `SELECT/INSERT/UPDATE/DELETE` on mutable tables, `INSERT/SELECT` only on append-only tables; **no** `BYPASSRLS`, not owner |
+| `rebate_ai_writer` | AI gateway sessions | `INSERT/SELECT/UPDATE(status…)` on `document_extractions`, `ai_invocations`, `agreement_drafts`, `agreement_draft_revisions`, `remittance_extraction_staging`; `SELECT` on `file_objects`; nothing else |
+| `rebate_readonly` | Support/debug (tenant-scoped via RLS) | `SELECT` |
+
+RLS pattern applied to **every** tenant table by the helper `enable_tenant_rls('table')` in `migrations/_rls.py`:
+
+```sql
+ALTER TABLE t ENABLE ROW LEVEL SECURITY;
+ALTER TABLE t FORCE ROW LEVEL SECURITY;
+CREATE POLICY tenant_isolation ON t
+  USING      (tenant_id = current_setting('app.tenant_id', true)::uuid)
+  WITH CHECK (tenant_id = current_setting('app.tenant_id', true)::uuid);
+```
+
+- `app.tenant_id` is set with `SET LOCAL` at the start of each transaction (`core/db.py`). If unset, `current_setting(..., true)` is NULL and no rows match (fail closed).
+- `tenants` policy: `id = current_setting('app.tenant_id', true)::uuid`.
+- Global tables (no RLS): `users`, `sessions`, `user_tokens`, `mfa_recovery_codes`, `reason_codes` (reference list), Procrastinate tables.
+- Pre-tenant lookups (login → list my workspaces) use `SECURITY DEFINER` functions owned by `rebate_owner` (`fn_user_memberships(user_id)`), which return only that user's rows.
+- A CI test asserts every table with a `tenant_id` column has RLS enabled and forced, and has `UNIQUE (tenant_id, id)`.
+
+## 3. Entity catalogue
+
+Legend: PK primary key · FK composite `(tenant_id, x)` unless noted · `NN` not null. `tenant_id` is implied on every tenant table and not repeated.
+
+### 3.1 Identity and tenancy
+
+**users** (global): `id`, `email citext NN UNIQUE`, `password_hash text NN`, `full_name`, `email_verified_at`, `mfa_enabled bool NN default false`, `mfa_secret_enc bytea` (application-level encrypted), `status` (`active`,`disabled`), `failed_login_count int`, `locked_until timestamptz`, `last_login_at`, `created_at`.
+
+**mfa_recovery_codes** (global): `id`, `user_id FK users`, `code_hash text NN`, `used_at`.
+
+**user_tokens** (global): `id`, `user_id`, `purpose` (`email_verify`,`password_reset`), `token_hash text NN UNIQUE`, `expires_at NN`, `used_at`, `created_at`.
+
+**sessions** (global): `id text` (SHA-256 of opaque token) PK, `user_id`, `active_tenant_id`, `created_at`, `last_seen_at`, `idle_expires_at`, `absolute_expires_at`, `mfa_verified bool`, `ip inet`, `user_agent`, `revoked_at`. Index `(user_id)`.
+
+**tenants**: `id`, `name NN`, `slug UNIQUE`, `status` (`active`,`suspended`,`closed`), `created_at`.
+
+**tenant_settings** (1:1): `tenant_id PK/FK`, `business_timezone text NN default 'America/Chicago'`, `currency_code char(3) NN default 'USD'`, `mfa_required bool NN default true`, `four_eyes_required bool NN default true`, `ai_processing_enabled bool NN default false`, `retention_years int NN default 7`, `default_claim_rounding jsonb`.
+*`ai_processing_enabled` defaults to false: AI is opt-in per workspace (OD-2).*
+
+**memberships**: `id`, `user_id FK users(id)` (global FK, single column), `role` (`admin`,`approver`,`analyst`,`viewer`), `status` (`active`,`disabled`), `invited_by`, `created_at`. `UNIQUE (tenant_id, user_id)`.
+
+**invitations**: `id`, `email citext NN`, `role NN`, `token_hash NN UNIQUE`, `invited_by`, `expires_at NN`, `accepted_at`, `revoked_at`.
+
+### 3.2 Audit, files, idempotency
+
+**audit_log** (append-only): `id bigint identity PK`, `tenant_id`, `occurred_at NN`, `actor_type` (`user`,`system`,`ai`), `actor_user_id`, `action NN` (e.g. `agreement.activated`), `entity_type NN`, `entity_id uuid`, `before jsonb`, `after jsonb`, `request_id`, `ip inet`, `user_agent`, `metadata jsonb`. Indexes `(tenant_id, entity_type, entity_id)`, `(tenant_id, occurred_at)`, `(tenant_id, actor_user_id, occurred_at)`.
+
+**audit_seals**: `id`, `tenant_id`, `from_audit_id NN`, `to_audit_id NN`, `prev_hash`, `seal_hash NN`, `sealed_at`.
+
+**file_objects**: `id`, `kind` (`import`,`agreement`,`remittance`,`export`,`attachment`), `original_name`, `storage_key NN`, `size_bytes NN`, `sha256 char(64) NN`, `declared_mime`, `detected_mime`, `scan_status` (`pending`,`clean`,`infected`,`error`), `scan_detail`, `uploaded_by`, `created_at`. `UNIQUE (tenant_id, kind, sha256)` for kinds `import`,`remittance`,`agreement` (partial index) to detect same-file re-upload.
+
+**idempotency_keys**: `tenant_id`, `key text`, `endpoint`, `request_hash`, `response_status`, `response_body jsonb`, `created_at`, `expires_at`. PK `(tenant_id, key, endpoint)`.
+
+### 3.3 Master data
+
+**manufacturers**: `id`, `name NN`, `code NN`, `external_id`, `active`. `UNIQUE (tenant_id, code)`.
+
+**manufacturer_settings** (1:1): `manufacturer_id PK/FK`, `claim_window_days int`, `claim_window_basis` (`invoice_date`,`ship_date`,`period_end`), `dispute_window_days int`, `dispute_window_basis` (`remittance_date`,`submission_date`), `allow_negative_claims bool NN default false`, `conflict_policy` (`flag`,`priority`) NN default `flag`, `variance_tolerance NUMERIC(18,4) NN default 0.01`, `payment_lag_days_expected int`, `notes`.
+
+**reason_codes** (global reference, seeded): `code PK`, `label`, `category`, `description`. Values in `BUSINESS_LOGIC.md` §11–§12.
+
+**reason_code_mappings**: `id`, `manufacturer_id`, `external_code NN`, `external_text`, `reason_code FK reason_codes`. `UNIQUE (tenant_id, manufacturer_id, external_code)`.
+
+**customers**: `id`, `name NN`, `code`, `external_id`, `customer_type` (`contractor`,`end_user`,`branch`,`other`), `parent_customer_id FK customers`, `active`. `UNIQUE (tenant_id, code)` where code not null. Trigram index on `name`.
+
+**customer_aliases**: `id`, `customer_id`, `alias NN`, `source`. `UNIQUE (tenant_id, lower(alias))`.
+
+**branches**: `id`, `name NN`, `code NN`. `UNIQUE (tenant_id, code)`.
+
+**products**: `id`, `sku NN`, `description`, `manufacturer_id NN`, `manufacturer_part_number`, `base_uom NN`, `category`, `active`. `UNIQUE (tenant_id, sku)`. Indexes `(tenant_id, manufacturer_id)`, trigram on `sku`.
+
+**product_aliases**: `id`, `product_id`, `alias NN`, `alias_type` (`erp_sku`,`manufacturer_part`,`upc`,`other`). `UNIQUE (tenant_id, alias_type, alias)`.
+
+**uom_conversions**: `id`, `product_id` (nullable = tenant default), `from_uom NN`, `to_uom NN`, `factor NUMERIC(18,8) NN CHECK (factor > 0)`. `UNIQUE (tenant_id, product_id, from_uom, to_uom)`.
+
+### 3.4 Import pipeline
+
+**mapping_templates**: `id`, `name NN`, `import_type NN` (`sales`,`purchases`,`customers`,`products`,`uom`,`agreement_items`,`remittance`), `header_signature NN` (hash of normalised header names), `mapping jsonb NN` (canonical field → source column + transform), `options jsonb` (delimiter, decimal separator, date format, encoding, header row, sheet), `version int`, `created_by`, `created_at`. `UNIQUE (tenant_id, name)`; index `(tenant_id, import_type, header_signature)`.
+
+**import_batches**: `id`, `import_type NN`, `file_id NN FK file_objects`, `mapping_template_id`, `source_system text NN`, `status NN` (`uploaded`,`scanning`,`parsing`,`awaiting_confirmation`,`loading`,`completed`,`completed_with_errors`,`failed`,`rejected`), `accept_partial bool default false`, `counts jsonb` (`rows_total, inserted, unchanged, changed, rejected`), `error_summary`, `checkpoint jsonb`, `created_by`, `created_at`, `started_at`, `completed_at`.
+
+**import_staged_rows**: `import_batch_id`, `row_number int NN`, `raw jsonb NN`, `normalized jsonb`, `status` (`valid`,`error`,`duplicate`,`changed`). PK `(import_batch_id, row_number)`. Purged after configurable retention (raw file remains in object storage).
+
+**import_row_errors**: `id`, `import_batch_id`, `row_number`, `column_name`, `code NN`, `message NN`, `raw jsonb`. Index `(import_batch_id)`.
+
+### 3.5 Source transactions (append-only versions)
+
+**sales_documents**: `id`, `import_batch_id NN`, `source_system NN`, `doc_type NN` (`invoice`,`credit_note`), `document_number NN`, `document_date NN date`, `ship_date date`, `customer_id NN`, `branch_id`, `original_document_id FK sales_documents` (credit notes), `currency_code`, `row_hash NN`, `version int NN default 1`, `is_current bool NN default true`, `superseded_by_id`, `created_at`.
+Unique: `(tenant_id, source_system, doc_type, document_number) WHERE is_current`.
+
+**sales_document_lines**: `id`, `document_id NN`, `import_batch_id NN`, `source_row_number NN`, `source_system NN`, `document_number NN` (denormalised), `line_number NN`, `product_id`, `sku_raw NN`, `manufacturer_id`, `customer_id NN` (denormalised), `description`, `quantity NUMERIC(18,6) NN CHECK (quantity <> 0)`, `uom NN`, `unit_price NUMERIC(18,6) NN`, `unit_cost NUMERIC(18,6)`, `replacement_cost NUMERIC(18,6)`, `extended_amount NUMERIC(18,4) NN`, `invoice_date NN date` (denormalised), `ship_date date`, `spa_reference text`, `project_reference text`, `original_line_id FK sales_document_lines` (returns), `row_hash NN`, `version int NN default 1`, `is_current bool NN default true`, `superseded_by_id`, `created_at`.
+Unique: `(tenant_id, source_system, document_number, line_number) WHERE is_current`.
+Indexes: `(tenant_id, manufacturer_id, invoice_date) WHERE is_current`, `(tenant_id, customer_id, invoice_date)`, `(tenant_id, product_id)`, `(tenant_id, spa_reference) WHERE spa_reference IS NOT NULL`, `(tenant_id, original_line_id)`.
+Checks: lines carry a denormalised `doc_type` (`invoice`,`credit_note`) and `CHECK ((doc_type = 'invoice' AND quantity > 0) OR (doc_type = 'credit_note' AND quantity < 0))`. The normaliser **canonicalises credit-note/return quantities to negative** whatever sign the source file uses. Price-only credit notes (quantity 0) are not supported in Release 1 and are rejected with a row error. (Rule in `BUSINESS_LOGIC.md` §7.)
+
+**purchase_documents**: `id`, `import_batch_id`, `source_system`, `doc_type` (`receipt`,`vendor_credit`), `document_number NN`, `document_date NN`, `manufacturer_id NN`, `po_number`, `currency_code`, `row_hash`, `version`, `is_current`, `superseded_by_id`. Unique as sales.
+
+**purchase_document_lines**: `id`, `document_id`, `import_batch_id`, `source_row_number`, `line_number`, `product_id`, `sku_raw`, `manufacturer_id`, `quantity`, `uom`, `unit_cost`, `extended_amount`, `document_date` (denormalised), `row_hash`, `version`, `is_current`, `superseded_by_id`. Index `(tenant_id, manufacturer_id, document_date) WHERE is_current`.
+
+### 3.6 Agreements
+
+**agreements**: `id`, `manufacturer_id NN`, `agreement_type NN` (`spa`,`rebate`), `external_number NN`, `name NN`, `cancelled_at`, `created_by`, `created_at`. `UNIQUE (tenant_id, manufacturer_id, external_number)`.
+
+**agreement_versions** (immutable once `active`): 
+`id`, `agreement_id NN`, `version_number int NN`, `status NN` (`active`,`superseded`,`expired`,`cancelled`), `valid_from date NN`, `valid_to date NN`, `valid_range daterange GENERATED ALWAYS AS (daterange(valid_from, valid_to, '[]')) STORED`, `rules jsonb NN`, `rules_schema_version int NN`, `priority int NN default 0`, `source NN` (`manual`,`spreadsheet_template`,`ai_extraction`), `draft_id`, `source_file_id`, `derived_from_version_id` (split copies), `supersedes_version_id`, `superseded_by_version_id`, `content_hash NN` (hash of canonical terms incl. items/customers/tiers), `created_by NN`, `approved_by NN`, `activated_at NN`, `superseded_at`.
+Constraints: `CHECK (valid_to >= valid_from)`; `UNIQUE (tenant_id, agreement_id, version_number)`; **`EXCLUDE USING gist (tenant_id WITH =, agreement_id WITH =, valid_range WITH &&) WHERE (status = 'active')`**.
+Only versions that passed approval exist in this table. Drafts live in `agreement_drafts` (a version row is never created in an unapproved state).
+
+**agreement_version_items** (SPA SKU lines): `id`, `version_id NN`, `line_number`, `product_id NN`, `customer_id` (item-level restriction, nullable), `reference_cost NUMERIC(18,6)`, `deviated_cost NUMERIC(18,6)`, `sell_price NUMERIC(18,6)`, `flat_amount NUMERIC(18,6)`, `rate NUMERIC(9,6)`, `claim_uom`, `max_quantity NUMERIC(18,6)`. Indexes `(tenant_id, version_id)`, `(tenant_id, product_id)`. `UNIQUE (tenant_id, version_id, product_id, coalesce(customer_id, '00000000-0000-0000-0000-000000000000'))`.
+
+**agreement_version_customers**: `version_id`, `customer_id`, `scope` (`include`,`exclude`). PK `(version_id, customer_id)`.
+
+**agreement_version_tiers**: `id`, `version_id`, `tier_number int NN`, `lower_bound NUMERIC(18,2) NN`, `rate NUMERIC(9,6)`, `flat_amount NUMERIC(18,4)`. `UNIQUE (tenant_id, version_id, tier_number)`. Validator (not just DB) enforces strictly increasing `lower_bound` with tier 1 = 0.
+
+**agreement_drafts**: `id`, `agreement_id` (null = brand-new agreement), `amends_version_id`, `source NN`, `status NN` (`draft`,`pending_approval`,`approved`,`rejected`,`needs_manual_entry`,`cancelled`), `payload jsonb NN` (the complete structured agreement: header, rules, items, customers, tiers), `payload_schema_version int NN`, `revision int NN default 1`, `validation jsonb` (errors/warnings from the last validator run), `extraction_id`, `source_file_id`, `created_by NN`, `submitted_by`, `submitted_at`, `reviewed_by`, `reviewed_at`, `rejection_reason`, `resulting_version_id`.
+
+**agreement_draft_revisions**: `id`, `draft_id`, `revision`, `payload jsonb`, `edited_by`, `created_at`, `change_summary`. Append-only.
+
+**document_extractions**: `id`, `file_id NN`, `kind NN` (`agreement`,`remittance`,`mapping`), `status NN` (`queued`,`processing`,`completed`,`needs_manual_entry`,`failed`), `text_method` (`native`,`ocr`,`none`), `pass_results jsonb`, `result jsonb`, `evidence_check jsonb`, `validation jsonb`, `confidence NUMERIC(4,3)`, `model`, `prompt_version`, `error_code`, `error_detail`, `created_by`, `created_at`, `completed_at`.
+
+**ai_invocations**: `id`, `extraction_id`, `purpose NN`, `provider NN`, `model NN`, `prompt_version NN`, `input_sha256`, `input_tokens`, `output_tokens`, `cost_usd NUMERIC(12,6)`, `latency_ms`, `status NN`, `error_code`, `created_at`. Raw prompts/responses are **not** stored here (the extraction `result` and `pass_results` hold what is needed).
+
+**remittance_extraction_staging**: `id`, `extraction_id`, `remittance_document_id`, `payload jsonb`, `arithmetic_check jsonb`, `status` (`pending_review`,`confirmed`,`rejected`).
+
+### 3.7 Calculation
+
+**calculation_runs**: `id`, `scope jsonb NN` (`manufacturer_ids`, `date_from`, `date_to`, filters), `as_of timestamptz NN` (agreement-version visibility instant), `data_cutoff timestamptz NN` (import state instant), `engine_version NN`, `config_hash NN`, `agreement_version_ids uuid[] NN`, `input_checksum`, `status NN` (`queued`,`running`,`completed`,`failed`,`cancelled`), `totals jsonb`, `error`, `created_by`, `created_at`, `started_at`, `completed_at`.
+
+**calculation_results** (append-only): `id`, `run_id NN`, `sales_document_line_id NN`, `agreement_version_id`, `status NN` (`eligible`,`exception`,`netted`,`adjustment`,`not_applicable`), `exception_code`, `eligible_quantity NUMERIC(18,6)`, `claim_uom`, `claim_unit_amount NUMERIC(18,6)`, `claim_amount NUMERIC(18,4) NN default 0`, `trace jsonb NN`, `inputs_hash NN`, `created_at`. `UNIQUE (tenant_id, run_id, sales_document_line_id)`. Indexes `(tenant_id, run_id, status)`, `(tenant_id, sales_document_line_id)`.
+
+**rebate_accrual_entries** (append-only ledger): `id`, `run_id NN`, `agreement_id NN`, `agreement_version_id NN`, `period_start NN`, `period_end NN`, `as_of_date NN`, `cumulative_qualifying NUMERIC(18,4)`, `cumulative_payout_base NUMERIC(18,4)`, `tier_number`, `tier_rate NUMERIC(9,6)`, `cumulative_earned NUMERIC(18,4)`, `prior_cumulative_accrued NUMERIC(18,4)`, `delta NUMERIC(18,4) NN`, `trace jsonb NN`, `created_at`. `UNIQUE (tenant_id, run_id, agreement_id, period_start)`.
+
+### 3.8 Claims
+
+**claim_export_templates**: `id`, `manufacturer_id`, `name`, `format` (`csv`,`xlsx`), `columns jsonb NN` (ordered: header, source field, format, constant), `options jsonb`, `active`.
+
+**claim_batches**: `id`, `manufacturer_id NN`, `batch_number NN`, `status NN` (`draft`,`approved`,`submitted`,`void`), `period_from`, `period_to`, `line_count int`, `total_amount NUMERIC(18,4)`, `export_template_id`, `exported_file_id`, `submitted_at`, `submitted_by`, `external_reference`, `created_by NN`, `approved_by`, `approved_at`, `void_reason`, `voided_at`. `UNIQUE (tenant_id, batch_number)`.
+
+**claim_lines**: `id`, `batch_id NN`, `claim_reference text NN` (human/export key, e.g. `CL-2026-000123`), `source_kind NN` (`sales_line`,`rebate_accrual`), `sales_document_line_id`, `rebate_accrual_entry_id`, `calculation_result_id NN`, `agreement_version_id NN`, `quantity NUMERIC(18,6)`, `unit_amount NUMERIC(18,6)`, `claim_amount NUMERIC(18,4) NN`, `frozen_at`, `released_at`, `created_at`.
+Constraints: `CHECK ((source_kind='sales_line') = (sales_document_line_id IS NOT NULL))`, `CHECK ((source_kind='rebate_accrual') = (rebate_accrual_entry_id IS NOT NULL))`; `UNIQUE (tenant_id, claim_reference)`; **partial unique** `(tenant_id, sales_document_line_id) WHERE released_at IS NULL` and `(tenant_id, rebate_accrual_entry_id) WHERE released_at IS NULL` (a source can be actively claimed once). `released_at` is set only when a *draft/approved* batch is voided.
+
+**claim_adjustments**: `id`, `manufacturer_id NN`, `adjustment_type NN` (`return_reversal`,`agreement_change`,`manual_correction`,`rebate_clawback`,`recovery_reclaim`), `claim_line_id`, `calculation_result_id`, `variance_case_id`, `amount NUMERIC(18,4) NN` (signed), `reason NN`, `status NN` (`proposed`,`approved`,`included`,`rejected`), `included_in_batch_id`, `proposed_by`, `approved_by`, `approved_at`, `created_at`.
+
+### 3.9 Remittance and reconciliation
+
+**remittance_documents**: `id`, `manufacturer_id NN`, `file_id NN`, `doc_type NN` (`credit_memo`,`remittance_advice`,`deduction_notice`), `channel NN` (`credit_memo`,`check`,`ach`,`deduction`), `document_number`, `document_date`, `payment_date`, `total_amount NUMERIC(18,4) NN`, `currency_code`, `status NN` (`uploaded`,`pending_review`,`accepted`,`reconciled`,`void`), `extraction_id`, `import_batch_id`, `accepted_by`, `accepted_at`, `created_by`, `created_at`. Partial unique `(tenant_id, manufacturer_id, document_number) WHERE status <> 'void' AND document_number IS NOT NULL`.
+
+**remittance_lines**: `id`, `remittance_document_id NN`, `line_number NN`, `source_row_number`, `claim_reference`, `invoice_number`, `invoice_line_number`, `sku_raw`, `customer_ref`, `quantity`, `amount_paid NUMERIC(18,4) NN`, `amount_claimed_stated NUMERIC(18,4)`, `external_reason_code`, `external_reason_text`, `reason_code` (mapped), `raw jsonb`. `UNIQUE (tenant_id, remittance_document_id, line_number)`. Indexes on `claim_reference`, `(invoice_number, invoice_line_number)`.
+
+**reconciliation_matches**: `id`, `remittance_line_id NN`, `claim_line_id`, `claim_adjustment_id`, `allocated_amount NUMERIC(18,4) NN`, `method NN` (`exact_reference`,`invoice_line`,`composite`,`fuzzy`,`subset_sum`,`manual`), `score NUMERIC(5,4)`, `evidence jsonb NN` (fields compared and how), `status NN` (`suggested`,`confirmed`,`rejected`), `matched_by_run_id`, `confirmed_by`, `confirmed_at`, `created_at`. `CHECK (num_nonnulls(claim_line_id, claim_adjustment_id) = 1)`. Application invariant (tested): confirmed allocations per remittance line sum to ≤ `amount_paid`; per claim line sum of confirmed allocations is tracked against `claim_amount`. Index on `(tenant_id, claim_line_id)`, `(tenant_id, remittance_line_id)`.
+
+### 3.10 Recovery
+
+**variance_cases**: `id`, `manufacturer_id NN`, `claim_line_id`, `remittance_line_id`, `case_type NN` (`short_paid`,`rejected`,`unpaid`,`overpaid`,`unmatched_payment`,`source_changed`,`deadline_unknown`), `reason_code NN FK reason_codes`, `claimed_amount NUMERIC(18,4)`, `paid_amount NUMERIC(18,4)`, `variance_amount NUMERIC(18,4) NN`, `deadline_date date`, `deadline_basis`, `owner_user_id`, `status NN` (`open`,`to_reclaim`,`submitted`,`recovered`,`written_off`,`closed_no_action`), `recovered_amount NUMERIC(18,4) default 0`, `written_off_amount NUMERIC(18,4) default 0`, `dispute_assessment jsonb`, `created_by_run_id`, `created_at`, `closed_at`.
+Partial unique `(tenant_id, claim_line_id, case_type) WHERE status NOT IN ('recovered','written_off','closed_no_action')` (one live case per claim line and type). Index `(tenant_id, status, deadline_date)`.
+
+**variance_case_events** (append-only): `id`, `case_id NN`, `event_type NN` (`created`,`status_changed`,`note`,`assigned`,`attachment`,`amount_recovered`,`assessment_updated`), `from_status`, `to_status`, `note`, `payload jsonb`, `actor_user_id`, `created_at`.
+
+**case_attachments**: `case_id`, `file_id`, `added_by`, `added_at`.
+
+**notifications**: `id`, `user_id NN`, `kind NN`, `entity_type`, `entity_id`, `title NN`, `body`, `due_date`, `dedupe_key NN`, `read_at`, `emailed_at`, `created_at`. `UNIQUE (tenant_id, user_id, dedupe_key)`.
+
+### 3.11 Reporting
+
+**summary_claims_monthly** (refreshed by job): `manufacturer_id`, `branch_id` (nullable), `month date`, `claimed`, `collected`, `short_paid`, `recovered`, `written_off`, `at_risk`, `refreshed_at`. PK `(tenant_id, manufacturer_id, coalesce(branch_id,…), month)`. Never the source of truth; every figure is reproducible by query (tested).
+
+## 4. ER diagram
+
+```mermaid
+erDiagram
+  TENANTS ||--o{ MEMBERSHIPS : has
+  USERS ||--o{ MEMBERSHIPS : belongs
+  TENANTS ||--|| TENANT_SETTINGS : configures
+  TENANTS ||--o{ MANUFACTURERS : owns
+  MANUFACTURERS ||--|| MANUFACTURER_SETTINGS : has
+  MANUFACTURERS ||--o{ PRODUCTS : supplies
+  PRODUCTS ||--o{ PRODUCT_ALIASES : known_as
+  PRODUCTS ||--o{ UOM_CONVERSIONS : converts
+  CUSTOMERS ||--o{ CUSTOMER_ALIASES : known_as
+
+  FILE_OBJECTS ||--o{ IMPORT_BATCHES : source
+  IMPORT_BATCHES ||--o{ SALES_DOCUMENTS : loads
+  IMPORT_BATCHES ||--o{ PURCHASE_DOCUMENTS : loads
+  SALES_DOCUMENTS ||--o{ SALES_DOCUMENT_LINES : contains
+  PURCHASE_DOCUMENTS ||--o{ PURCHASE_DOCUMENT_LINES : contains
+  CUSTOMERS ||--o{ SALES_DOCUMENTS : buys
+  PRODUCTS ||--o{ SALES_DOCUMENT_LINES : sold
+  SALES_DOCUMENT_LINES ||--o{ SALES_DOCUMENT_LINES : returned_by
+
+  MANUFACTURERS ||--o{ AGREEMENTS : has
+  AGREEMENTS ||--o{ AGREEMENT_VERSIONS : versions
+  AGREEMENT_VERSIONS ||--o{ AGREEMENT_VERSION_ITEMS : items
+  AGREEMENT_VERSIONS ||--o{ AGREEMENT_VERSION_CUSTOMERS : scope
+  AGREEMENT_VERSIONS ||--o{ AGREEMENT_VERSION_TIERS : tiers
+  AGREEMENT_DRAFTS ||--o| AGREEMENT_VERSIONS : approved_into
+  AGREEMENT_DRAFTS ||--o{ AGREEMENT_DRAFT_REVISIONS : history
+  FILE_OBJECTS ||--o{ DOCUMENT_EXTRACTIONS : processed
+  DOCUMENT_EXTRACTIONS ||--o{ AGREEMENT_DRAFTS : proposes
+  DOCUMENT_EXTRACTIONS ||--o{ AI_INVOCATIONS : logs
+
+  CALCULATION_RUNS ||--o{ CALCULATION_RESULTS : produces
+  SALES_DOCUMENT_LINES ||--o{ CALCULATION_RESULTS : evaluated
+  AGREEMENT_VERSIONS ||--o{ CALCULATION_RESULTS : applied
+  CALCULATION_RUNS ||--o{ REBATE_ACCRUAL_ENTRIES : accrues
+  AGREEMENTS ||--o{ REBATE_ACCRUAL_ENTRIES : for
+
+  MANUFACTURERS ||--o{ CLAIM_BATCHES : receives
+  CLAIM_BATCHES ||--o{ CLAIM_LINES : contains
+  CALCULATION_RESULTS ||--o| CLAIM_LINES : claimed_as
+  CLAIM_LINES ||--o{ CLAIM_ADJUSTMENTS : adjusted_by
+
+  MANUFACTURERS ||--o{ REMITTANCE_DOCUMENTS : pays
+  FILE_OBJECTS ||--o{ REMITTANCE_DOCUMENTS : source
+  REMITTANCE_DOCUMENTS ||--o{ REMITTANCE_LINES : contains
+  REMITTANCE_LINES ||--o{ RECONCILIATION_MATCHES : matched
+  CLAIM_LINES ||--o{ RECONCILIATION_MATCHES : matched
+  CLAIM_LINES ||--o{ VARIANCE_CASES : disputed
+  REMITTANCE_LINES ||--o{ VARIANCE_CASES : triggers
+  VARIANCE_CASES ||--o{ VARIANCE_CASE_EVENTS : history
+  VARIANCE_CASES ||--o{ CASE_ATTACHMENTS : has
+  TENANTS ||--o{ AUDIT_LOG : records
+```
+
+## 5. Duplicate-import prevention (three layers)
+
+1. **File level:** `file_objects (tenant_id, kind, sha256)` partial unique index → uploading the identical file returns the existing import ("already imported on …").
+2. **Natural key per row:** `(tenant_id, source_system, document_number, line_number) WHERE is_current` unique index. Loading uses `INSERT … ON CONFLICT` logic implemented in the repository, never blind inserts.
+3. **Row content hash:** `row_hash = SHA-256(canonical JSON of normalised fields)`. For an existing key:
+   - same hash → **unchanged** (no-op, counted);
+   - different hash → insert new row `version = old + 1`, set old `is_current = false`, `superseded_by_id = new.id`; record as **changed** in the batch summary; if the old row is referenced by any non-released `claim_line`, create a `variance_cases` row of type `source_changed` and block silent propagation.
+
+Imports are chunked, each chunk one transaction, with `import_batches.checkpoint` allowing resume. Order independence is a tested property.
+
+## 6. Traceability
+
+```
+file_objects ← import_batches ← sales_document_lines (import_batch_id, source_row_number)
+sales_document_lines ← calculation_results (run_id, agreement_version_id, trace, engine_version via run)
+calculation_results ← claim_lines (calculation_result_id) → claim_batches
+claim_lines ← reconciliation_matches → remittance_lines → remittance_documents → file_objects
+claim_lines/remittance_lines ← variance_cases ← variance_case_events
+agreement_versions ← agreement_drafts ← document_extractions ← file_objects
+```
+
+Every amount in an API response that is computed or stored carries (or can be resolved by) a `trace_ref` = `{kind, id}` pointing at the `calculation_result`, `rebate_accrual_entry`, or `reconciliation_match` row. `GET /trace/...` resolves the chain in one call (see `API_SPECIFICATION.md`).
+
+## 7. Immutability and integrity triggers
+
+| Rule | Mechanism |
+|---|---|
+| `audit_log` no UPDATE/DELETE | `BEFORE UPDATE OR DELETE` trigger raises; `rebate_app` lacks the privileges anyway |
+| `calculation_results`, `rebate_accrual_entries`, `agreement_draft_revisions`, `variance_case_events` append-only | trigger raises on UPDATE/DELETE |
+| `agreement_versions` terms immutable | trigger rejects UPDATE of any column except `status`, `superseded_at`, `superseded_by_version_id` |
+| `agreement_version_items/customers/tiers` immutable when parent active | trigger checks parent status |
+| `claim_lines` frozen after submission | trigger: when `frozen_at IS NOT NULL`, reject UPDATE/DELETE. `released_at` may be set only if parent batch `status IN ('draft','approved','void')` |
+| `claim_batches` | status transitions validated by trigger (`draft→approved→submitted`, `draft/approved→void`); `submitted` rows immutable except `external_reference` notes via audited update |
+| Source lines | only `is_current`, `superseded_by_id` may change; trigger rejects other updates |
+| Money sanity | CHECKs: amounts finite, `rate BETWEEN 0 AND 1` (rates above 100% rejected), `allocated_amount <> 0` |
+| Cross-tenant | composite FKs; isolation test suite |
+
+## 8. Transaction management
+
+- One API request = one transaction; `SET LOCAL app.tenant_id` first.
+- **Calculation run:** takes `pg_advisory_xact_lock(hashtext(tenant_id::text || scope_key))`; writes results in chunks; run row is `completed` only when all chunks succeed. Readers only use results whose run is `completed`.
+- **Batch submission:** single transaction: set `frozen_at` on all lines, set batch `submitted`, audit entry.
+- **Agreement activation:** single transaction including split-supersede, exclusion-constraint check, audit.
+- Isolation level `READ COMMITTED` with explicit `SELECT … FOR UPDATE` on rows being transitioned. Use `SERIALIZABLE` only where a documented invariant needs it (none required initially).
+
+## 9. Indexing and scale
+
+Expected: 1–10M sales lines/year/tenant. Indexes lead with `tenant_id`. Partition `sales_document_lines` and `calculation_results` by `tenant_id` hash or by date **only after** measurements in S11 show need. Use `COPY`/bulk upserts for imports, keyset pagination for lists, and `EXPLAIN` checks recorded for the main queries (S11).
+
+## 10. Migration strategy
+
+- Alembic in `backend/migrations`, one revision per logical change, human-readable `message`, never edited after merge to a shared branch.
+- Revision naming: `YYYYMMDD_HHMM_<slug>`. A `downgrade` is **optional** and only written when safe; production is forward-only (restore from backup is the rollback).
+- Expand → migrate → contract for breaking changes (add nullable column, backfill, switch code, then constrain/drop in a later release).
+- Helpers in `migrations/_rls.py` (enable RLS), `_immutable.py` (create immutability trigger), `_audit.py`.
+- CI: (1) `alembic upgrade head` on empty DB; (2) schema-drift check (`alembic check` / compare metadata); (3) lint: no float types, every tenant table has RLS + composite unique, every FK between tenant tables is composite; (4) migration on a seeded realistic dataset from `testdata/`.
+- Seed data (reference `reason_codes`, roles) is applied by migrations (idempotent), not by app startup.
+- Local DB: created from scratch by `infra/scripts/init-db.sh` (creates roles, database, extensions) followed by `alembic upgrade head`. See `DEPLOYMENT.md`.

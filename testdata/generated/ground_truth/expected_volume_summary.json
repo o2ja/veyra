@@ -1,0 +1,14 @@
+{
+  "SYNTHETIC": true,
+  "agreement": "SPA-VOLT-2026-884 only (no caps apply: PNL-200A not used)",
+  "eligible_count": 1869,
+  "eligible_total": "972707.50",
+  "exceptions": {
+    "ineligible_customer": 36,
+    "missing_spa_reference": 31,
+    "price_mismatch": 64
+  },
+  "file": "sales_volume_2000.csv",
+  "run_date": "2026-07-10",
+  "seed": 20261109
+}

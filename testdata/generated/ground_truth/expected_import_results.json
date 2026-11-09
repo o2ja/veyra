@@ -1,0 +1,33 @@
+{
+  "SYNTHETIC": true,
+  "sales_layoutB_us_formats.xlsx": {
+    "checks": [
+      "US dates parse (6/12/2026)",
+      "thousands separators parse",
+      "'00418' keeps leading zeros",
+      "title rows above header skipped"
+    ],
+    "rows_total": 3
+  },
+  "sales_scenarios_layoutA.csv": {
+    "reimport_same_file": {
+      "changed": 0,
+      "inserted": 0,
+      "unchanged": 23
+    }
+  },
+  "sales_with_errors_layoutA.csv": {
+    "duplicate_in_file": 1,
+    "note": "unknown product goes to the unmapped-entities review queue; counts depend on whether the user imports valid rows only",
+    "rejected_rows": {
+      "INV-30002": "invalid_date",
+      "INV-30003": "missing_customer",
+      "INV-30004": "unknown_product (to unmapped queue, not a hard error)",
+      "INV-30005": "invoice_negative_quantity",
+      "INV-30006": "invalid_number",
+      "INV-30007": "zero_quantity"
+    },
+    "rows_total": 8,
+    "valid_inserted": 1
+  }
+}

@@ -1,0 +1,73 @@
+{
+  "customers": [
+    {
+      "customer_code": "ALDER",
+      "scope": "include"
+    },
+    {
+      "customer_code": "DELTA",
+      "scope": "include"
+    },
+    {
+      "customer_code": "EVERG",
+      "scope": "include"
+    }
+  ],
+  "header": {
+    "agreement_type": "spa",
+    "external_number": "SPA-BRIT-2026-031",
+    "manufacturer_code": "BRIT",
+    "name": "Brightline guaranteed-margin SPA (SYNTHETIC)",
+    "priority": 0,
+    "valid_from": "2026-03-01",
+    "valid_to": "2026-08-31"
+  },
+  "items": [
+    {
+      "claim_uom": null,
+      "max_quantity": null,
+      "rate": "0.12",
+      "sku": "LED-2X4-40W"
+    },
+    {
+      "claim_uom": null,
+      "max_quantity": null,
+      "rate": "0.12",
+      "sku": "LED-HB-150W"
+    }
+  ],
+  "payload_schema_version": 1,
+  "rules": {
+    "adapter": null,
+    "calculation": {
+      "basis": "guaranteed_margin",
+      "cost_source": "line_cost"
+    },
+    "claim_uom": null,
+    "customer_scope": {
+      "mode": "listed"
+    },
+    "date_basis": "ship_date",
+    "price_check": {
+      "mode": "ignore",
+      "tolerance": "0.005"
+    },
+    "product_scope": {
+      "mode": "listed"
+    },
+    "quantity": {
+      "cap_scope": "per_item"
+    },
+    "rounding": {
+      "mode": "half_up",
+      "scale": 2,
+      "timing": "per_line"
+    },
+    "schema_version": 1,
+    "spa_reference": {
+      "required": false
+    },
+    "type": "spa"
+  },
+  "tiers": []
+}

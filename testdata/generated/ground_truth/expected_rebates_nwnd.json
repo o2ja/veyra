@@ -1,0 +1,16 @@
+{
+  "SYNTHETIC": true,
+  "agreement": "REB-NWND-2026",
+  "cases": [
+    {
+      "as_of": "2026-12-31",
+      "cumulative_qualifying": "1200000.00",
+      "earned_cumulative": "25000.00",
+      "id": "GL-R3",
+      "note": "12 lines x 100,000; 2 lines carry spa_ref -> qualify_only",
+      "payout_base": "1000000.00",
+      "tier": 2
+    }
+  ],
+  "file": "sales/sales_hvac_rebate_scenario.csv"
+}

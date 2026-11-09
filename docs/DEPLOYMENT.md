@@ -1,0 +1,189 @@
+# Deployment and Operations
+
+> Principles: portable (Docker + standard Postgres + S3 API), no BaaS, simple first (single host), reproducible from the repo. Production hosting decisions (Postgres self-run vs managed, provider, region) are **PROPOSED / OD-3, OD-4**; everything here works for either. Security controls: `SECURITY.md`. Tech choices: `TECH_STACK.md`.
+
+## 1. Environments
+
+| Env | Purpose | Data | Notes |
+|---|---|---|---|
+| `local` | Development | Synthetic only | Docker Compose, **new empty database created from scratch** |
+| `ci` | Automated tests | Synthetic | Postgres service container, ephemeral |
+| `staging` | Pre-release verification, demos, ZAP scans | Synthetic only | Mirrors production topology; separate secrets and buckets |
+| `production` | Customers | Real | Separate host/network, backups, monitoring |
+
+Real customer data never exists in `local`, `ci`, or `staging`.
+
+## 2. Local development
+
+### 2.1 Prerequisites
+Docker + Docker Compose; Python 3.12+ with `uv`; Node 20 LTS+ with npm/pnpm. (A native PostgreSQL 16 install is acceptable instead of the container: use the same `init-db.sh` against it.)
+
+### 2.2 Services (`infra/docker/compose.dev.yml`)
+
+| Service | Image | Ports (host) | Purpose |
+|---|---|---|---|
+| `postgres` | `postgres:16` | 5432 | Database (volume `pgdata`) |
+| `minio` | `minio/minio` | 9000/9001 | S3-compatible storage |
+| `clamav` | `clamav/clamav` | 3310 | Malware scanning |
+| `mailpit` | `axllent/mailpit` | 1025/8025 | Local SMTP + inbox UI |
+| `api` | built from `backend/` | 8000 | FastAPI (reload in dev) |
+| `worker` | built from `backend/` | — | Job worker |
+| `frontend` | built from `frontend/` | 5173 | Vite dev server (proxy `/api` → `api`) |
+
+Convenience commands (`Makefile` or `justfile`): `make up`, `make down`, `make db-init`, `make migrate`, `make seed-synthetic`, `make test`, `make test-isolation`, `make lint`, `make e2e`, `make gen-client`.
+
+### 2.3 Database setup from scratch
+
+1. `make up` starts an empty Postgres (no restore, no import).
+2. `infra/scripts/init-db.sh` (run once per new database, as the Postgres superuser):
+   - `CREATE ROLE rebate_owner LOGIN PASSWORD …; CREATE ROLE rebate_app LOGIN …; CREATE ROLE rebate_ai_writer LOGIN …; CREATE ROLE rebate_readonly LOGIN …;` (passwords from env; `rebate_app` etc. with `NOBYPASSRLS NOSUPERUSER`).
+   - `CREATE DATABASE rebate OWNER rebate_owner;` then `CREATE EXTENSION btree_gist, pg_trgm, citext;`.
+   - `REVOKE ALL ON DATABASE rebate FROM PUBLIC;` grant `CONNECT` to the app roles.
+3. `make migrate` runs Alembic **as `rebate_owner`**; migrations create schema, grants (default privileges for `rebate_app`), RLS, triggers, reference data.
+4. `make seed-synthetic` (optional): loads `testdata/generated` through the real import/agreement services into a dev workspace (never direct SQL inserts that bypass validation).
+5. Startup self-check: the API refuses to start if connected as superuser/owner or a role with `BYPASSRLS`.
+
+### 2.4 Environment variables
+
+Defined by `core/config.py` (pydantic-settings). `.env.example` contains placeholders only; real `.env` files are git-ignored.
+
+| Variable | Example (placeholder) | Notes |
+|---|---|---|
+| `APP_ENV` | `local` / `ci` / `staging` / `production` | |
+| `SECRET_KEY` | random 64 bytes | Signs CSRF tokens etc.; rotate with overlap |
+| `DATABASE_URL` | `postgresql+psycopg://rebate_app:***@postgres:5432/rebate` | Runtime role |
+| `DATABASE_URL_OWNER` | `…rebate_owner…` | Migrations only; not present in the running API container |
+| `DATABASE_URL_AI` | `…rebate_ai_writer…` | AI gateway sessions |
+| `S3_ENDPOINT_URL`, `S3_REGION`, `S3_BUCKET`, `S3_ACCESS_KEY_ID`, `S3_SECRET_ACCESS_KEY` | | MinIO locally |
+| `CLAMD_HOST`, `CLAMD_PORT` | `clamav`, `3310` | |
+| `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASSWORD`, `MAIL_FROM` | | Mailpit locally |
+| `LLM_PROVIDER`, `LLM_API_KEY`, `LLM_MODEL_PRIMARY`, `LLM_MODEL_SECONDARY`, `AI_DAILY_COST_CAP_USD` | | **Unset by default; AI disabled** until OD-2 approval |
+| `ENCRYPTION_KEY`, `ENCRYPTION_KEY_ID` | | MFA secrets; key id enables rotation |
+| `SESSION_IDLE_MINUTES` / `SESSION_ABSOLUTE_HOURS` | `30` / `12` | |
+| `SENTRY_DSN` | | Optional |
+| `PUBLIC_BASE_URL` | `https://app.example.com` | Links in emails, cookie/Origin checks |
+| `LOG_LEVEL` | `INFO` | |
+
+The frontend receives only public build-time config (`VITE_API_BASE=/api/v1`); never secrets.
+
+### 2.5 Docker images
+
+- `backend/Dockerfile`: multi-stage (builder with `uv` → slim runtime), non-root user, read-only root filesystem where possible, no build tools in the final image, healthcheck on `/api/v1/health/live`, pinned base image by digest. One image runs as `api` (`gunicorn -k uvicorn.workers.UvicornWorker`) or `worker` (`python -m rebate.workers`) by command.
+- OCR tooling (Tesseract/OCRmyPDF) is included in the **worker** image only.
+- `frontend/Dockerfile`: build stage (`npm ci && npm run build`) → static files copied into the Caddy image (or served from a volume).
+
+## 3. Production topology (initial)
+
+```mermaid
+flowchart LR
+  Internet --> CD[Caddy :443]
+  subgraph Host A - Docker network
+    CD --> API[api x N]
+    CD --> FE[static SPA]
+    API --> PGX[(Postgres - per OD-3)]
+    WK[worker x M] --> PGX
+    WK --> CL[clamav]
+  end
+  API --> S3[(S3-compatible object storage)]
+  WK --> S3
+  PGX -->|WAL + dumps, encrypted| BK[(Backup storage, separate account)]
+  S3 -.versioned, replicated.-> BK
+  WK --> LLM[LLM provider - only after OD-2 approval]
+  API --> OBS[Sentry / log store / uptime check]
+```
+
+- One production host (VPS or cloud VM, e.g. 4 vCPU / 8 GB to start) running Compose: `caddy`, `api`, `worker`, `clamav`, and (if self-run) `postgres`. A separate staging host.
+- **Postgres (OD-3):** (a) self-run in Compose on a dedicated volume/host with `pgBackRest` or WAL-G; or (b) managed standard Postgres from a plain cloud provider. App connects over TLS (`sslmode=verify-full` when remote). Either way: backups, PITR, tested restores.
+- Network: only Caddy exposes 80/443; Postgres/ClamAV/MinIO are not exposed publicly; host firewall default-deny; SSH key-only, no root login, fail2ban; automatic security updates.
+- Scale-up path: bigger instance → move worker to its own host → managed/dedicated Postgres with a read replica for reporting → multiple API replicas behind Caddy/load balancer. Kubernetes only with an ADR and a measured need.
+
+### 3.1 Reverse proxy and SSL (Caddy)
+
+`infra/caddy/Caddyfile` (sketch; final values set in S0/S11):
+
+```
+app.example.com {
+    encode zstd gzip
+    header {
+        Strict-Transport-Security "max-age=31536000; includeSubDomains"
+        X-Content-Type-Options nosniff
+        X-Frame-Options DENY
+        Referrer-Policy strict-origin-when-cross-origin
+        Permissions-Policy "camera=(), microphone=(), geolocation=()"
+        Content-Security-Policy "default-src 'self'; frame-ancestors 'none'; object-src 'none'; base-uri 'self'; form-action 'self'"
+        -Server
+    }
+    request_body { max_size 60MB }
+    handle /api/* { reverse_proxy api:8000 }
+    handle        { root * /srv/frontend; try_files {path} /index.html; file_server }
+}
+```
+Caddy obtains and renews TLS certificates automatically (ACME); TLS 1.2+ only. Coarse rate limiting at the edge via a Caddy rate-limit plugin or the host firewall; fine-grained limits in the app.
+
+## 4. CI/CD
+
+GitHub Actions (or equivalent). Pipeline (see `TESTING_STRATEGY.md` §12):
+
+1. **PR:** `ruff`, `mypy`, `import-linter`, unit/integration/api/db/isolation/golden tests against a Postgres service, `verify_business_logic_examples.py`, frontend lint/type/unit, OpenAPI client regeneration diff, `bandit`, `pip-audit`, `npm audit`, `gitleaks`, migration checks (empty→head, drift, lint rules).
+2. **Main:** build and tag images (git SHA), push to a private registry, run Playwright e2e, ZAP baseline against an ephemeral stack.
+3. **Deploy to staging** automatically; **production by manual approval**.
+4. **Deploy procedure** (`infra/scripts/deploy.sh`): pull images → run migrations (`alembic upgrade head` with owner credentials, in a one-off container) → rolling restart `api` then `worker` → smoke tests (`/health/ready`, login, a read call) → record the release. Rollback = redeploy previous image tag; schema is forward-compatible for one release (expand/contract), otherwise restore from backup.
+5. Branch protection: required checks, review (the owner approves stage completion, see `CODE_REVIEW_CHECKLIST.md`).
+
+## 5. Logging
+
+Structured JSON to stdout (collected by Docker); fields: `timestamp`, `level`, `service`, `request_id`, `tenant_id`, `user_id`, `route`, `status`, `latency_ms`, `job_id`. **Never** log bodies, tokens, passwords, file contents, or financial detail tied to named parties. Ship to a log store (e.g. Loki/Grafana Cloud/Papertrail; decision at S11) with 30–90 day retention. Audit trail is in the database (`audit_log`), not in log files.
+
+## 6. Monitoring and alerting
+
+| Signal | Tool | Alert |
+|---|---|---|
+| Uptime / TLS expiry | external checker (e.g. UptimeRobot/Better Stack) on `/health/ready` | Down > 2 min |
+| Errors | Sentry (PII scrubbed) | New issue / spike |
+| Jobs | Admin view + metric from Postgres | Any `failed`/dead job; queue age > 15 min |
+| Postgres | `pg_stat_*`, disk, connections, replication/WAL archiving lag | Disk > 80%, archive failing, long-running transactions |
+| Host | CPU/RAM/disk | > 85% sustained |
+| Backups | Job result + checksum verification | Missed or failed |
+| ClamAV | Signature freshness | Stale > 48 h |
+| AI | Cost/day, failure rate | Cap reached, error spike |
+| Security | Failed-login spikes, permission-denied spikes | Threshold |
+
+## 7. Backups and recovery
+
+- **Postgres:** nightly base backup + continuous WAL archiving (PITR). Self-run: `pgBackRest`/WAL-G to object storage in a **separate account/provider**; managed: provider PITR plus a nightly `pg_dump` copied elsewhere. Retention: 35 daily, 12 monthly. Backups encrypted.
+- **Objects:** bucket versioning; nightly sync of changed objects to a second bucket/provider.
+- **Config:** `infra/` and Compose files are in git; secrets in the secret store with documented recovery (owner holds an offline copy of critical keys, including `ENCRYPTION_KEY`).
+- **Targets (initial, confirm with owner):** RPO ≤ 15 min, RTO ≤ 4 h.
+
+### 7.1 Recovery runbooks (`infra/runbooks/`)
+
+| Scenario | Steps (summary) |
+|---|---|
+| Restore DB to a point in time | Provision clean Postgres → restore base backup → replay WAL to target → verify with row counts and `alembic current` → run isolation/golden smoke tests → switch `DATABASE_URL` |
+| Lost host | Provision new host → install Docker → pull images by tag → restore secrets → attach/restore DB → point DNS → smoke test |
+| Corrupt object store | Restore versions or from the secondary bucket; verify `file_objects.sha256` against restored objects |
+| Failed deployment | Roll back image tag; if a migration ran, assess forward-fix vs restore |
+| Credential leak | Rotate affected secrets, revoke sessions (`UPDATE sessions SET revoked_at = now()`), review audit log, notify per policy |
+| Single-tenant data incident | Use per-tenant export (Later) or point-in-time restore into a scratch DB and extract |
+| Dead jobs | Admin UI: inspect error → retry or fix data; never edit queue tables by hand |
+
+**Restore drill:** before the first pilot and monthly thereafter, restore the latest backup to a scratch environment, run the smoke/golden/isolation tests, and record duration and issues in `PROJECT_STATUS.md`.
+
+## 8. Cost estimates (ESTIMATES, not verified prices; check current provider pricing)
+
+| Item | Rough monthly (USD) |
+|---|---|
+| Production VPS 4 vCPU / 8 GB | 15–50 |
+| Staging VPS | 8–20 |
+| Managed Postgres (if OD-3 = managed) | 15–60 |
+| Object storage + backups | 5–20 |
+| Email, domain, uptime check | 10–40 |
+| Sentry / logs | 0–30 |
+| LLM and OCR | Variable: depends on document volume; likely cents to a few dollars per document during pilots (unverified) |
+| **Total excluding LLM** | **≈ 60–220** |
+
+## 9. Operational checklists
+
+- **Before first pilot:** all S0–S11 stages approved; restore drill done; pen test scheduled/complete; AI provider terms approved (OD-2) or AI disabled; monitoring alerts tested; runbooks reviewed; data-processing terms and customer-facing security overview ready; support access procedure defined.
+- **Release:** changelog, migration review, backup taken immediately before deploy, smoke tests, rollback plan noted.
+- **Weekly:** check failed jobs, backup status, dependency alerts. **Monthly:** restore drill, secret/access review, cost review.

@@ -1,0 +1,61 @@
+{
+  "customers": [
+    {
+      "customer_code": "EVERG",
+      "scope": "include"
+    }
+  ],
+  "header": {
+    "agreement_type": "spa",
+    "external_number": "SPA-VOLT-2026-901",
+    "manufacturer_code": "VOLT",
+    "name": "Voltara project SPA - Evergreen (SYNTHETIC; overlaps 884 on purpose)",
+    "priority": 0,
+    "valid_from": "2026-01-01",
+    "valid_to": "2026-12-31"
+  },
+  "items": [
+    {
+      "claim_uom": null,
+      "deviated_cost": "80.00",
+      "max_quantity": null,
+      "reference_cost": "100.00",
+      "sell_price": "90.00",
+      "sku": "BRK-3P-100A"
+    }
+  ],
+  "payload_schema_version": 1,
+  "rules": {
+    "adapter": null,
+    "calculation": {
+      "basis": "price_difference",
+      "cost_source": "agreement_reference"
+    },
+    "claim_uom": null,
+    "customer_scope": {
+      "mode": "listed"
+    },
+    "date_basis": "ship_date",
+    "price_check": {
+      "mode": "flag",
+      "tolerance": "0.005"
+    },
+    "product_scope": {
+      "mode": "listed"
+    },
+    "quantity": {
+      "cap_scope": "per_item"
+    },
+    "rounding": {
+      "mode": "half_up",
+      "scale": 2,
+      "timing": "per_line"
+    },
+    "schema_version": 1,
+    "spa_reference": {
+      "required": false
+    },
+    "type": "spa"
+  },
+  "tiers": []
+}

@@ -1,0 +1,7 @@
+line,invoice_no,invoice_line,part_no,qty,amount_claimed,amount_paid,reason_code,reason_text
+1,INV-10001,1,BRK-3P-100A,100,2200.00,2050.00,E12,SPA price differs from approved price
+2,INV-10010,1,PNL-200A,60,3120.00,3120.00,,
+3,INV-10011,1,PNL-200A,40,2080.00,0.00,E07,Exceeds authorized quantity
+4,INV-10021,1,BRK-3P-60A,16,200.00,200.00,,Net of return CN-5002
+5,,,,,,2100.00,,Mixed SPA claims - June shipments
+6,INV-99999,1,BRK-3P-100A,3,66.00,75.00,,Credit - unidentified

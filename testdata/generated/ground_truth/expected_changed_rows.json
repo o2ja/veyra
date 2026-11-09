@@ -1,0 +1,14 @@
+{
+  "SYNTHETIC": true,
+  "after_importing": "sales_scenarios_layoutA.csv",
+  "expected": {
+    "changed": 2,
+    "changed_keys": [
+      "INV-10001/1",
+      "INV-10002/1"
+    ],
+    "note": "INV-10001/1 is in claim_batches_fixture (frozen): must raise a source_changed case",
+    "unchanged": 3
+  },
+  "file": "sales_corrected_changed_rows.csv"
+}

@@ -1,0 +1,53 @@
+{
+  "customers": [],
+  "header": {
+    "agreement_type": "rebate",
+    "external_number": "REB-NWND-2026",
+    "manufacturer_code": "NWND",
+    "name": "Northwind growth rebate 2026 (SYNTHETIC)",
+    "priority": 0,
+    "valid_from": "2026-01-01",
+    "valid_to": "2026-12-31"
+  },
+  "items": [],
+  "payload_schema_version": 1,
+  "rules": {
+    "measurement_period": {
+      "end": "2026-12-31",
+      "kind": "calendar_year",
+      "start": "2026-01-01"
+    },
+    "product_scope": {
+      "mode": "all"
+    },
+    "returns": "reduce_volume",
+    "rounding": {
+      "mode": "half_up",
+      "scale": 2,
+      "timing": "per_line"
+    },
+    "schema_version": 1,
+    "spa_lines": "qualify_only",
+    "tier_metric": "amount",
+    "tier_mode": "retroactive",
+    "type": "rebate",
+    "volume_basis": "sales"
+  },
+  "tiers": [
+    {
+      "lower_bound": "0",
+      "rate": "0.015",
+      "tier_number": 1
+    },
+    {
+      "lower_bound": "1000000",
+      "rate": "0.025",
+      "tier_number": 2
+    },
+    {
+      "lower_bound": "2000000",
+      "rate": "0.035",
+      "tier_number": 3
+    }
+  ]
+}

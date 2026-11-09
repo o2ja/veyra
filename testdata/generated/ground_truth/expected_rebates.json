@@ -1,0 +1,36 @@
+{
+  "SYNTHETIC": true,
+  "agreement": "REB-VOLT-2026",
+  "cases": [
+    {
+      "as_of": "2026-08-30",
+      "cumulative_qualifying": "990000.00",
+      "delta": "14850.00",
+      "earned_cumulative": "14850.00",
+      "id": "GL-R1a",
+      "prior_accrued": "0.00",
+      "tier": 1
+    },
+    {
+      "as_of": "2026-08-31",
+      "cumulative_qualifying": "1010000.00",
+      "delta": "10400.00",
+      "earned_cumulative": "25250.00",
+      "id": "GL-R1b",
+      "prior_accrued": "14850.00",
+      "tier": 2
+    },
+    {
+      "as_of": "2026-09-30",
+      "cumulative_qualifying": "990000.00",
+      "delta": "-10400.00",
+      "earned_cumulative": "14850.00",
+      "id": "GL-R2",
+      "note": "vendor credit VCR-9010 (-20,000) pulls volume under the tier; negative delta -> rebate_clawback adjustment",
+      "prior_accrued": "25250.00",
+      "tier": 1
+    }
+  ],
+  "idempotency": "re-running any as_of with unchanged data must give delta 0.00",
+  "tiers": "0:1.5%, 1,000,000:2.5%, 2,000,000:3.5% retroactive, purchases basis"
+}
