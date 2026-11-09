@@ -33,11 +33,9 @@ function WorkspaceSwitcher() {
 
   return (
     <Menu.Root>
-      <Menu.Trigger
-        className="rounded-md border border-line px-3 py-1.5 text-sm"
-        aria-label="Switch workspace"
-      >
-        {me.tenant.name} ▾
+      <Menu.Trigger className="rounded-md border border-line px-3 py-1.5 text-sm">
+        <span className="sr-only">Switch workspace: </span>
+        {me.tenant.name} <span aria-hidden="true">▾</span>
       </Menu.Trigger>
       <Menu.Portal>
         <Menu.Content
