@@ -21,10 +21,10 @@ Common items for **every** stage (copy into each stage's kickoff/completion):
 **Read:** `CLAUDE.md`, `TECH_STACK.md`, `ARCHITECTURE.md`, `DEPLOYMENT.md` §2.
 **Depends on:** nothing.
 
-- [ ] S0.1 Repository skeleton
+- [x] S0.1 Repository skeleton
   - [x] `backend/` with `pyproject.toml` (uv), `src/rebate/{core,api,modules,workers}`, `src/rebate_engine`, `src/rebate_matching`, `tests/` layout
   - [x] `frontend/` Vite + React + TS strict, ESLint, Prettier, Vitest
-  - [ ] `infra/{docker,caddy,scripts,runbooks}`, `.github/workflows`, `.gitignore`, `.env.example`, `Makefile`, `.pre-commit-config.yaml`
+  - [x] `infra/{docker,caddy,scripts,runbooks}`, `.github/workflows`, `.gitignore`, `.env.example`, `Makefile`, `.pre-commit-config.yaml`
 - [x] S0.2 Core backend plumbing
   - [x] `core/config.py` (pydantic-settings, fail-fast), `core/logging.py` (structlog JSON, request id), `core/errors.py` (DomainError + envelope), `core/clock.py`, `core/ids.py` (UUIDv7), `core/money.py` (Decimal helpers; rejects floats)
   - [x] `core/db.py`: engine, request-scoped transaction, `SET LOCAL app.tenant_id` hook, startup self-check (not superuser/owner/BYPASSRLS)
@@ -37,14 +37,14 @@ Common items for **every** stage (copy into each stage's kickoff/completion):
   - [x] `ruff`, `mypy` (strict on engine/matching), `import-linter` contracts (module boundaries, engine/matching purity), `bandit`, `pip-audit`, `gitleaks`
   - [x] CI workflow running all gates against a Postgres service container
   - [x] OpenAPI → TypeScript client generation + CI diff check
-- [ ] S0.5 Docker/dev stack
-  - [ ] Compose dev stack (postgres, mailpit, api, frontend; clamav behind profile `s2`; storage and worker in S2)
-  - [ ] Dockerfiles (non-root, multi-stage), `make up/down/db-init/migrate/test/lint`
-- [ ] S0.6 Docs: `README.md` run instructions verified on a clean checkout
+- [x] S0.5 Docker/dev stack
+  - [x] Compose dev stack (postgres, mailpit, api, frontend; clamav behind profile `s2`; storage and worker in S2)
+  - [x] Dockerfiles (non-root, multi-stage), `make up/down/db-init/migrate/test/lint`
+- [x] S0.6 Docs: `README.md` run instructions verified on a clean checkout
 
 **Acceptance:** `make up && make db-init && make migrate && make test` green; CI green; deliberate import violation fails `import-linter`; empty SPA shell loads and calls `/api/v1/health/live` through the proxy.
 **Tests:** health endpoint, config fail-fast, money helper rejects float, startup self-check refuses owner role, migration empty→head, schema-lint tests.
-**Status note (2026-11-09):** ticked items are implemented and tested (local scratch PostgreSQL 17 + green CI on PostgreSQL 16.15). Unticked items need local Docker (pending WSL2 reboot). Money helpers live in `rebate_engine/money.py` with `core/money.py` as the boundary type (C-4). `core/db.py` has the engine, `transaction(engine, tenant_id)` (SET LOCAL semantics, no bleed on a pooled connection) and the startup self-check, all tested; the per-request dependency `api/deps.py::db_session` gives one transaction per request (tested, red-green checked). Worker and object storage are deferred to S2 (owner decision Q5(b); ADR-017).
+**Status note (2026-11-09):** ticked items are implemented and tested (local scratch PostgreSQL 17 + green CI on PostgreSQL 16.15). All S0 tasks are ticked; Docker checks verified locally on 2026-11-09 after the WSL2 reboot: `make up/db-init/migrate/test/test-isolation/lint/check-client/down` green, and the README flow green on a fresh `git clone` (two fixes found: `make up` now runs db-init first; `make env` uses `python` on Windows). The dev image target runs as root (bind-mounted source); the runtime image is non-root per DEPLOYMENT.md §2.5. Acceptance item "SPA shell calls `/api/v1/health/live` through the proxy": verified with curl via :5173; not yet checked in a browser. Money helpers live in `rebate_engine/money.py` with `core/money.py` as the boundary type (C-4). `core/db.py` has the engine, `transaction(engine, tenant_id)` (SET LOCAL semantics, no bleed on a pooled connection) and the startup self-check, all tested; the per-request dependency `api/deps.py::db_session` gives one transaction per request (tested, red-green checked). Worker and object storage are deferred to S2 (owner decision Q5(b); ADR-017).
 
 **Expected files:** `backend/src/rebate/core/*.py`, `backend/migrations/versions/*_baseline.py`, `backend/migrations/_rls.py`, `infra/docker/compose.dev.yml`, `.github/workflows/ci.yml`, `importlinter.ini`.
 

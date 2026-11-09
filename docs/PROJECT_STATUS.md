@@ -7,7 +7,7 @@
 | Item | State |
 |---|---|
 | Phase | **Release 1 build** |
-| Current stage | **S0 Foundation and tooling: in progress** (kickoff approved 2026-11-09). Blocked on a Windows reboot to activate WSL2/Docker for the Compose-based acceptance checks |
+| Current stage | **S0 Foundation and tooling: implementation complete, awaiting completion report sign-off** (kickoff approved 2026-11-09) |
 | Application code | S0 skeleton: backend core + baseline migration, frontend shell, CI, Compose, Makefile (see §3) |
 | Synthetic test data | Generated and self-checked (`testdata/`) |
 
@@ -21,7 +21,7 @@
 
 ## 3. In progress
 
-S0. Done and tested: backend core, health endpoints, init-db, baseline migration and helpers, schema lint, import contracts, frontend shell, gitleaks planted-secret check (tests run against a scratch PostgreSQL 17 cluster; CI uses 16.15). CI on GitHub (`o2ja/veyra`, private) is green on `main`: backend, frontend, api-contract (client drift), secrets (gitleaks), images (runtime image non-root, Caddyfile valid). A probe PR proved CI fails on a skipped test. Deferred by the owner until later: local Docker (WSL2 reboot), hence not yet verified locally: `make up/db-init/migrate/test/lint`, SPA-through-proxy in a browser, README clean-checkout run.
+S0. Done and tested: backend core, health endpoints, init-db, baseline migration and helpers, schema lint, import contracts, frontend shell, gitleaks planted-secret check (tests run against a scratch PostgreSQL 17 cluster; CI uses 16.15). CI on GitHub (`o2ja/veyra`, private) is green on `main`: backend, frontend, api-contract (client drift), secrets (gitleaks), images (runtime image non-root, Caddyfile valid). A probe PR proved CI fails on a skipped test. Local Docker verified 2026-11-09 (after WSL2 reboot): `make up/db-init/migrate/test/test-isolation/lint/check-client/down` green; README flow green on a fresh `git clone`; planted import violation fails `import-linter`. Fixed on the way: `make up` failed on a fresh volume (api startup role check ran before db-init), `make env` called the Windows `python3` Store stub. Not yet done: SPA-through-proxy in a browser (curl via :5173 returns 200), CI run on these commits.
 
 ## 4. Pending
 
@@ -73,3 +73,4 @@ Top items only; full list in the analysis and `SECURITY.md` §12.
 | 2026-11-09 | Product named "Veyra Recover", company "Veyra AI" (README, CLAUDE.md, PROJECT_OVERVIEW) |
 | 2026-11-09 | Owner approved SeaweedFS for local/CI object storage (ADR-017), with S2 test conditions |
 | 2026-11-09 | S0 kickoff approved; doc corrections C-1..C-15 applied (CLAUDE.md, roadmap, schema, API, deployment, tech stack, testing); ADR-027 toolchain versions |
+| 2026-11-09 | S0 local Docker verification; `make up` runs db-init first; `make env` Windows interpreter fix; `infra/runbooks/` pointer |
