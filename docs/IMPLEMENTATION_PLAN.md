@@ -25,9 +25,9 @@ Common items for **every** stage (copy into each stage's kickoff/completion):
   - [x] `backend/` with `pyproject.toml` (uv), `src/rebate/{core,api,modules,workers}`, `src/rebate_engine`, `src/rebate_matching`, `tests/` layout
   - [x] `frontend/` Vite + React + TS strict, ESLint, Prettier, Vitest
   - [ ] `infra/{docker,caddy,scripts,runbooks}`, `.github/workflows`, `.gitignore`, `.env.example`, `Makefile`, `.pre-commit-config.yaml`
-- [ ] S0.2 Core backend plumbing
+- [x] S0.2 Core backend plumbing
   - [x] `core/config.py` (pydantic-settings, fail-fast), `core/logging.py` (structlog JSON, request id), `core/errors.py` (DomainError + envelope), `core/clock.py`, `core/ids.py` (UUIDv7), `core/money.py` (Decimal helpers; rejects floats)
-  - [ ] `core/db.py`: engine, request-scoped transaction, `SET LOCAL app.tenant_id` hook, startup self-check (not superuser/owner/BYPASSRLS)
+  - [x] `core/db.py`: engine, request-scoped transaction, `SET LOCAL app.tenant_id` hook, startup self-check (not superuser/owner/BYPASSRLS)
   - [x] FastAPI app factory, `/health/live`, `/health/ready`, error handlers, request-id middleware
 - [x] S0.3 Database baseline
   - [x] `infra/scripts/init-db.sh` (roles, database, extensions, revokes)
@@ -44,7 +44,7 @@ Common items for **every** stage (copy into each stage's kickoff/completion):
 
 **Acceptance:** `make up && make db-init && make migrate && make test` green; CI green; deliberate import violation fails `import-linter`; empty SPA shell loads and calls `/api/v1/health/live` through the proxy.
 **Tests:** health endpoint, config fail-fast, money helper rejects float, startup self-check refuses owner role, migration empty→head, schema-lint tests.
-**Status note (2026-11-09):** ticked items are implemented and tested (local scratch PostgreSQL 17 + green CI on PostgreSQL 16.15). Unticked items need local Docker (pending WSL2 reboot). Money helpers live in `rebate_engine/money.py` with `core/money.py` as the boundary type (C-4). `core/db.py` has the engine, `transaction(engine, tenant_id)` (SET LOCAL semantics, no bleed on a pooled connection) and the startup self-check, all tested; the per-request FastAPI dependency is not wired yet because no S0 route uses a transaction (lands with the first DB route, `api/deps.py`, S1). Worker and object storage are deferred to S2 (owner decision Q5(b); ADR-017).
+**Status note (2026-11-09):** ticked items are implemented and tested (local scratch PostgreSQL 17 + green CI on PostgreSQL 16.15). Unticked items need local Docker (pending WSL2 reboot). Money helpers live in `rebate_engine/money.py` with `core/money.py` as the boundary type (C-4). `core/db.py` has the engine, `transaction(engine, tenant_id)` (SET LOCAL semantics, no bleed on a pooled connection) and the startup self-check, all tested; the per-request dependency `api/deps.py::db_session` gives one transaction per request (tested, red-green checked). Worker and object storage are deferred to S2 (owner decision Q5(b); ADR-017).
 
 **Expected files:** `backend/src/rebate/core/*.py`, `backend/migrations/versions/*_baseline.py`, `backend/migrations/_rls.py`, `infra/docker/compose.dev.yml`, `.github/workflows/ci.yml`, `importlinter.ini`.
 
