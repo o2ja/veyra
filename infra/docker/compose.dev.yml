@@ -1,0 +1,82 @@
+# Local development stack (DEPLOYMENT.md §2.2). Secrets come from ../../.env (never committed).
+# Default services: postgres, mailpit, api, frontend.
+# Profile `s2` (not started by default until S2): clamav. MinIO: see PROJECT_STATUS.md (image unavailable).
+# The worker service is added in S2 together with the job queue.
+name: veyra-recover
+
+services:
+  postgres:
+    image: postgres:16.15-trixie@sha256:f9a7b9ebf6f56201f949db745e47bc423c0f0f8294bafe991cc10bf74b029657
+    environment:
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set in .env}
+      REBATE_OWNER_PASSWORD: ${REBATE_OWNER_PASSWORD:?set in .env}
+      REBATE_APP_PASSWORD: ${REBATE_APP_PASSWORD:?set in .env}
+      REBATE_AI_WRITER_PASSWORD: ${REBATE_AI_WRITER_PASSWORD:?set in .env}
+      REBATE_READONLY_PASSWORD: ${REBATE_READONLY_PASSWORD:?set in .env}
+    ports:
+      - "127.0.0.1:${POSTGRES_HOST_PORT:-5432}:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      - ../scripts:/opt/rebate-scripts:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 2s
+      timeout: 3s
+      retries: 30
+
+  mailpit:
+    image: axllent/mailpit:v1.33.1@sha256:aef2aacc11f075ec0fb6874275ee4a421e688e11a96ebb296134d1735c7761ce
+    ports:
+      - "127.0.0.1:1025:1025"
+      - "127.0.0.1:8025:8025"
+
+  clamav:
+    profiles: ["s2"]
+    image: clamav/clamav:1.4.6-debian13-slim@sha256:aedee9daad6b069b26adad61af7ec50a41efe33fd8eff7f985c1f31e3a6ae9de
+    ports:
+      - "127.0.0.1:3310:3310"
+
+  api:
+    build:
+      context: ../../backend
+      target: dev
+    command: uvicorn rebate.api.asgi:app --host 0.0.0.0 --port 8000 --reload --reload-dir src
+    environment:
+      APP_ENV: local
+      SECRET_KEY: ${SECRET_KEY:?set in .env}
+      DATABASE_URL: postgresql+psycopg://rebate_app:${REBATE_APP_PASSWORD}@postgres:5432/rebate
+      LOG_LEVEL: ${LOG_LEVEL:-INFO}
+      WATCHFILES_FORCE_POLLING: "true"
+    ports:
+      - "127.0.0.1:8000:8000"
+    volumes:
+      - ../../backend:/app
+      - ../../testdata:/testdata:ro
+    depends_on:
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/api/v1/health/live', timeout=2)"]
+      interval: 5s
+      timeout: 3s
+      retries: 30
+
+  frontend:
+    build:
+      context: ../../frontend
+      target: dev
+    environment:
+      VITE_DEV_API_PROXY: http://api:8000
+      VITE_POLL: "1"
+    ports:
+      - "127.0.0.1:5173:5173"
+    volumes:
+      - ../../frontend:/app
+      - frontend_node_modules:/app/node_modules
+    depends_on:
+      api:
+        condition: service_healthy
+
+volumes:
+  pgdata:
+  frontend_node_modules:
