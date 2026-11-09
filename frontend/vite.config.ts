@@ -15,6 +15,7 @@ export default defineConfig({
     proxy: { "/api": { target: apiTarget, changeOrigin: false } },
   },
   test: {
+    include: ["src/**/*.test.{ts,tsx}"], // e2e/ and manual/ belong to Playwright
     environment: "jsdom",
     // https origin: jsdom enforces the __Host- cookie prefix rules (Secure, Path=/), like browsers
     environmentOptions: { jsdom: { url: "https://localhost/" } },
