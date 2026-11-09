@@ -1,0 +1,16 @@
+# `uv run --directory backend pre-commit install` once per clone.
+repos:
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.17.4
+    hooks:
+      - id: ruff-check
+        files: ^backend/
+      - id: ruff-format
+        files: ^backend/
+  - repo: local
+    hooks:
+      - id: gitleaks
+        name: gitleaks (staged changes)
+        entry: gitleaks git --pre-commit --staged --redact --no-banner
+        language: system
+        pass_filenames: false

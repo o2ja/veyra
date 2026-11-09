@@ -1,0 +1,7 @@
+# LF everywhere: scripts and SQL run inside Linux containers; generated files diff identically in CI.
+* text=auto eol=lf
+*.pdf binary
+*.xlsx binary
+*.png binary
+# Synthetic data is kept byte-exact (the generator writes CRLF CSVs).
+testdata/generated/** -text
