@@ -13,12 +13,12 @@ from typing import Any
 from uuid import UUID
 
 import structlog
-from sqlalchemy import select, update
+from sqlalchemy import Engine, select, update
 from sqlalchemy.orm import Session
 
 from rebate.core import clock
 from rebate.core.config import Settings
-from rebate.core.db import tenant_scope
+from rebate.core.db import tenant_scope, transaction
 from rebate.core.errors import (
     AccountLocked,
     InvalidCredentials,
@@ -30,7 +30,7 @@ from rebate.core.errors import (
     ValidationFailed,
 )
 from rebate.core.ids import new_id
-from rebate.core.mail import send_after_commit
+from rebate.core.mail import background_after_commit, send_after_commit
 from rebate.core.request import Principal, RequestContext
 from rebate.core.security import Passwords, SecretBox, hash_token, keyed_hash, new_token
 from rebate.core.validation import email_key
@@ -398,32 +398,49 @@ def _set_password(c: RequestContext, user: User, new_password: str) -> None:
 
 
 def forgot_password(c: RequestContext, email: str) -> None:
+    """The response path is identical for known and unknown addresses: two rate-limit writes, then
+    the lookup and token work run after the response (timing test: S1 review finding 11)."""
     ratelimit.hit(c.db, f"forgot:ip:{c.ip}", limit=5, window_seconds=3600)
     ratelimit.hit(c.db, f"forgot:acct:{_hkey(c, 'forgot', email_key(email))}", limit=3, window_seconds=3600)
-    user = _user_by_email(c.db, email)
-    if user is None or user.status != "active":
-        return  # the two rate-limit writes above are the same work on both branches
-    now = clock.now()
-    c.db.execute(
-        update(UserToken)
-        .where(
-            UserToken.user_id == user.id, UserToken.purpose == "password_reset", UserToken.used_at.is_(None)
+    engine = c.db.get_bind()
+    if not isinstance(engine, Engine):  # the request session is always bound to the app engine
+        raise TypeError("request session must be bound to an Engine")
+    settings, meta = c.settings, (c.request_id, c.ip, c.user_agent)
+    background_after_commit(c, lambda: _issue_reset(engine, settings, email, meta))
+
+
+def _issue_reset(
+    engine: Engine, settings: Settings, email: str, meta: tuple[str, str | None, str | None]
+) -> None:
+    with transaction(engine) as db:
+        bg = RequestContext(db=db, settings=settings, request_id=meta[0], ip=meta[1], user_agent=meta[2])
+        user = _user_by_email(db, email)
+        if user is None or user.status != "active":
+            return
+        now = clock.now()
+        db.execute(
+            update(UserToken)
+            .where(
+                UserToken.user_id == user.id,
+                UserToken.purpose == "password_reset",
+                UserToken.used_at.is_(None),
+            )
+            .values(used_at=now)
         )
-        .values(used_at=now)
-    )
-    token = new_token()
-    c.db.add(
-        UserToken(
-            id=new_id(),
-            user_id=user.id,
-            purpose="password_reset",
-            token_hash=hash_token(token),
-            expires_at=now + timedelta(minutes=c.settings.password_reset_token_minutes),
+        token = new_token()
+        db.add(
+            UserToken(
+                id=new_id(),
+                user_id=user.id,
+                purpose="password_reset",
+                token_hash=hash_token(token),
+                expires_at=now + timedelta(minutes=settings.password_reset_token_minutes),
+            )
         )
-    )
-    c.db.flush()
-    audit_user_event(c, user.id, Action.AUTH_PASSWORD_RESET_REQUESTED, actor=Actor("system"))
-    send_after_commit(c, c.settings, emails.password_reset(c.settings, user.email, token))
+        db.flush()
+        audit_user_event(bg, user.id, Action.AUTH_PASSWORD_RESET_REQUESTED, actor=Actor("system"))
+        send_after_commit(bg, settings, emails.password_reset(settings, user.email, token))
+    bg.run_after_commit()
 
 
 def _consume_token(c: RequestContext, token: str, purpose: str) -> UserToken:

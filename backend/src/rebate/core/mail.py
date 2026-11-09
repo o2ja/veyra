@@ -10,6 +10,8 @@ What is temporary, stated plainly:
 """
 
 import smtplib
+import time
+from collections.abc import Callable
 from concurrent.futures import Future, ThreadPoolExecutor, wait
 from dataclasses import dataclass
 from email.message import EmailMessage
@@ -48,15 +50,33 @@ def _deliver(settings: Settings, mail: Mail) -> None:
     log.info("email.sent", template=mail.template)
 
 
-def send_after_commit(context: RequestContext, settings: Settings, mail: Mail) -> None:
-    def submit() -> None:
-        future = _pool.submit(_deliver, settings, mail)
-        _pending.add(future)
-        future.add_done_callback(_pending.discard)
+def _submit(fn: Callable[[], None]) -> None:
+    future = _pool.submit(fn)
+    _pending.add(future)
+    future.add_done_callback(_pending.discard)
 
-    context.after_commit(submit)
+
+def send_after_commit(context: RequestContext, settings: Settings, mail: Mail) -> None:
+    context.after_commit(lambda: _submit(lambda: _deliver(settings, mail)))
+
+
+def background_after_commit(context: RequestContext, fn: Callable[[], None]) -> None:
+    """Run ``fn`` off the response path once the request has committed (same temporary pool).
+
+    Used where the *amount of work* would otherwise reveal whether an account exists (forgot
+    password: S1 timing test). Replaced by a job in S2 together with the mailer (K-9)."""
+
+    def guarded() -> None:
+        try:
+            fn()
+        except Exception as exc:  # never kill the pool; never log details that may hold PII
+            log.error("background.failed", error=type(exc).__name__)
+
+    context.after_commit(lambda: _submit(guarded))
 
 
 def flush(timeout: float = 10.0) -> None:
-    """Wait for queued messages (tests and shutdown)."""
-    wait(list(_pending), timeout=timeout)
+    """Wait until the pool is idle (tests and shutdown); background work may queue more mail."""
+    deadline = time.monotonic() + timeout
+    while _pending and time.monotonic() < deadline:
+        wait(list(_pending), timeout=max(0.0, deadline - time.monotonic()))

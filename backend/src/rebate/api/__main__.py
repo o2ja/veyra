@@ -7,6 +7,8 @@ import sys
 os.environ.setdefault("APP_ENV", "local")
 os.environ.setdefault("SECRET_KEY", "openapi-export-only-not-a-secret-000000")
 os.environ.setdefault("DATABASE_URL", "postgresql+psycopg://openapi-export@localhost/none")
+# placeholder key (32 zero bytes): the export never encrypts anything
+os.environ.setdefault("ENCRYPTION_KEYS", "export:AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=")
 
 from rebate.api.app import create_app  # env must be set before settings load
 

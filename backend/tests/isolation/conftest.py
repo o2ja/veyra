@@ -67,7 +67,7 @@ def _tenant(conn: Connection, name: str, admin_email: str) -> TenantData:
     admin = _user(conn, admin_email)
     conn.execute(
         text("INSERT INTO tenants (id, name, slug) VALUES (:id, :n, :s)"),
-        {"id": tid, "n": name, "s": f"iso-{tid.hex[:12]}"},
+        {"id": tid, "n": name, "s": f"iso-{tid.hex[-12:]}"},
     )
     conn.execute(text("INSERT INTO tenant_settings (tenant_id) VALUES (:t)"), {"t": tid})
     data = TenantData(tenant_id=tid, admin_user_id=admin)

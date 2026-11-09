@@ -31,12 +31,13 @@ class AuditLog(Base):
     action: Mapped[str] = mapped_column(Text)
     entity_type: Mapped[str] = mapped_column(Text)
     entity_id: Mapped[UUID | None] = mapped_column()
-    before: Mapped[dict[str, Any] | None] = mapped_column(JSONB)
-    after: Mapped[dict[str, Any] | None] = mapped_column(JSONB)
+    # none_as_null: Python None is stored as SQL NULL, not as the JSON scalar null
+    before: Mapped[dict[str, Any] | None] = mapped_column(JSONB(none_as_null=True))
+    after: Mapped[dict[str, Any] | None] = mapped_column(JSONB(none_as_null=True))
     request_id: Mapped[str | None] = mapped_column(Text)
     ip: Mapped[str | None] = mapped_column(INET)
     user_agent: Mapped[str | None] = mapped_column(Text)
-    metadata_: Mapped[dict[str, Any] | None] = mapped_column("metadata", JSONB)
+    metadata_: Mapped[dict[str, Any] | None] = mapped_column("metadata", JSONB(none_as_null=True))
 
 
 class IdempotencyKey(Base):
