@@ -52,7 +52,7 @@ Legend: PK primary key · FK composite `(tenant_id, x)` unless noted · `NN` not
 
 ### 3.1 Identity and tenancy
 
-**users** (global): `id`, `email citext NN UNIQUE`, `password_hash text NN`, `full_name`, `email_verified_at`, `mfa_enabled bool NN default false`, `mfa_secret_enc bytea` (application-level encrypted), `status` (`active`,`disabled`), `failed_login_count int`, `locked_until timestamptz`, `last_login_at`, `created_at`. Added S1: `password_changed_at`, `mfa_last_used_step bigint` (TOTP replay guard), `lockout_level int NN default 0` (progressive lockout).
+**users** (global): `id`, `email citext NN UNIQUE`, `password_hash text NN`, `full_name`, `email_verified_at`, `mfa_enabled bool NN default false`, `mfa_secret_enc bytea` (application-level encrypted), `status` (`active`,`disabled`), `failed_login_count int`, `locked_until timestamptz`, `last_login_at`, `created_at`. Added S1: `password_changed_at`, `mfa_last_used_step bigint` (TOTP replay guard), `lockout_level int NN default 0` (progressive lockout), `last_failed_at` (failures older than the 24 h decay window are forgotten, exactly like the counters for unknown emails).
 
 **mfa_recovery_codes** (global): `id`, `user_id FK users`, `code_hash text NN`, `used_at`.
 

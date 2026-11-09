@@ -809,6 +809,13 @@ export interface components {
             /** Error Type */
             type: string;
         };
+        /** VerifyIn */
+        VerifyIn: {
+            /** Password */
+            password: string;
+            /** Token */
+            token: string;
+        };
         /** WorkspaceList */
         WorkspaceList: {
             /** Data */
@@ -1361,7 +1368,7 @@ export interface operations {
         };
         requestBody: {
             content: {
-                "application/json": components["schemas"]["TokenIn"];
+                "application/json": components["schemas"]["VerifyIn"];
             };
         };
         responses: {

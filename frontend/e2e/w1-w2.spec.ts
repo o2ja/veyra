@@ -25,6 +25,8 @@ test("W1 + W2: register, verify, enrol MFA, invite an analyst and a viewer, role
   await expect(page.getByRole("alert")).toContainText("The email or password is incorrect.");
 
   await page.goto(`/verify-email#token=${await tokenFromMail(admin)}`);
+  await page.getByLabel("Password").fill(PASSWORD);
+  await page.getByRole("button", { name: "Confirm and create workspace" }).click();
   await expect(page).toHaveURL(/\/login\?reason=verified/);
   expect(page.url()).not.toContain("token=");
 

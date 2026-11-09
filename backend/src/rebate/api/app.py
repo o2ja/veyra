@@ -14,6 +14,7 @@ from starlette.exceptions import HTTPException as StarletteHTTPException
 from rebate.api import health
 from rebate.api.deps import RequestContextDep
 from rebate.api.paths import API_PREFIX, route_template
+from rebate.core import mail
 from rebate.core.config import Settings, get_settings
 from rebate.core.db import assert_safe_role, make_engine
 from rebate.core.errors import DomainError, error_body
@@ -108,6 +109,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     async def lifespan(_: FastAPI) -> AsyncIterator[None]:
         assert_safe_role(engine)  # raises UnsafeDatabaseRole: the process does not start
         yield
+        mail.flush()  # let queued mail / background work finish before the engine goes away
         engine.dispose()
 
     expose_docs = settings.app_env != "production"  # unauthenticated docs only outside production

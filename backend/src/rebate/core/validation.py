@@ -26,7 +26,11 @@ def normalize_email(value: str) -> str:
 
 
 Email = Annotated[str, BeforeValidator(_strip), AfterValidator(normalize_email)]
-Name = Annotated[str, BeforeValidator(_strip), StringConstraints(min_length=1, max_length=200)]
+NO_CONTROL = r"^[^\x00-\x1f\x7f]+$"  # names end up in email headers: no control characters
+# (S1 code review finding 11)
+Name = Annotated[
+    str, BeforeValidator(_strip), StringConstraints(min_length=1, max_length=200, pattern=NO_CONTROL)
+]
 Token = Annotated[str, StringConstraints(min_length=20, max_length=128, pattern=r"^[A-Za-z0-9_-]+$")]
 TotpCode = Annotated[
     str,

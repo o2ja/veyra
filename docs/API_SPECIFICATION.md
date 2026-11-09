@@ -82,7 +82,7 @@ Legend: **R** = roles allowed (A admin, P approver, N analyst, V viewer). Writes
 | Method & path | Purpose | Auth | Notes |
 |---|---|---|---|
 | `POST /auth/register` | Create workspace + admin | Public | Rate-limited; generic responses. Stores a **pending registration** only; user, workspace and membership are created when the emailed link is used (`POST /auth/verify-email`). An unverified account does not exist, so login treats it as wrong credentials |
-| `POST /auth/verify-email` | Confirm email token | Public | |
+| `POST /auth/verify-email` | Body `{token, password}`: confirm the email | Public | The registration password is required as well as the link, so a link triggered by someone else for your address cannot create an account you did not register (S1 review). Wrong password = same 410 as a bad link |
 | `POST /auth/login` | Email + password | Public | Returns `mfa_required` or session; lockout after repeated failures |
 | `POST /auth/mfa/verify` | TOTP or recovery code | Partial session | |
 | `POST /auth/mfa/setup` / `POST /auth/mfa/enable` | Enroll TOTP; returns recovery codes once | Session | |

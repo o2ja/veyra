@@ -26,7 +26,7 @@ def register_and_verify(api: Api, email: str, workspace: str = "Acme Electric (S
     )
     assert r.status_code == 202, r.text
     token = latest_token(email, expect=before + 1)
-    v = api.post("/auth/verify-email", json={"token": token})
+    v = api.post("/auth/verify-email", json={"token": token, "password": STRONG_PASSWORD})
     assert v.status_code == 200, v.text
     return Account(email=email)
 

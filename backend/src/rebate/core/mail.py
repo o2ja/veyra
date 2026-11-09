@@ -35,19 +35,21 @@ class Mail:
     body: str
 
 
-def _deliver(settings: Settings, mail: Mail) -> None:
-    msg = EmailMessage()
-    msg["From"] = settings.mail_from
-    msg["To"] = mail.to
-    msg["Subject"] = mail.subject
-    msg.set_content(mail.body)
+def _deliver(settings: Settings, mail: Mail, request_id: str) -> None:
     try:
+        msg = EmailMessage()  # built inside the try: a bad header must be logged, not swallowed
+        msg["From"] = settings.mail_from
+        msg["To"] = mail.to
+        msg["Subject"] = mail.subject
+        msg.set_content(mail.body)
         with smtplib.SMTP(settings.smtp_host, settings.smtp_port, timeout=10) as smtp:
             smtp.send_message(msg)
-    except (OSError, smtplib.SMTPException) as exc:
-        log.warning("email.send_failed", template=mail.template, error=type(exc).__name__)
+    except Exception as exc:  # class name only: SMTP errors can carry the recipient address
+        log.warning(
+            "email.send_failed", template=mail.template, error=type(exc).__name__, request_id=request_id
+        )
         return
-    log.info("email.sent", template=mail.template)
+    log.info("email.sent", template=mail.template, request_id=request_id)
 
 
 def _submit(fn: Callable[[], None]) -> None:
@@ -57,7 +59,7 @@ def _submit(fn: Callable[[], None]) -> None:
 
 
 def send_after_commit(context: RequestContext, settings: Settings, mail: Mail) -> None:
-    context.after_commit(lambda: _submit(lambda: _deliver(settings, mail)))
+    context.after_commit(lambda: _submit(lambda: _deliver(settings, mail, context.request_id)))
 
 
 def background_after_commit(context: RequestContext, fn: Callable[[], None]) -> None:
@@ -70,7 +72,7 @@ def background_after_commit(context: RequestContext, fn: Callable[[], None]) -> 
         try:
             fn()
         except Exception as exc:  # never kill the pool; never log details that may hold PII
-            log.error("background.failed", error=type(exc).__name__)
+            log.error("background.failed", error=type(exc).__name__, request_id=context.request_id)
 
     context.after_commit(lambda: _submit(guarded))
 

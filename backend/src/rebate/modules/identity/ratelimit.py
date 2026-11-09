@@ -7,10 +7,11 @@ though the request fails). Expired rows are pruned on write.
 import math
 from datetime import datetime, timedelta
 
-from sqlalchemy import delete, text
+from sqlalchemy import Engine, delete, text
 from sqlalchemy.orm import Session
 
 from rebate.core import clock
+from rebate.core.db import transaction
 from rebate.core.errors import RateLimited
 from rebate.modules.identity.models import RateLimitCounter
 
@@ -37,11 +38,19 @@ _PUT = text(
 
 
 def hit(db: Session, key: str, *, limit: int, window_seconds: int) -> int:
-    """Count one event; raise ``RateLimited`` (with Retry-After) once ``limit`` is exceeded."""
+    """Count one event; raise ``RateLimited`` (with Retry-After) once ``limit`` is exceeded.
+
+    The hit commits in its own short transaction, so it counts even when the request later fails and
+    rolls back (bad tokens, 4xx answers: S1 code review finding 4)."""
+    bind = db.get_bind()
+    if not isinstance(bind, Engine):
+        raise TypeError("session must be bound to an Engine")
     now = clock.now()
-    db.execute(delete(RateLimitCounter).where(RateLimitCounter.expires_at < now - timedelta(minutes=5)))
     params = {"key": key[:200], "now": now, "expires": now + timedelta(seconds=window_seconds)}
-    row = db.execute(_UPSERT, params).mappings().one()
+    # ponytail: one extra pooled connection per hit; fine at S1 scale, revisit with load tests (S11)
+    with transaction(bind) as own:
+        own.execute(delete(RateLimitCounter).where(RateLimitCounter.expires_at < now - timedelta(minutes=5)))
+        row = own.execute(_UPSERT, params).mappings().one()
     count = int(row["n"])
     if count > limit:
         retry = max(1, math.ceil((row["expires_at"] - now).total_seconds()))

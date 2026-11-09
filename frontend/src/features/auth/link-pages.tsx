@@ -58,13 +58,43 @@ function OneShot({
   );
 }
 
+/** Verify needs the registration password too, so a link someone else triggered for your address
+ * cannot create an account you did not register (S1 code review finding 8). */
 export function VerifyEmailPage() {
+  const token = useToken();
+  const navigate = useNavigate();
+  const [password, setPassword] = useState("");
+  const { busy, error, submit } = useApiSubmit();
+  if (!token) return <InvalidLink />;
+
+  async function onSubmit(event: React.FormEvent) {
+    event.preventDefault();
+    const ok = await submit(() =>
+      unwrap(api.POST("/api/v1/auth/verify-email", { body: { token: token as string, password } })),
+    );
+    if (ok) navigate("/login?reason=verified");
+  }
+
   return (
-    <OneShot
-      title="Confirming your email"
-      done="verified"
-      run={(token) => unwrap(api.POST("/api/v1/auth/verify-email", { body: { token } }))}
-    />
+    <AuthCard title="Confirm your email">
+      <form className="flex flex-col gap-4" onSubmit={onSubmit}>
+        <p className="text-sm text-muted">
+          Enter the password you chose when you registered. If you did not register, close this page.
+        </p>
+        <ErrorAlert error={error} />
+        <Field
+          label="Password"
+          type="password"
+          autoComplete="current-password"
+          value={password}
+          onChange={(e) => setPassword(e.target.value)}
+          required
+        />
+        <Button type="submit" disabled={busy}>
+          Confirm and create workspace
+        </Button>
+      </form>
+    </AuthCard>
   );
 }
 

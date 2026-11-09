@@ -74,9 +74,15 @@ class TokenIn(BaseModel):
     token: Token
 
 
+class VerifyIn(BaseModel):
+    model_config = STRICT
+    token: Token
+    password: Password
+
+
 @router.post("/auth/verify-email", operation_id="auth_verify_email", dependencies=[Depends(public())])
-def verify_email(request: Request, body: TokenIn) -> Ok:
-    service.verify_email(ctx(request), body.token)
+def verify_email(request: Request, body: VerifyIn) -> Ok:
+    service.verify_email(ctx(request), body.token, body.password)
     return Ok()
 
 
@@ -185,7 +191,9 @@ def mfa_setup(
     response: Response,
     principal: Annotated[Principal, Depends(authenticated(allow_enrollment=True))],
 ) -> MfaSetupOut:
-    uri, svg = service.mfa_setup(ctx(request), principal)
+    c = ctx(request)
+    require_recent_reauth(principal, c.settings.step_up_window_minutes)  # SECURITY.md §1: changing MFA
+    uri, svg = service.mfa_setup(c, principal)
     return MfaSetupOut(otpauth_uri=uri, qr_svg_data_uri=svg)
 
 
@@ -201,6 +209,7 @@ def mfa_enable(
     principal: Annotated[Principal, Depends(authenticated(allow_enrollment=True))],
 ) -> RecoveryCodesOut:
     c = ctx(request)
+    require_recent_reauth(principal, c.settings.step_up_window_minutes)
     new, codes = service.mfa_enable(c, principal, body.code)
     sessions.set_cookies(response, c.settings, new)
     return RecoveryCodesOut(recovery_codes=codes)
@@ -394,7 +403,7 @@ def update_user(
     principal: Annotated[Principal, Depends(require("user.manage"))],
 ) -> MemberOut:
     c = ctx(request)
-    if body.role == "admin":
+    if body.role == "admin" or body.status == "active":  # anything that can (re)grant admin rights
         require_recent_reauth(principal, c.settings.step_up_window_minutes)
     view = service.change_member(
         c, principal, tenant_of(principal), user_id, role=body.role, status=body.status

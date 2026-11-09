@@ -129,13 +129,18 @@ def test_absolute_timeout_despite_activity(api: Api, clk: FakeClock) -> None:
     assert r.status_code == 401 and r.json()["error"]["code"] == "session_expired"
 
 
-def test_session_rotates_on_login_and_mfa(api: Api) -> None:
+def test_session_rotates_on_mfa_and_the_pending_session_dies(api: Api) -> None:
     account = full_admin(api, unique_email("rotate"))
-    before = api.client.cookies.get("__Host-session")
     api.post("/auth/logout")
-    login(api, account)  # password + TOTP
-    after = api.client.cookies.get("__Host-session")
-    assert before and after and before != after
+    api.post("/auth/login", json={"email": account.email, "password": account.password})
+    pending = api.client.cookies.get("__Host-session")
+    assert account.otpauth_uri
+    assert api.post("/auth/mfa/verify", json={"code": totp_now(account.otpauth_uri)}).status_code == 200
+    full = api.client.cookies.get("__Host-session")
+    assert pending and full and pending != full
+    api.client.cookies.clear()
+    replay = api.client.get("/api/v1/auth/me", headers={"Cookie": f"__Host-session={pending}"})
+    assert replay.status_code == 401
 
 
 def test_pre_login_cookie_is_never_accepted_after_login(api: Api) -> None:
@@ -225,9 +230,12 @@ def test_verify_link_single_use_and_unknown(api: Api) -> None:
         json={"email": email, "full_name": "V", "workspace_name": "V", "password": STRONG_PASSWORD},
     )
     token = latest_token(email)
-    assert api.post("/auth/verify-email", json={"token": token}).status_code == 200
-    assert api.post("/auth/verify-email", json={"token": token}).status_code == 410
-    assert api.post("/auth/verify-email", json={"token": "x" * 43}).status_code == 410
+    body = {"token": token, "password": STRONG_PASSWORD}
+    wrong = api.post("/auth/verify-email", json={**body, "password": "not the registration password"})
+    assert wrong.status_code == 410  # the link alone is not enough (review finding 8) ...
+    assert api.post("/auth/verify-email", json=body).status_code == 200  # ... and stays usable
+    assert api.post("/auth/verify-email", json=body).status_code == 410
+    assert api.post("/auth/verify-email", json={**body, "token": "x" * 43}).status_code == 410
 
 
 def test_unverified_account_does_not_exist_and_cannot_be_hijacked(api: Api, api2: Api) -> None:
@@ -249,7 +257,8 @@ def test_unverified_account_does_not_exist_and_cannot_be_hijacked(api: Api, api2
     oldest = messages_to(victim, expect=2)[-1]
     attacker_token = TOKEN_RE.search(oldest["Text"])
     assert attacker_token
-    assert api2.post("/auth/verify-email", json={"token": attacker_token.group(1)}).status_code == 410
+    stale = {"token": attacker_token.group(1), "password": attacker_pw}
+    assert api2.post("/auth/verify-email", json=stale).status_code == 410
 
 
 def test_registering_an_existing_email_sends_a_notice_not_a_link(api: Api) -> None:
@@ -262,3 +271,85 @@ def test_registering_an_existing_email_sends_a_notice_not_a_link(api: Api) -> No
     newest = messages_to(account.email, expect=2)[0]
     assert newest["Subject"] == "Someone tried to register with your email"
     assert "#token=" not in newest["Text"]
+
+
+def test_victim_cannot_complete_an_attackers_registration(api: Api, api2: Api) -> None:
+    """Review finding 8: the owner of the address clicks the verify mail the attacker triggered."""
+    victim = unique_email("victim2")
+    api2.post(
+        "/auth/register",
+        json={
+            "email": victim,
+            "full_name": "M",
+            "workspace_name": "Evil",
+            "password": "attacker chosen pw 77",
+        },
+    )
+    token = latest_token(victim)
+    # the victim does not know the attacker's password: whatever they type, no account is created
+    r = api.post("/auth/verify-email", json={"token": token, "password": STRONG_PASSWORD})
+    assert r.status_code == 410
+    assert (
+        api2.post("/auth/login", json={"email": victim, "password": "attacker chosen pw 77"}).status_code
+        == 401
+    )
+
+
+def test_mfa_setup_and_enable_need_a_recent_step_up(api: Api, clk: FakeClock) -> None:
+    """Review finding 2: a stolen session must not be able to bind the attacker's authenticator."""
+    account = register_and_verify(api, unique_email("mfastepup"))
+    login(api, account)
+    clk.advance(6 * 60)
+    r = api.post("/auth/mfa/setup")
+    assert r.status_code == 401 and r.json()["error"]["code"] == "reauthentication_required"
+    assert api.post("/auth/reauthenticate", json={"password": account.password}).status_code == 200
+    enable_mfa(api, account)
+    # enabling MFA does not count as a fresh step-up
+    clk.advance(6 * 60)
+    assert api.post("/auth/mfa/recovery-codes").status_code == 401
+
+
+def test_password_reset_voids_a_pending_email_change(app: object, api: Api, api2: Api) -> None:
+    """Review finding 3: the notice tells the owner to reset; the reset must stop the change."""
+    account = full_admin(api, unique_email("hijackmail"))
+    assert account.otpauth_uri
+    new_email = unique_email("attackeraddr")
+    r = api.post(
+        "/auth/email/change",
+        json={
+            "new_email": new_email,
+            "password": account.password,
+            "mfa_code": totp_now(account.otpauth_uri),
+        },
+    )
+    assert r.status_code == 202
+    change_token = latest_token(new_email)
+    api2.post("/auth/password/forgot", json={"email": account.email})
+    reset = latest_token(account.email, expect=3)
+    assert (
+        api2.post(
+            "/auth/password/reset", json={"token": reset, "new_password": "owner took it back 2026"}
+        ).status_code
+        == 200
+    )
+    assert api2.post("/auth/email/confirm", json={"token": change_token}).status_code == 410
+
+
+def test_login_rehashes_when_argon2_parameters_change(migrated_db: object, admin_engine: Engine) -> None:
+    """Kickoff §4: rehash on login so parameters can be retuned without forcing resets."""
+    from tests.support import api_client, make_app
+
+    email = unique_email("rehash")
+    with api_client(make_app(migrated_db.app)) as a:  # type: ignore[attr-defined]
+        register_and_verify(a, email)
+    with admin_engine.connect() as conn:
+        before = conn.execute(
+            text("SELECT password_hash FROM users WHERE email = :e"), {"e": email}
+        ).scalar_one()
+    with api_client(make_app(migrated_db.app, argon2_time_cost=2)) as b:  # type: ignore[attr-defined]
+        assert b.post("/auth/login", json={"email": email, "password": STRONG_PASSWORD}).status_code == 200
+    with admin_engine.connect() as conn:
+        after = conn.execute(
+            text("SELECT password_hash FROM users WHERE email = :e"), {"e": email}
+        ).scalar_one()
+    assert "t=1" in before and "t=2" in after

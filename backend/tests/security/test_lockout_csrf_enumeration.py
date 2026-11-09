@@ -187,7 +187,7 @@ def test_register_rate_limit_per_ip(app: FastAPI) -> None:
         ("10.0.0.2", "1.2.3.4", ("10.0.0.2",), "1.2.3.4"),
         ("10.0.0.2", "6.6.6.6, 1.2.3.4", ("10.0.0.2",), "1.2.3.4"),  # spoofed left part ignored
         ("10.0.0.2", "1.2.3.4, 10.0.0.3", ("10.0.0.2", "10.0.0.3"), "1.2.3.4"),
-        ("10.0.0.2", "garbage", ("10.0.0.2",), None),
+        ("10.0.0.2", "garbage", ("10.0.0.2",), "10.0.0.2"),  # falls back to the proxy peer
     ],
 )
 def test_client_ip_resolution(
@@ -205,3 +205,28 @@ def test_mfa_code_lockout_revokes_pending_session(app: FastAPI, api: Api) -> Non
         after = attacker.post("/auth/mfa/verify", json={"code": totp_now(account.otpauth_uri)})
     assert results[-1] == 423
     assert after.status_code in (401, 423)  # pending session gone or account locked: never signed in
+
+
+def test_bad_tokens_still_count_towards_the_rate_limit(app: FastAPI) -> None:
+    """Review finding 4: hits must survive the rollback of the failing request."""
+    with api_client(app) as api:
+        codes = [
+            api.post(
+                "/auth/password/reset", json={"token": "x" * 43, "new_password": "whatever passphrase"}
+            ).status_code
+            for _ in range(11)
+        ]
+    assert codes[:10] == [410] * 10 and codes[10] == 429
+
+
+def test_failure_counter_expires_identically_for_real_and_unknown(
+    app: FastAPI, api: Api, clk: FakeClock
+) -> None:
+    """Review finding 5: 4 failures, 25 h quiet, 1 failure -> no lockout for either."""
+    real = register_and_verify(api, unique_email("decayreal")).email
+    ghost = unique_email("decayghost")
+    for email in (real, ghost):
+        _fresh_ip_logins(app, email, "wrong password number 4", 4)
+    clk.advance(25 * 3600)
+    outcome = [_codes(_fresh_ip_logins(app, e, "wrong password number 5", 1)) for e in (real, ghost)]
+    assert outcome == [[(401, "unauthenticated")]] * 2

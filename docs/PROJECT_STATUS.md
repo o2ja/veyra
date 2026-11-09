@@ -1,14 +1,14 @@
 # Project Status
 
-> Living document. Updated at the end of every stage and whenever a decision, risk or known issue changes. Last updated: 2026-11-09.
+> Living document. Updated at the end of every stage and whenever a decision, risk or known issue changes. Last updated: 2026-11-10.
 
 ## 1. Current position
 
 | Item | State |
 |---|---|
 | Phase | **Release 1 build** |
-| Current stage | **S1 Identity, tenancy, RBAC, audit: in progress** (kickoff and decisions D-1..D-8 approved 2026-11-09; owner signs off S1 personally) |
-| Application code | S0 skeleton: backend core + baseline migration, frontend shell, CI, Compose, Makefile (see §3) |
+| Current stage | **S1 Identity, tenancy, RBAC, audit: implementation complete, awaiting owner sign-off** (`docs/reports/S1_COMPLETION_REPORT.md`) |
+| Application code | S0 skeleton + S1: identity, tenancy, audit modules; auth/MFA/sessions/CSRF; admin UI; isolation suite with negative control |
 | Synthetic test data | Generated and self-checked (`testdata/`) |
 
 ## 2. Completed
@@ -17,11 +17,12 @@
 - [x] Owner decisions recorded (local PostgreSQL, no BaaS, React SPA + separate backend, manual + AI agreements on one pipeline, staged delivery with approvals)
 - [x] Documentation package (`docs/`, `CLAUDE.md`, `README.md`)
 - [x] Synthetic dataset generator and ground truth (`testdata/generate.py`)
+- [x] S0 Foundation and tooling (signed off 2026-11-09)
 - [x] Independent check of every worked example in `BUSINESS_LOGIC.md` (`testdata/verify_business_logic_examples.py`, passes)
 
 ## 3. In progress
 
-S0. Done and tested: backend core, health endpoints, init-db, baseline migration and helpers, schema lint, import contracts, frontend shell, gitleaks planted-secret check (tests run against a scratch PostgreSQL 17 cluster; CI uses 16.15). CI on GitHub (`o2ja/veyra`, private) is green on `main`: backend, frontend, api-contract (client drift), secrets (gitleaks), images (runtime image non-root, Caddyfile valid). A probe PR proved CI fails on a skipped test. Local Docker verified 2026-11-09 (after WSL2 reboot): `make up/db-init/migrate/test/test-isolation/lint/check-client/down` green; README flow green on a fresh `git clone`; planted import violation fails `import-linter`. Fixed on the way: `make up` failed on a fresh volume (api startup role check ran before db-init), `make env` called the Windows `python3` Store stub. SPA-through-proxy verified in headless Chrome (renders `API: live`); CI green on `dccf862`. Awaiting owner sign-off.
+S1 implemented and verified; awaiting owner sign-off. Evidence and open points: `docs/reports/S1_COMPLETION_REPORT.md`. CI green on `main` (jobs: backend incl. isolation negative control, frontend, e2e (Playwright W1–W2 + axe), api-contract, secrets, images).
 
 ## 4. Pending
 
@@ -48,7 +49,7 @@ Stages S0–S11 per `DEVELOPMENT_ROADMAP.md` / `IMPLEMENTATION_PLAN.md`. Release
 | K-5 | Legal/commercial review (terms, DPA, data retention) not done | Needed before a paid pilot | Owner to engage counsel |
 | K-6 | `minio/minio` images are no longer publicly pullable (Docker Hub: not found; quay.io: 401) | Resolved 2026-11-09: owner approved SeaweedFS for local dev and CI (ADR-017); image added in S2 | Closed |
 | K-7 | Starlette deprecates `httpx` for `TestClient` (warning; suggests `httpx2`) | Test-only warning | Swap the test dependency when convenient |
-| K-9 | **Temporary in-process email sender** (S1.6): SMTP to Mailpit via FastAPI background task after commit; not durable, no retry; refuses to start outside `local`/`ci` | Lost email on crash; no production email | Replace with the `send_email` job in S2.1 (`docs/reports/S1_KICKOFF_REPORT.md` §5) |
+| K-9 | **Temporary in-process background pool** (S1.6, `core/mail.py`): emails go to Mailpit over SMTP from a 2-thread pool fed after commit; the forgot-password lookup/token/audit work runs there too (timing fix). Not durable, no retry; the API refuses to start outside `local`/`ci` | A crash or SMTP failure loses the email (and, for forgot-password, the token); no production email | Replace both with jobs in S2.1 (`docs/reports/S1_KICKOFF_REPORT.md` §5) |
 | K-8 | `minimatch` 10.x advisory GHSA-g3hv-75wg-m249 in ESLint tooling (dev only) | None at runtime | npm `overrides` pins minimatch 11.0.5; remove the override once ESLint ships it |
 
 ## 7. Risks being watched
@@ -64,7 +65,7 @@ Top items only; full list in the analysis and `SECURITY.md` §12.
 | Stage | Kickoff approved | Completed | Owner sign-off | Notes |
 |---|---|---|---|---|
 | S0 | 2026-11-09 | 2026-11-09 | 2026-11-09 | Approved |
-| S1 | 2026-11-09 | – | – | In progress; owner sign-off required |
+| S1 | 2026-11-09 | 2026-11-10 | – | Awaiting owner sign-off |
 | S2–S11 | – | – | – | Not started |
 
 ## 9. Change log
@@ -77,3 +78,4 @@ Top items only; full list in the analysis and `SECURITY.md` §12.
 | 2026-11-09 | S0 kickoff approved; doc corrections C-1..C-15 applied (CLAUDE.md, roadmap, schema, API, deployment, tech stack, testing); ADR-027 toolchain versions |
 | 2026-11-09 | S0 local Docker verification; `make up` runs db-init first; `make env` Windows interpreter fix; `infra/runbooks/` pointer |
 | 2026-11-09 | S0 signed off. S1 kickoff approved with D-1..D-8 (negative-control DB, `cryptography`, local breach list, Postgres rate-limit counters, email-change endpoints, no in-app MFA reset + runbook, per-tenant auth audit rows, `segno`). Owner standing delegation recorded in `CLAUDE.md` §18; reviewer subagent `.claude/agents/reviewer.md` |
+| 2026-11-10 | S1 complete: audit shows actor names; runbook operator scripts + dry run (found and fixed a missing EXECUTE grant, migration `20261110_0900`); session-ended message; axe on S1 pages; completion report |

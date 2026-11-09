@@ -22,6 +22,8 @@ from sqlalchemy import create_engine, make_url, text
 BACKEND = Path(__file__).resolve().parents[2]
 BREACH = "ISOLATION-BREACH"
 
+MIN_TESTS = 59  # tests/isolation size at S1 sign-off; raise it as the suite grows
+
 # Tests whose protection comes from RLS. They must fail with a BREACH assertion once RLS is off.
 RLS_DEPENDENT = (
     "test_d1_",
@@ -67,6 +69,15 @@ def _classify(junit: Path) -> tuple[list[str], list[str]]:
             if dependent:
                 problems.append(f"{name}: PASSED with RLS off, so it does not test RLS")
         report.append(f"{'RLS-dependent' if dependent else 'independent  '} | {outcome:26} | {name}")
+    # A truncated or empty run must not pass vacuously (S1 code review finding 10).
+    names = [line.rsplit("| ", 1)[-1] for line in report]
+    problems += [
+        f"no test matched RLS-dependent prefix {p!r}"
+        for p in RLS_DEPENDENT
+        if not any(x.startswith(p) for x in names)
+    ]
+    if len(report) < MIN_TESTS:
+        problems.append(f"only {len(report)} isolation tests ran (expected at least {MIN_TESTS})")
     return problems, report
 
 

@@ -55,30 +55,30 @@ Common items for **every** stage (copy into each stage's kickoff/completion):
 **Read:** `PRODUCT_REQUIREMENTS.md` §1.1–1.2, `SECURITY.md` §1–§3, §7, `DATABASE_SCHEMA.md` §2, §3.1–3.2, `API_SPECIFICATION.md` §2.1.
 **Depends on:** S0.
 
-- [ ] S1.1 Schema + RLS
-  - [ ] Migrations: `users`, `sessions`, `user_tokens`, `mfa_recovery_codes`, `tenants`, `tenant_settings`, `memberships`, `invitations`, `audit_log`, `idempotency_keys`
-  - [ ] RLS policies via helper; `fn_user_memberships`; privilege grants for `rebate_app`; audit immutability triggers
-- [ ] S1.2 `identity` module
-  - [ ] Registration (generic responses), email verification, login with Argon2id, lockout, uniform timing
-  - [ ] TOTP enrolment/verify, recovery codes (hashed), MFA enforcement setting
-  - [ ] Sessions: opaque token hashed in DB, cookie flags, idle/absolute timeouts, rotation, revocation (logout, deactivate, password change)
-  - [ ] CSRF double-submit + Origin check; password reset; email-change protections
-- [ ] S1.3 `tenancy` module
-  - [ ] Workspace creation, settings (time zone, MFA required, four-eyes, AI opt-in), memberships, invitations (create/accept/revoke/expire), role changes (last-admin protection), tenant switching
-  - [ ] Policy layer: permission registry from `SECURITY.md` §3; decorator on every route; four-eyes helper
-- [ ] S1.4 `audit` module: writer (same transaction), search endpoint, event catalogue constants
-- [ ] S1.5 Rate limiting (login/register/reset; general), request/response security headers
-- [ ] S1.6 Email jobs (can use a temporary in-process sender until S2 provides the queue; **replace in S2**, record in status)
-- [ ] S1.7 Frontend: register/login/verify/MFA setup/recovery codes/reset screens; workspace switcher; Users, Invitations, Settings pages; Audit log page; permission-aware nav; session-expiry handling
-- [ ] S1.8 Tests
-  - [ ] Auth flows, lockout, no enumeration, session expiry/revocation, CSRF
-  - [ ] Role × route matrix generated from the registry; every route declares a permission (meta-test)
-  - [ ] **Isolation suite v1** (routes, DB-level with app role, pool-size-1 context test, meta-test for RLS)
-  - [ ] Audit immutability and same-transaction writes
-  - [ ] Playwright W1–W2
+- [x] S1.1 Schema + RLS
+  - [x] Migrations: `users`, `sessions`, `user_tokens`, `mfa_recovery_codes`, `tenants`, `tenant_settings`, `memberships`, `invitations`, `audit_log`, `idempotency_keys`
+  - [x] RLS policies via helper; `fn_user_memberships`; privilege grants for `rebate_app`; audit immutability triggers. Also `pending_registrations`, `rate_limit_counters`, `rebate_lookup` owner role (kickoff §7/§10)
+- [x] S1.2 `identity` module
+  - [x] Registration (generic responses), email verification, login with Argon2id, lockout, uniform timing
+  - [x] TOTP enrolment/verify, recovery codes (hashed), MFA enforcement setting
+  - [x] Sessions: opaque token hashed in DB, cookie flags, idle/absolute timeouts, rotation, revocation (logout, deactivate, password change)
+  - [x] CSRF double-submit + Origin check; password reset; email-change protections
+- [x] S1.3 `tenancy` module
+  - [x] Workspace creation, settings (time zone, MFA required, four-eyes, AI opt-in), memberships, invitations (create/accept/revoke/expire), role changes (last-admin protection), tenant switching
+  - [x] Policy layer: permission registry from `SECURITY.md` §3; decorator on every route; four-eyes helper
+- [x] S1.4 `audit` module: writer (same transaction), search endpoint, event catalogue constants
+- [x] S1.5 Rate limiting (login/register/reset; general), request/response security headers
+- [x] S1.6 Email jobs (can use a temporary in-process sender until S2 provides the queue; **replace in S2**, record in status). Done as K-9; forgot-password work also runs in this temporary pool (timing fix)
+- [x] S1.7 Frontend: register/login/verify/MFA setup/recovery codes/reset screens; workspace switcher; Users, Invitations, Settings pages; Audit log page; permission-aware nav; session-expiry handling
+- [x] S1.8 Tests
+  - [x] Auth flows, lockout, no enumeration, session expiry/revocation, CSRF
+  - [x] Role × route matrix generated from the registry; every route declares a permission (meta-test)
+  - [x] **Isolation suite v1** (routes, DB-level with app role, pool-size-1 context test, meta-test for RLS)
+  - [x] Audit immutability and same-transaction writes
+  - [x] Playwright W1–W2
 
 **Acceptance:** two workspaces cannot see each other's anything (tests prove it); MFA works end to end; admin invites an analyst and a viewer; role limits enforced server-side; audit shows all actions.
-**Expected files:** `modules/identity/*`, `modules/tenancy/*`, `modules/audit/*`, `api/deps.py`, `api/middleware.py`, migrations, `tests/isolation/*`, frontend `features/auth`, `features/admin`.
+**Expected files:** `modules/identity/*`, `modules/tenancy/*`, `modules/audit/*`, `api/deps.py`, `api/middleware.py` (not created: the small middleware stays in `api/app.py`; paths in `api/paths.py`), migrations, `tests/isolation/*`, frontend `features/auth`, `features/admin`.
 
 ---
 

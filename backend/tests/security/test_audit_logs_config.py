@@ -14,7 +14,6 @@ from sqlalchemy import Engine, text
 
 from rebate.core import mail
 from rebate.core.db import transaction
-from rebate.core.request import RequestContext
 from rebate.modules import audit
 from rebate.modules.audit import Action, Actor
 from rebate.modules.tenancy import check_four_eyes, permissions_for
@@ -181,6 +180,7 @@ def test_secrets_never_reach_the_logs(
         api.post(
             "/invitations/accept", json={"token": invite_token, "full_name": "L", "password": STRONG_PASSWORD}
         )
+    mail.flush()  # background work (forgot-password) logs from the pool
     out = capsys.readouterr().out
     lines = [json.loads(line) for line in out.splitlines() if line.startswith("{")]
     assert any(e.get("event") == "request" for e in lines)
@@ -278,11 +278,11 @@ def test_db_sessions_are_opened_only_in_sanctioned_places() -> None:
     assert not offenders, f"open DB sessions only via core.db.transaction / the request context: {offenders}"
 
 
-def test_request_context_after_commit_only_runs_on_success() -> None:
-    ran: list[str] = []
-    c = RequestContext(db=None, settings=None, request_id="r", ip=None, user_agent=None)  # type: ignore[arg-type]
-    c.after_commit(lambda: ran.append("x"))
-    assert ran == []
-    c.run_after_commit()
-    c.run_after_commit()
-    assert ran == ["x"]
+def test_no_mutation_markers_left_in_source() -> None:
+    """Breakage spot-checks mark temporary edits with MUTATION; none may reach a commit (review finding 1)."""
+    hits = [
+        p.relative_to(SRC).as_posix()
+        for p in SRC.rglob("*.py")
+        if "MUTATION" in p.read_text(encoding="utf-8")
+    ]
+    assert not hits, hits

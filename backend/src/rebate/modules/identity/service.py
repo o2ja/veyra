@@ -122,8 +122,10 @@ def register(c: RequestContext, *, email: str, full_name: str, workspace_name: s
     send_after_commit(c, c.settings, mail)
 
 
-def verify_email(c: RequestContext, token: str) -> None:
-    """Creates user + workspace + admin membership only now (S1 review finding 1)."""
+def verify_email(c: RequestContext, token: str, password: str) -> None:
+    """Creates user + workspace + admin membership only now (S1 review finding 1). The link alone is not
+    enough: the registration password must match, so an attacker's verify email for someone else's
+    address cannot be completed by the address owner by mistake (S1 code review finding 8)."""
     ratelimit.hit(c.db, f"verify:ip:{c.ip}", limit=10, window_seconds=3600)
     pending = c.db.scalar(
         select(PendingRegistration)
@@ -133,6 +135,8 @@ def verify_email(c: RequestContext, token: str) -> None:
     now = clock.now()
     if pending is None or pending.used_at is not None or pending.expires_at <= now:
         raise LinkExpired()
+    if not password_hasher(c.settings).verify(pending.password_hash, password).ok:
+        raise LinkExpired()  # same answer as a bad link; the pending row stays usable
     c.db.execute(
         update(PendingRegistration)
         .where(PendingRegistration.email == pending.email, PendingRegistration.used_at.is_(None))
@@ -330,7 +334,7 @@ def mfa_enable(c: RequestContext, principal: Principal, code: str) -> tuple[sess
         pending_mfa=False,
         ip=c.ip,
         user_agent=c.user_agent,
-        reauthenticated=True,
+        reauthenticated=False,  # enrolling is not a step-up (S1 code review finding 2)
     )
     audit_user_event(c, user.id, Action.AUTH_MFA_ENABLED, after={"mfa_enabled": True})
     return new, codes
@@ -390,9 +394,8 @@ def _set_password(c: RequestContext, user: User, new_password: str) -> None:
     user.password_changed_at, user.updated_at = now, now
     c.db.execute(
         update(UserToken)
-        .where(
-            UserToken.user_id == user.id, UserToken.purpose == "password_reset", UserToken.used_at.is_(None)
-        )
+        # every open token (reset, email change): a password reset must also stop a pending email change
+        .where(UserToken.user_id == user.id, UserToken.used_at.is_(None))
         .values(used_at=now)
     )
 
@@ -476,11 +479,11 @@ def request_email_change(
     user = _user(c.db, principal.user_id, lock=True)
     if not user.mfa_enabled:
         raise MfaEnrollmentRequired()
-    _check_password_and_mfa(c, user, password, mfa_code)
     if email_key(new_email) == email_key(user.email):
         raise ValidationFailed(
             details=[{"field": "new_email", "code": "unchanged", "message": "This is your current email."}]
         )
+    _check_password_and_mfa(c, user, password, mfa_code)
     now = clock.now()
     c.db.execute(
         update(UserToken)

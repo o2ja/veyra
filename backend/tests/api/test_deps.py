@@ -11,6 +11,8 @@ from rebate.core.request import ctx
 from tests.conftest import DbUrls
 from tests.support import api_client, make_app
 
+_ran: list[str] = []
+
 
 class _Boom(DomainError):
     code = "conflict"
@@ -41,6 +43,11 @@ def _app(url: str):  # type: ignore[no-untyped-def]
             text("INSERT INTO rate_limit_counters VALUES (:k, now(), 1, now() + interval '1 hour')"),
             {"k": key},
         )
+        if mode == "callback_then_fail":
+            ctx(request).after_commit(lambda: _ran.append(key))
+            raise _Boom()
+        if mode == "callback_ok":
+            ctx(request).after_commit(lambda: _ran.append(key))
         if mode == "fail":
             raise _Boom()
         if mode == "fail_commit":
@@ -80,3 +87,11 @@ def test_commit_rollback_and_failure_bookkeeping(migrated_db: DbUrls) -> None:
     assert _exists(migrated_db.admin, f"probe:ok:{ok.headers['X-Request-Id']}") == 1
     assert _exists(migrated_db.admin, f"probe:fail:{fail.headers['X-Request-Id']}") == 0  # rolled back
     assert _exists(migrated_db.admin, f"probe:fail_commit:{kept.headers['X-Request-Id']}") == 1  # committed
+
+
+def test_after_commit_callbacks_run_only_when_the_request_commits(migrated_db: DbUrls) -> None:
+    with api_client(_app(migrated_db.app)) as api:
+        failed = api.client.post("/api/v1/write?mode=callback_then_fail", headers=api._headers(None))
+        ok = api.client.post("/api/v1/write?mode=callback_ok", headers=api._headers(None))
+    assert failed.status_code == 409 and ok.status_code == 200
+    assert _ran == [f"probe:callback_ok:{ok.headers['X-Request-Id']}"]

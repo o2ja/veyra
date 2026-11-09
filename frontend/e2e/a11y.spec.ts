@@ -28,6 +28,8 @@ test("S1 pages have no automated WCAG 2.1 AA violations", async ({ page }) => {
   await page.getByLabel("Password").fill(PASSWORD);
   await page.getByRole("button", { name: "Create workspace" }).click();
   await page.goto(`/verify-email#token=${await tokenFromMail(admin)}`);
+  await page.getByLabel("Password").fill(PASSWORD);
+  await page.getByRole("button", { name: "Confirm and create workspace" }).click();
   await signIn(page, admin);
   await page.getByRole("button", { name: "Start setup" }).click();
   await expect(page.getByRole("img", { name: /QR code/ })).toBeVisible();

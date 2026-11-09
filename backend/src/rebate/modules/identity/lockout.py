@@ -62,6 +62,12 @@ def user_state(user: User) -> LockState:
 
 
 def user_failure(settings: Settings, user: User) -> bool:
+    now = clock.now()
+    if user.last_failed_at is not None and now - user.last_failed_at > timedelta(
+        hours=settings.lockout_decay_hours
+    ):
+        user.failed_login_count = 0  # same horizon as the unknown-email counter (S1 code review finding 5)
+    user.last_failed_at = now
     state = user_state(user)
     locked = _fail(settings, state)
     user.failed_login_count, user.lockout_level, user.locked_until = (

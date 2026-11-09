@@ -15,7 +15,8 @@ def client_ip(peer: str | None, forwarded_for: str | None, trusted: tuple[str, .
         return _valid(peer)
     for hop in reversed([h.strip() for h in forwarded_for.split(",")]):
         if hop and hop not in trusted:
-            return _valid(hop)
+            # an unparsable hop must not collapse every such client into one shared "None" bucket
+            return _valid(hop) or _valid(peer)
     return _valid(peer)
 
 

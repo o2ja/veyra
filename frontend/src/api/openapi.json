@@ -999,6 +999,30 @@
         "title": "ValidationError",
         "type": "object"
       },
+      "VerifyIn": {
+        "additionalProperties": false,
+        "properties": {
+          "password": {
+            "maxLength": 1024,
+            "minLength": 1,
+            "title": "Password",
+            "type": "string"
+          },
+          "token": {
+            "maxLength": 128,
+            "minLength": 20,
+            "pattern": "^[A-Za-z0-9_-]+$",
+            "title": "Token",
+            "type": "string"
+          }
+        },
+        "required": [
+          "token",
+          "password"
+        ],
+        "title": "VerifyIn",
+        "type": "object"
+      },
       "WorkspaceList": {
         "properties": {
           "data": {
@@ -1782,7 +1806,7 @@
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/TokenIn"
+                "$ref": "#/components/schemas/VerifyIn"
               }
             }
           },

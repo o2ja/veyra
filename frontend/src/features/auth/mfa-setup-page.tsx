@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 
+import { useStepUp } from "../../components/step-up";
 import { Alert, AuthCard, Button, ErrorAlert, Field } from "../../components/ui";
 import { api } from "../../lib/api/client";
 import { unwrap } from "../../lib/api/errors";
@@ -12,20 +13,21 @@ export function MfaSetupPage() {
   const navigate = useNavigate();
   const { me, refresh } = useSession();
   const { busy, error, submit } = useApiSubmit();
+  const stepUp = useStepUp(); // SECURITY.md §1: changing MFA needs a recent password check
   const [setup, setSetup] = useState<{ otpauth_uri: string; qr_svg_data_uri: string } | null>(null);
   const [code, setCode] = useState("");
   const [codes, setCodes] = useState<string[] | null>(null);
   const [showSecret, setShowSecret] = useState(false);
 
   async function start() {
-    const result = await submit(() => unwrap(api.POST("/api/v1/auth/mfa/setup")));
+    const result = await submit(() => stepUp(() => unwrap(api.POST("/api/v1/auth/mfa/setup"))));
     if (result) setSetup(result);
   }
 
   async function enable(event: React.FormEvent) {
     event.preventDefault();
     const result = await submit(() =>
-      unwrap(api.POST("/api/v1/auth/mfa/enable", { body: { code: code.trim() } })),
+      stepUp(() => unwrap(api.POST("/api/v1/auth/mfa/enable", { body: { code: code.trim() } }))),
     );
     if (result) setCodes(result.recovery_codes);
   }

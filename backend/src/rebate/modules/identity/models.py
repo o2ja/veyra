@@ -30,6 +30,7 @@ class User(Base):
     failed_login_count: Mapped[int] = mapped_column(Integer, server_default="0")
     lockout_level: Mapped[int] = mapped_column(Integer, server_default="0")
     locked_until: Mapped[datetime | None] = mapped_column(TS)
+    last_failed_at: Mapped[datetime | None] = mapped_column(TS)
     last_login_at: Mapped[datetime | None] = mapped_column(TS)
     password_changed_at: Mapped[datetime | None] = mapped_column(TS)
     created_at: Mapped[datetime] = mapped_column(TS, server_default="now()")

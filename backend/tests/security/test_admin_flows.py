@@ -281,3 +281,16 @@ def test_invitation_rows_store_only_the_token_hash(api: Api, admin_engine: Engin
             text("SELECT token_hash FROM invitations WHERE email = :e"), {"e": email}
         ).scalar_one()
     assert stored != token and len(stored) == 64
+
+
+def test_reactivating_an_admin_needs_step_up(app: FastAPI, api: Api, clk: FakeClock) -> None:
+    """Review finding 16: re-granting admin rights by status change is a step-up action too."""
+    admin = full_admin(api, unique_email("reactadmin"))
+    other, _ = member(app, unique_email("secondadmin"), api, "analyst")
+    uid = other.get("/auth/me").json()["user"]["id"]
+    step_up(api, admin)
+    assert api.patch(f"/users/{uid}", json={"role": "admin"}).status_code == 200
+    assert api.patch(f"/users/{uid}", json={"status": "disabled"}).status_code == 200
+    clk.advance(6 * 60)
+    r = api.patch(f"/users/{uid}", json={"status": "active"})
+    assert r.status_code == 401 and r.json()["error"]["code"] == "reauthentication_required"

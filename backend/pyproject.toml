@@ -50,7 +50,7 @@ select = ["E", "F", "W", "I", "B", "UP", "S", "N", "RUF"]
 ignore = ["N818"]  # domain errors are named by meaning (DomainError subclasses)
 
 [tool.ruff.lint.per-file-ignores]
-"tests/**" = ["S101", "S105", "S106", "S603", "S607", "S608"]
+"tests/**" = ["S101", "S105", "S106", "S603", "S607", "S608", "E501"]
 "migrations/**" = ["S608"]
 
 [tool.mypy]
