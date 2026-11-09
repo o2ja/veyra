@@ -41,8 +41,8 @@ jobs:
       run:
         working-directory: backend
     steps:
-      - uses: actions/checkout@v6.0.0
-      - uses: astral-sh/setup-uv@v7.1.0
+      - uses: actions/checkout@v7.0.1
+      - uses: astral-sh/setup-uv@v10.3.3
         with:
           version: ${{ env.UV_VERSION }}
           python-version: ${{ env.PYTHON_VERSION }}
@@ -75,8 +75,8 @@ jobs:
       run:
         working-directory: frontend
     steps:
-      - uses: actions/checkout@v6.0.0
-      - uses: actions/setup-node@v7.0.1
+      - uses: actions/checkout@v7.0.1
+      - uses: actions/setup-node@v7.1.0
         with:
           node-version: ${{ env.NODE_VERSION }}
           cache: npm
@@ -93,12 +93,12 @@ jobs:
   api-contract:
     runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@v6.0.0
-      - uses: astral-sh/setup-uv@v7.1.0
+      - uses: actions/checkout@v7.0.1
+      - uses: astral-sh/setup-uv@v10.3.3
         with:
           version: ${{ env.UV_VERSION }}
           python-version: ${{ env.PYTHON_VERSION }}
-      - uses: actions/setup-node@v7.0.1
+      - uses: actions/setup-node@v7.1.0
         with:
           node-version: ${{ env.NODE_VERSION }}
           cache: npm
@@ -114,7 +114,7 @@ jobs:
   secrets:
     runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@v6.0.0
+      - uses: actions/checkout@v7.0.1
         with:
           fetch-depth: 0
       - name: gitleaks (full history)
@@ -125,7 +125,7 @@ jobs:
   images:
     runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@v6.0.0
+      - uses: actions/checkout@v7.0.1
       - run: docker build --target runtime -t rebate-api:ci backend
       - name: runtime image runs as non-root and imports the app
         run: |
