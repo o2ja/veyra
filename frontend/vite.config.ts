@@ -16,6 +16,8 @@ export default defineConfig({
   },
   test: {
     environment: "jsdom",
+    // https origin: jsdom enforces the __Host- cookie prefix rules (Secure, Path=/), like browsers
+    environmentOptions: { jsdom: { url: "https://localhost/" } },
     restoreMocks: true,
   },
 });

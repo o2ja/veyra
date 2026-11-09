@@ -13,3 +13,6 @@ coverage.xml
 junit*.xml
 testdata/generated_volume/
 .claude/review/
+test-results/
+playwright-report/
+junit-e2e.xml

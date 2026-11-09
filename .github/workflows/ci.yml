@@ -144,3 +144,64 @@ jobs:
           docker run --rm -e APP_DOMAIN=localhost -v "$PWD/infra/caddy:/etc/caddy:ro"
           caddy:2.11.9-alpine@sha256:0bbb055bda6793c999bde78b1b5ce3e89f829fb031af2cf50056ea1246559fee
           caddy validate --config /etc/caddy/Caddyfile
+
+  e2e:
+    # Playwright W1-W2 against the real stack: Postgres, Mailpit, API (uvicorn), Vite dev server.
+    runs-on: ubuntu-24.04
+    services:
+      postgres:
+        image: postgres:16.15-trixie@sha256:f9a7b9ebf6f56201f949db745e47bc423c0f0f8294bafe991cc10bf74b029657
+        env:
+          POSTGRES_PASSWORD: ci-postgres
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U postgres" --health-interval 2s --health-timeout 3s --health-retries 30
+      mailpit:
+        image: axllent/mailpit:v1.33.1@sha256:aef2aacc11f075ec0fb6874275ee4a421e688e11a96ebb296134d1735c7761ce
+        ports: ["1025:1025", "8025:8025"]
+    env:
+      PGHOST: localhost
+      PGUSER: postgres
+      PGPASSWORD: ci-postgres
+      REBATE_OWNER_PASSWORD: ci-owner
+      REBATE_APP_PASSWORD: ci-app
+      REBATE_AI_WRITER_PASSWORD: ci-ai
+      REBATE_READONLY_PASSWORD: ci-ro
+    steps:
+      - uses: actions/checkout@v7.0.1
+      - uses: astral-sh/setup-uv@v10.3.3
+        with:
+          version: ${{ env.UV_VERSION }}
+          python-version: ${{ env.PYTHON_VERSION }}
+      - uses: actions/setup-node@v7.1.0
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - run: uv sync --frozen --directory backend
+      - run: npm ci --no-fund --prefix frontend
+      - run: bash infra/scripts/init-db.sh
+      - name: migrate
+        working-directory: backend
+        env:
+          DATABASE_URL_OWNER: postgresql+psycopg://rebate_owner:ci-owner@localhost:5432/rebate
+        run: uv run alembic upgrade head
+      - name: start API and dev server
+        run: |
+          export APP_ENV=ci SECRET_KEY="$(openssl rand -hex 32)" \
+            ENCRYPTION_KEYS="k1:$(openssl rand -base64 32)" \
+            DATABASE_URL=postgresql+psycopg://rebate_app:ci-app@localhost:5432/rebate \
+            PUBLIC_BASE_URL=http://localhost:5173 SMTP_HOST=localhost SMTP_PORT=1025
+          (cd backend && nohup uv run uvicorn rebate.api.asgi:app --port 8000 > ../api.log 2>&1 &)
+          (cd frontend && VITE_DEV_API_PROXY=http://localhost:8000 nohup npx vite --port 5173 > ../vite.log 2>&1 &)
+          for i in $(seq 60); do curl -sf http://localhost:5173/api/v1/health/ready && break; sleep 1; done
+          curl -sf http://localhost:5173/api/v1/health/ready
+      - run: npx --prefix frontend playwright install --with-deps chromium
+      - name: Playwright W1-W2
+        working-directory: frontend
+        run: npx playwright test
+      - name: no skipped tests
+        run: python3 infra/scripts/check-no-skips.py frontend/junit-e2e.xml
+      - name: logs on failure
+        if: failure()
+        run: tail -n 200 api.log vite.log
