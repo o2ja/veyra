@@ -16,7 +16,13 @@ from alembic.config import Config
 from sqlalchemy import Engine, create_engine, make_url, text
 
 BACKEND = Path(__file__).resolve().parents[1]
-TEST_DB = "rebate_test"
+TEST_DB = os.environ.get("REBATE_TEST_DB", "rebate_test")
+# Negative control (CLAUDE.md §11 exception, S1 D-1): only in the throwaway database `rebate_negctl`,
+# RLS is disabled after migrating, by a dedicated role that can connect to that database only.
+NEGCTL_DB = "rebate_negctl"
+NEGCTL = os.environ.get("REBATE_NEGCTL") == "1"
+if NEGCTL and TEST_DB != NEGCTL_DB:
+    raise RuntimeError("REBATE_NEGCTL=1 is only allowed with REBATE_TEST_DB=rebate_negctl")
 ROLES = ("rebate_owner", "rebate_app", "rebate_ai_writer", "rebate_readonly", "rebate_lookup")
 
 
@@ -72,7 +78,51 @@ def migrated_db(db_urls: DbUrls) -> DbUrls:
         )
     server.dispose()
     command.upgrade(alembic_config(db_urls.owner), "head")
+    if NEGCTL:
+        _disable_rls_in_throwaway_db(db_urls)
     return db_urls
+
+
+def _disable_rls_in_throwaway_db(db_urls: DbUrls) -> None:
+    """Switch RLS off on every tenant table of `rebate_negctl` via the dedicated role
+    `rebate_negctl_ddl` (CONNECT on rebate_negctl only), then drop that role again."""
+    import secrets
+
+    assert TEST_DB == NEGCTL_DB
+    password = secrets.token_urlsafe(24)
+    server = create_engine(
+        make_url(os.environ["TEST_ADMIN_DATABASE_URL"]).set(database="postgres"),
+        isolation_level="AUTOCOMMIT",
+    )
+    with server.connect() as conn:
+        conn.execute(text("DROP ROLE IF EXISTS rebate_negctl_ddl"))
+        conn.execute(text(f"CREATE ROLE rebate_negctl_ddl LOGIN PASSWORD '{password}'"))
+        conn.execute(text(f"GRANT CONNECT ON DATABASE {NEGCTL_DB} TO rebate_negctl_ddl"))
+        conn.execute(text("GRANT rebate_owner TO rebate_negctl_ddl WITH INHERIT FALSE, SET TRUE"))
+    ddl_url = make_url(db_urls.owner).set(username="rebate_negctl_ddl", password=password)
+    ddl = create_engine(ddl_url)
+    try:
+        with ddl.begin() as conn:
+            assert conn.execute(text("SELECT current_database()")).scalar_one() == NEGCTL_DB
+            conn.execute(text("SET LOCAL ROLE rebate_owner"))
+            tables = (
+                conn.execute(
+                    text(
+                        "SELECT c.relname FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace "
+                        "WHERE n.nspname = 'public' AND c.relkind = 'r' AND c.relrowsecurity"
+                    )
+                )
+                .scalars()
+                .all()
+            )
+            for table in tables:
+                conn.execute(text(f'ALTER TABLE "{table}" DISABLE ROW LEVEL SECURITY'))
+    finally:
+        ddl.dispose()
+        with server.connect() as conn:
+            conn.execute(text(f"REVOKE CONNECT ON DATABASE {NEGCTL_DB} FROM rebate_negctl_ddl"))
+            conn.execute(text("DROP ROLE rebate_negctl_ddl"))
+        server.dispose()
 
 
 def _engine(url: str) -> Iterator[Engine]:

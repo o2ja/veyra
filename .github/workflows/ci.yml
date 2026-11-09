@@ -65,6 +65,8 @@ jobs:
       - run: uv run pytest --junitxml=junit-backend.xml
       - name: no skipped tests
         run: python3 ../infra/scripts/check-no-skips.py junit-backend.xml
+      - name: isolation negative control (RLS disabled in throwaway DB rebate_negctl)
+        run: uv run python -m tests.isolation.negative_control
       - name: worked examples in BUSINESS_LOGIC.md
         working-directory: .
         run: python3 -I testdata/verify_business_logic_examples.py

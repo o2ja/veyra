@@ -45,8 +45,8 @@ test-backend: ## full backend suite against a fresh rebate_test database
 test-frontend:
 	$(FE_RUN) npm test
 
-test-isolation: ## tenant-isolation suite (meta-test only until S1 adds tenant tables)
-	$(API_RUN) sh -c 'TEST_ADMIN_DATABASE_URL="$(ADMIN_URL)" pytest --no-cov tests/db/test_schema_lint.py tests/db/test_migration_helpers.py'
+test-isolation: ## tenant-isolation suite + schema meta-test + negative control (RLS off in a throwaway DB)
+	$(API_RUN) sh -c 'export TEST_ADMIN_DATABASE_URL="$(ADMIN_URL)"; pytest --no-cov tests/isolation tests/db/test_schema_lint.py tests/db/test_migration_helpers.py && python -m tests.isolation.negative_control'
 
 lint: ## all static gates (backend, frontend, secrets)
 	$(API_RUN) sh -c 'ruff check . && ruff format --check . && mypy && lint-imports --config importlinter.ini && bandit -q -c pyproject.toml -r src migrations && uv export --frozen --no-hashes --no-emit-project -o /tmp/req.txt -q && pip-audit --strict --no-deps --disable-pip -r /tmp/req.txt'
