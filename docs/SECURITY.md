@@ -6,13 +6,13 @@
 
 | Control | Requirement |
 |---|---|
-| Passwords | Argon2id (`argon2-cffi`, parameters tuned to ≈ 250 ms on prod hardware, stored in config); minimum 12 characters; breach-list check (k-anonymity or local list); no composition rules theatre; no max < 128 |
-| MFA | TOTP (`pyotp`); workspace `mfa_required` default true; 10 single-use recovery codes (hashed); MFA secret encrypted at application level with a key from secret store (envelope-ready) |
-| Login protection | Per-account and per-IP rate limiting; progressive lockout (5 failures → 15 min, `423`); uniform timing and messages (no account enumeration on login, reset, register, invite) |
+| Passwords | Argon2id (`argon2-cffi`, parameters tuned to ≈ 250 ms on prod hardware, stored in config); minimum 12 characters; breach-list check against a **bundled local list** (S1 D-3: Xato 10M-password set, released to the public domain by its author M. Burnett 2015, top 1M as redistributed by SecLists (MIT); only entries ≥ 12 chars are kept; no network call); no composition rules theatre; max 256 (≥ 128 required); NFKC-normalised before hashing; rehash on login when parameters change |
+| MFA | TOTP (`pyotp`); workspace `mfa_required` default true; 10 single-use recovery codes (hashed); MFA secret encrypted at application level with AES-256-GCM (`cryptography`, S1 D-2), keys from the environment variable `ENCRYPTION_KEYS` (`kid:base64key,…`, first = active; ciphertext carries the kid; rotation: `DEPLOYMENT.md` §2.4); TOTP replay of the same time step rejected. **The otpauth URI, the secret and the QR code are never logged** (S1 D-8) and are returned only by `POST /auth/mfa/setup` with `Cache-Control: no-store`. No in-app MFA reset by admins (S1 D-6); operator runbook `infra/runbooks/locked-out-admin.md` |
+| Login protection | Per-account and per-IP rate limiting; progressive lockout (5 failures → 15 min, `423`); uniform timing and messages (no account enumeration on login, reset, register, invite). Unknown emails are counted and locked exactly like real accounts (keyed HMAC of the normalised email). **Raw email addresses of unknown users are never logged** (S1 D-7); logs carry only that keyed hash. Counters live in Postgres (`rate_limit_counters`, S1 D-4) |
 | Sessions | Opaque 256-bit random token → cookie `__Host-session` (`HttpOnly; Secure; SameSite=Lax; Path=/`); DB stores only SHA-256 of the token; idle timeout 30 min, absolute 12 h; rotation on login, MFA success, role change, and tenant switch; immediate revocation on logout/deactivation/password change (all sessions) |
 | CSRF | Double-submit token (`X-CSRF-Token`) for all mutating requests; `SameSite=Lax` as second layer; `Origin`/`Referer` check |
 | Reset/verify/invite tokens | 256-bit random, stored hashed, single-use, expiry (reset 30 min, verify 24 h, invite 7 d) |
-| Email changes | Re-verification and notification to old address |
+| Email changes | Requires **password re-entry and a current MFA code** in the same request (S1 D-5); link to the new address (24 h, single-use); notice to the old address; on confirm all other sessions are revoked |
 | Step-up | Re-enter password/MFA for: changing password/MFA, creating API-level exports of all data, user role changes to `admin` |
 | SSO/SCIM | Later (R2), OIDC/SAML as add-on |
 
@@ -34,7 +34,8 @@ Roles: `admin`, `approver`, `analyst`, `viewer`. Permissions are enforced in the
 | Permission | admin | approver | analyst | viewer |
 |---|:-:|:-:|:-:|:-:|
 | `user.manage`, `invitation.manage`, `settings.write` | ✔ | | | |
-| `settings.read`, all `*.read` (data, reports, audit) | ✔ | ✔ | ✔ | ✔ |
+| `settings.read`, all `*.read` (data, reports) | ✔ | ✔ | ✔ | ✔ |
+| `audit.read` | ✔ | ✔ | | ✔ |
 | `file.upload`, `import.run`, `masterdata.write`, `mapping.write` | ✔ | ✔ | ✔ | |
 | `agreement.draft` (create/edit/submit) | ✔ | ✔ | ✔ | |
 | `agreement.approve/reject/return/cancel` | ✔ | ✔ | | |

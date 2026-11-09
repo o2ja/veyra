@@ -58,7 +58,9 @@ Defined by `core/config.py` (pydantic-settings). `.env.example` contains placeho
 | `CLAMD_HOST`, `CLAMD_PORT` | `clamav`, `3310` | |
 | `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASSWORD`, `MAIL_FROM` | | Mailpit locally |
 | `LLM_PROVIDER`, `LLM_API_KEY`, `LLM_MODEL_PRIMARY`, `LLM_MODEL_SECONDARY`, `AI_DAILY_COST_CAP_USD` | | **Unset by default; AI disabled** until OD-2 approval |
-| `ENCRYPTION_KEY`, `ENCRYPTION_KEY_ID` | | MFA secrets; key id enables rotation |
+| `ENCRYPTION_KEYS` | `k1:<base64 32 bytes>` | MFA secrets (AES-256-GCM). Comma-separated `kid:key`; the **first is active** for new encryptions, all listed keys decrypt. **Rotation:** add the new key first in the list, deploy, run the re-encrypt command (added with the first rotation need; until then old keys stay listed), remove the old key. Never reuse a kid |
+| `EMAIL_BACKEND` | `smtp_inprocess` | **Temporary (S1, K-9)**: refuses to start unless `APP_ENV` is `local` or `ci`; replaced by the job-based sender in S2 |
+| `TRUSTED_PROXY_IPS` | `` (empty) | `X-Forwarded-For` honoured only from these peers (Caddy) |
 | `SESSION_IDLE_MINUTES` / `SESSION_ABSOLUTE_HOURS` | `30` / `12` | |
 | `SENTRY_DSN` | | Optional |
 | `PUBLIC_BASE_URL` | `https://app.example.com` | Links in emails, cookie/Origin checks |

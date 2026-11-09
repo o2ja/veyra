@@ -8,6 +8,7 @@ from sqlalchemy import Engine, MetaData, create_engine, text
 from sqlalchemy.orm import DeclarativeBase, Session
 
 OWNER_ROLE = "rebate_owner"
+LOOKUP_ROLE = "rebate_lookup"  # BYPASSRLS owner of SECURITY DEFINER lookups
 
 # Constraint names per DATABASE_SCHEMA.md §1 (pk_/fk_/uq_/ck_/ix_).
 NAMING_CONVENTION = {
@@ -53,6 +54,8 @@ _ROLE_CHECK = text(
            d.datdba = r.oid AS owns_database,
            COALESCE((SELECT pg_has_role(current_user, o.oid, 'MEMBER')
                      FROM pg_roles o WHERE o.rolname = :owner), false) AS is_owner_member,
+           COALESCE((SELECT pg_has_role(current_user, l.oid, 'MEMBER')
+                     FROM pg_roles l WHERE l.rolname = :lookup), false) AS is_lookup_member,
            EXISTS (SELECT 1 FROM pg_class c
                    JOIN pg_namespace n ON n.oid = c.relnamespace
                    WHERE c.relowner = r.oid
@@ -65,9 +68,9 @@ _ROLE_CHECK = text(
 
 
 def assert_safe_role(engine: Engine) -> None:
-    """Refuse superuser, BYPASSRLS, database owner, rebate_owner members and object owners."""
+    """Refuse superuser, BYPASSRLS, database owner, members of rebate_owner/rebate_lookup, object owners."""
     with engine.connect() as conn:
-        row = conn.execute(_ROLE_CHECK, {"owner": OWNER_ROLE}).mappings().one()
+        row = conn.execute(_ROLE_CHECK, {"owner": OWNER_ROLE, "lookup": LOOKUP_ROLE}).mappings().one()
     problems = [
         name
         for name in (
@@ -75,6 +78,7 @@ def assert_safe_role(engine: Engine) -> None:
             "rolbypassrls",
             "owns_database",
             "is_owner_member",
+            "is_lookup_member",
             "owns_relations",
         )
         if row[name]

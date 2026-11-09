@@ -33,6 +33,9 @@
 | Procrastinate | Job queue and periodic tasks | Uses Postgres `LISTEN/NOTIFY` and `FOR UPDATE SKIP LOCKED`. Spike in S2; fallback is a minimal in-house `SKIP LOCKED` queue (ADR-005) |
 | `argon2-cffi` | Password hashing | Argon2id |
 | `pyotp` | TOTP MFA | Plus recovery codes (hashed) |
+| `cryptography` | AES-256-GCM for MFA secrets | S1 D-2; keys from env `ENCRYPTION_KEYS` |
+| `segno` | TOTP QR code as SVG | S1 D-8; pure Python, BSD; the QR/URI is never logged |
+| Common-password list (data) | Breached-password check | S1 D-3; Xato set (public domain), via SecLists (MIT); ≥ 12-char entries only; `modules/identity/data/` with `NOTICE` |
 | `structlog` | Structured logging | JSON, request id + tenant id binding |
 | `sentry-sdk` | Error tracking | Scrub PII; self-hostable alternative acceptable |
 | `boto3` | S3-compatible storage client | Presigned URLs, short expiry |

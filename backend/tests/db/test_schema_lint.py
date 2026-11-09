@@ -35,6 +35,12 @@ def test_lint_detects_each_violation(owner_engine: Engine) -> None:
         f"CONSTRAINT fk_ok FOREIGN KEY (tenant_id, parent_id) REFERENCES {SCRATCH}.good (tenant_id, id), "
         f"CONSTRAINT fk_bad FOREIGN KEY (other_id) REFERENCES {SCRATCH}.good (id))",
         *tenant_rls_sql(f"{SCRATCH}.child"),
+        # No `id` column: exempt from UNIQUE (tenant_id, id), still needs RLS.
+        f"CREATE TABLE {SCRATCH}.keyed (tenant_id uuid PRIMARY KEY)",
+        *tenant_rls_sql(f"{SCRATCH}.keyed"),
+        f"CREATE TABLE {SCRATCH}.keyed_no_rls (tenant_id uuid PRIMARY KEY)",
+        # `tenants` has no tenant_id column but must still have RLS.
+        f"CREATE TABLE {SCRATCH}.tenants (id uuid PRIMARY KEY)",
     ]
     with owner_engine.connect() as conn:
         try:
@@ -51,6 +57,8 @@ def test_lint_detects_each_violation(owner_engine: Engine) -> None:
             "floats.b: forbidden type double precision",
             "floats.c: forbidden type money",
             "floats.d: forbidden type double precision[]",
+            "keyed_no_rls: row level security not enabled and forced",
+            "tenants: row level security not enabled and forced",
             "no_rls: row level security not enabled and forced",
             "no_unique: missing UNIQUE (tenant_id, id)",
             "not_forced: row level security not enabled and forced",

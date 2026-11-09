@@ -41,6 +41,8 @@ Stages S0–S11 are defined in `docs/DEVELOPMENT_ROADMAP.md` and broken into che
 5. Update `docs/PROJECT_STATUS.md`, `IMPLEMENTATION_PLAN.md` checkboxes and any changed docs.
 6. **Completion report**: what was built, what was tested and how, results, deviations from the docs, known issues, decisions needed. **Wait for owner approval** before the next stage.
 
+Approval and sign-off rules (who approves what, the reviewer subagent, auto-advance): §18.
+
 Report honestly. A failing or skipped test, an unverified claim or a limitation is stated plainly. Say "not tested" when something was not tested.
 
 ## 4. Document map — read before working on…
@@ -136,6 +138,7 @@ Modules (authoritative list: `docs/ARCHITECTURE.md` §3): `identity, tenancy, au
 
 - Alembic only; never `create_all`, never manual DDL outside migrations.
 - **Exception (tests only):** a test may run DDL solely inside a transaction that is always rolled back, in a scratch schema (never `public`), to prove that schema lints and migration helpers detect or enforce what they claim.
+- **Exception (isolation negative control, owner-approved S1 D-1):** the CI job `isolation-negative-control` may disable RLS on tenant tables **only in a throwaway database** that it creates, owns through its own dedicated role, and drops afterwards. Never against the development, CI-main, staging or production database or schema.
 - Every tenant table: `tenant_id`, `UNIQUE (tenant_id, id)`, composite FKs, RLS enabled and forced, policy via the shared helper. The schema-lint tests enforce this.
 - Invariants in constraints/triggers, not only in code. Frozen data has immutability triggers.
 - Destructive migrations need a note in the kickoff report and owner approval.
@@ -176,3 +179,11 @@ Follow `docs/SECURITY.md`. Highlights: Argon2id, MFA, server-side sessions, CSRF
 ## 17. Small, staged development
 
 Prefer the smallest vertical slice that proves the design, test it, then extend. Avoid speculative features, premature optimisation and new abstractions without a second use. If something is bigger than a stage allows, stop and propose a split.
+
+## 18. Decision authority (standing delegation from the owner, 2026-11-09)
+
+1. **Decide alone** and record in the stage report or an ADR: libraries for standard needs, default values, test design, tooling, doc corrections, naming. Do not ask the owner about these.
+2. **Ask the owner only** about: business/product direction; spending or new accounts; legal/data terms (OD-2); production hosting (OD-3/OD-4); destructive or irreversible actions; any change that weakens an approved security or financial-integrity design. Batch these into **one short list, at most once per stage**, each with a recommendation.
+3. **Independent reviewer:** run the read-only `reviewer` subagent (`.claude/agents/reviewer.md`) (a) on every kickoff report before presenting it, and (b) on every completion report plus the stage's code diff before presenting it. Fix its findings or explain the disagreement; include its findings and the responses in the report.
+4. **Stage sign-off:** the owner personally approves **S1, S5 and S8**. For every other stage, if all tests and CI are green, the reviewer has no unresolved serious finding, and nothing from item 2 is open, start the next stage automatically and send the owner a short digest (built, tested, issues). Otherwise stop and wait.
+5. **Every report starts with a 5-line summary of what the owner needs to decide** (or "nothing"). Honesty rules (§3) still apply: say what was not tested.

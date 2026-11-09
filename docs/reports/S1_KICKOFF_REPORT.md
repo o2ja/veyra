@@ -1,6 +1,13 @@
 # S1 Kickoff Report — Identity, tenancy, RBAC, audit
 
-> Status: **PROPOSED — awaiting owner approval.** No S1 code is written until approval.
+## Owner decisions needed
+1. Nothing. Kickoff and D-1..D-8 approved by the owner on 2026-11-09, with conditions (§7).
+2. –
+3. –
+4. –
+5. –
+
+> Status: **APPROVED 2026-11-09** (D-1..D-8 with owner conditions, §7). Reviewer findings and responses: §10.
 > Date: 2026-11-09. Stage size: L. Depends on S0 (approved 2026-11-09).
 > Sources read: `PRODUCT_REQUIREMENTS.md` §1.1–1.2 and §3 (US-01..03), `SECURITY.md` §1–§3, §6, §7, §11, `DATABASE_SCHEMA.md` §1–§3.2, §7, §10, `API_SPECIFICATION.md` §1, §2.1, §2.9, §5, `ARCHITECTURE.md` §11 (W1, W2), `TESTING_STRATEGY.md` §5–§9, ADR-006/007/026, current code in `backend/src/rebate/core` and `api/`.
 
@@ -130,7 +137,7 @@ All values in `core/config.py` (pydantic-settings), overridable by environment, 
 | `INVITATION_DAYS` | 7 | FR-ID-02 |
 | TOTP | **SHA-1, 6 digits, 30 s, ±1 step, issuer "Veyra Recover"** | Authenticator-app compatible; reuse of the same step is rejected |
 | Recovery codes | 10 single-use codes, **16 base32 chars (80 bits), SHA-256 stored**, shown once; regenerating voids old ones | High-entropy, so a fast hash is safe; Argon2 ×10 per attempt would be a DoS lever |
-| `MFA_ENCRYPTION_KEYS` | **`kid:base64(32-byte key)` list, first = active; AES-256-GCM, ciphertext prefixed with kid** | SECURITY §1/§8 "envelope-ready, key-id prefix for rotation"; needs a new dependency (D-2) |
+| `ENCRYPTION_KEYS` | **`kid:base64(32-byte key)` list, first = active; AES-256-GCM, ciphertext prefixed with kid, `user_id` bound as associated data** | SECURITY §1/§8 "envelope-ready, key-id prefix for rotation"; needs a new dependency (D-2) |
 | Workspace `mfa_required` | true | A user without MFA entering such a workspace gets a session limited to MFA enrolment (`403 mfa_enrollment_required`) |
 
 ### Other
@@ -167,7 +174,7 @@ All values in `core/config.py` (pydantic-settings), overridable by environment, 
 
 ### 6.2 Attacks, expected result, and what happens if RLS is removed
 
-"No RLS" = `ALTER TABLE … DISABLE ROW LEVEL SECURITY` (or `NO FORCE`) on the targeted table.
+"No RLS" = `ALTER TABLE … DISABLE ROW LEVEL SECURITY` on the targeted table. (`NO FORCE` alone only exempts the table *owner*; `rebate_app` would still be filtered. A missing FORCE is caught by D11 and D12.)
 
 **DB-level, connected as `rebate_app` (`tests/isolation/test_db_rls.py`)**
 
@@ -183,15 +190,17 @@ All values in `core/config.py` (pydantic-settings), overridable by environment, 
 | D8 | `app.tenant_id` set to a random UUID | 0 rows | All rows; fails |
 | D9 | As `rebate_app`: `ALTER TABLE memberships DISABLE ROW LEVEL SECURITY`, `… NO FORCE …`, `DROP POLICY`, `SET ROLE rebate_owner`, `UPDATE/DELETE audit_log` | `permission denied` / `must be owner` for each | Unaffected by RLS: this test guards the *grants* and ownership that make RLS unbypassable |
 | D10 | `SELECT * FROM fn_user_memberships(<M>)` with `app.tenant_id = A` | Exactly M's memberships in A and B (the one sanctioned cross-tenant read), only the columns `tenant_id, tenant name, role, status` | Unaffected by RLS (SECURITY DEFINER). Also asserts the function returns nothing for other users' rows and exposes no other columns |
-| D11 | Meta-test: every table with `tenant_id` has RLS enabled **and** forced, a policy using the helper's expression, and `UNIQUE (tenant_id, id)` | Pass | Fails and names the table |
+| D12 | Connected as `rebate_owner` with no `app.tenant_id`: `SELECT` on each tenant table | 0 rows (FORCE applies to the owner) | With `NO FORCE`: all rows; fails. Also shows why `fn_user_memberships` needs the BYPASSRLS `rebate_lookup` owner (R-8) |
+| D13 | `rebate_readonly` and `rebate_ai_writer` call `fn_user_memberships` / `fn_invitation_by_token`; `rebate_readonly` selects from `users`, `sessions`, `user_tokens`, `mfa_recovery_codes`, `pending_registrations` | `permission denied` for each | Unaffected by RLS: guards grants |
+| D11 | Meta-test: every table with `tenant_id` (plus `tenants` by name) has RLS enabled **and** forced, a policy using the helper's expression, and `UNIQUE (tenant_id, id)` (tables without an `id` column are exempt: `tenant_settings`, `idempotency_keys`) | Pass | Fails and names the table |
 
 **Pooled-connection context leakage (`tests/isolation/test_pool_context.py`; engine with `pool_size=1, max_overflow=0`, so every transaction reuses the same physical connection)**
 
 | # | Attack | Expected | If RLS were removed / if `SET` were used instead of `SET LOCAL` |
 |---|---|---|---|
 | P1 | Transaction in tenant A commits; the next transaction on the same connection sets no tenant and selects `memberships` | `current_setting('app.tenant_id', true)` is `''`/NULL; 0 rows | No RLS: A's and B's rows visible; fails. Session-level `SET`: setting still `A`, A's rows visible; fails |
-| P2 | Transaction in A **raises** midway (rollback); next transaction for B | Setting is B; only B's rows | Same as above |
-| P3 | Interleaved A, B, A, B over 200 iterations on one connection, each asserting it sees only its own rows | Pass | Fails on the first iteration with RLS off; on the second with session-level `SET` |
+| P2 | Transaction in A **raises** midway (rollback); next transaction for B | Setting is B; only B's rows | No RLS: A's rows visible; fails. (Session-level `SET` is undone by the rollback, so P2 does not detect it.) |
+| P3 | 200 transactions on one connection cycling A, none, B, none; each asserts it sees only its own rows (none = zero rows) | Pass | No RLS: fails on the first iteration. Session-level `SET`: fails on the first "none" transaction |
 | P4 | Through the API: request as A's admin, then as B's admin, then unauthenticated `/health/ready`, with a pool of size 1 | Each response has only its own tenant's data | Covered by P1–P3 plus route tests |
 | P5 | Mutation check of the context code itself: monkeypatch `transaction()` to use `SET app.tenant_id` (session scope) and rerun P1 | P1 **fails** (proves P1 can detect the bug) | — |
 
@@ -227,7 +236,21 @@ The completion report will contain the real output of this job: the pass/fail ta
 
 ## 7. Auth design points, risks and decisions needed
 
-### Decisions needed from the owner
+### Decisions (all approved by the owner 2026-11-09, as recommended)
+Owner conditions and how they are met:
+
+| ID | Condition | Where it is met |
+|---|---|---|
+| D-1 | Only in a throwaway database with its own role, never the real schema | CLAUDE.md §11 exception; the CI job creates role `rebate_negctl_owner` + database `rebate_negctl`, drops both after |
+| D-2 | Key from environment plus a rotation note | `ENCRYPTION_KEYS` env; rotation steps in `DEPLOYMENT.md` §2.4 |
+| D-3 | Check the licence of the bundled list | Done: Xato 10M set, released to the public domain by its author (M. Burnett, Feb 2015 post: "I am releasing to the public domain"); top 1M as redistributed by SecLists (MIT, © 2018 D. Miessler). Kept only entries of ≥ 12 chars. `NOTICE` file next to the data. Rejected: NCSC 100k (no licence found), zxcvbn list (MIT, but only 298 entries ≥ 12 chars) |
+| D-5 | Password re-entry + MFA; add to API_SPECIFICATION | `POST /auth/email/change` body requires `password` and `mfa_code`; added to API spec §2.1 |
+| D-6 | Runbook for a locked-out sole admin | `infra/runbooks/locked-out-admin.md` (dry run recorded in the completion report) |
+| D-7 | Never log raw emails for unknown users | SECURITY §1; keyed hash only; log-capture test |
+| D-8 | Never log the otpauth URI/QR | SECURITY §1; returned only by `POST /auth/mfa/setup` with `no-store`; log-capture test |
+
+Original proposals:
+
 | ID | Question | My recommendation |
 |---|---|---|
 | **D-1** | Allow the negative-control job (§6.4) to run DDL (`DISABLE ROW LEVEL SECURITY`) outside migrations in a throwaway test database? CLAUDE.md §11 only allows test DDL in a rolled-back scratch schema. | **Yes**; I'll add it to CLAUDE.md §11 as a second named exception |
@@ -251,6 +274,7 @@ The completion report will contain the real output of this job: the pass/fail ta
 |---|---|---|
 | R-2 | Tenant context leak through pooled connections or a forgotten `SET LOCAL` | `transaction()` is the only way to open a DB session (lint test: no other `Session(` use); P1–P5 |
 | R-3 | Account enumeration through 423 lockouts, timing or email sends | Unknown emails locked the same way; one Argon2 verify per login; emails after the response; timing test asserts median difference < 20% across 50 calls each (statistical, can be flaky in CI: tolerance documented, not loosened silently) |
+| R-8 | **Found while writing the D-6 runbook:** with FORCE RLS, a `SECURITY DEFINER` function owned by `rebate_owner` sees no rows, so the documented `fn_user_memberships` could not work | Correction recorded in `DATABASE_SCHEMA.md` §2: owner role `rebate_lookup` (NOLOGIN, BYPASSRLS, SELECT on `memberships`/`tenants` only), created by `init-db.sh`; startup self-check refuses a runtime role that is a member of it. Managed Postgres may restrict creating BYPASSRLS roles: to be checked under OD-3 |
 | R-4 | `fn_user_memberships(user_id)` is callable by `rebate_app` with any user id; SQL injection there would list another user's workspaces | All SQL bound; function returns only ids, names and roles; D10 pins its columns |
 | R-5 | `Secure` cookies on `http://localhost` depend on browser behaviour | Manual checks in Chrome and Firefox; Playwright Chromium in CI; Safari not tested |
 | R-6 | Stage size: S1 is L and the frontend adds 4 libraries plus ~12 screens | Backend first, each step green before the next; if it grows beyond L, I stop and propose a split (S1a backend, S1b frontend) |
@@ -262,7 +286,7 @@ The completion report will contain the real output of this job: the pass/fail ta
 - **Auth (`tests/security/`, `tests/api/`):** register/verify/login/logout; wrong password ×5 → 423 and unlock after the window (controlled `core/clock`); progressive doubling; unknown email locks the same way; identical status/body for existing vs unknown emails on register, login, forgot, invite; timing test (R-3); session fixation (pre-login cookie is never accepted after login); idle expiry at 30 min and absolute expiry at 12 h (clock-driven); revocation on logout, password change/reset (all sessions), deactivation; rotation on login/MFA/role change/switch; token single use, expiry and voiding; CSRF missing/wrong/other session's token → 403; bad `Origin` → 403; MFA: wrong code, replayed step, recovery code single use, enrolment-only session, pre-MFA session limited to MFA routes; step-up required for password/MFA/admin promotion; rehash on parameter change; breached password rejected; secrets/tokens never in logs (log-capture test).
 - **AuthZ:** role × route matrix generated from the permission registry (each role → 200/403; unauthenticated → 401); meta-test that every route declares a permission or is public; last-admin protection (demote, deactivate); non-admin role change → 403 + rate-limited audit entry; mass assignment (`status`, `role` on self, `tenant_id`) → 422; four-eyes helper unit tests.
 - **Isolation:** §6 in full, plus the negative-control job.
-- **Audit:** an entry for every catalogued action, written in the same transaction (handler raises after the write → no audit row and no change); `UPDATE/DELETE` rejected by trigger and by grant; search filters; viewer can read, analyst can read, unauthenticated cannot.
+- **Audit:** an entry for every catalogued action, written in the same transaction (handler raises after the write → no audit row and no change); failure-path rows (failed login, lockout, denial) **are** committed (review finding 3); `UPDATE/DELETE` rejected by trigger and by grant; search filters; admin, approver and viewer can read, **analyst cannot** (API spec §2.9, SECURITY §7), unauthenticated cannot; secret columns never appear in before/after.
 - **Email:** each flow delivers to Mailpit (read via its API) with a working link; startup refuses `smtp_inprocess` when `APP_ENV=staging`.
 - **DB:** migrations from empty; schema lint; grants (append-only tables have no UPDATE/DELETE for `rebate_app`).
 - **Frontend:** Vitest for forms (validation messages, generic errors) and the session-expiry handler; Playwright W1 (register → verify via Mailpit → MFA setup → recovery codes) and W2 (invite analyst + viewer → accept → role-limited nav and 403 on a forbidden action); axe checks on the auth and admin pages.
@@ -287,3 +311,40 @@ I will record what I clicked and observed for each step in the completion report
 
 ## 9. Expected outcome (demonstrable at completion)
 Two synthetic workspaces running locally, fully separated, with the isolation suite and its negative control in CI showing which tests fail when RLS is removed; a complete register → verify → MFA → invite → role-limited flow in the browser with email through Mailpit; every auth and admin action visible in the audit log; and docs updated for the spec additions and decisions above.
+
+## 10. Independent review (reviewer subagent, 2026-11-09)
+
+The reviewer (`.claude/agents/reviewer.md`, read-only, security focus) reviewed this report and the docs changed for D-1..D-8. It ran as a general-purpose agent loaded with that definition, because a new agent type registers only on the next session. Verdict: **2 blocker, 12 serious, 12 minor, 4 nit.** All are accepted except that for finding 29 I took the narrower option. The design changes below supersede earlier text of this report where they conflict. "Fixed" means the plan is changed; only 7, 9, 10, 27 and 28 already exist in code (first migration and lint). The rest are implemented during S1 and checked again in the completion review.
+
+| # | Sev | Finding | Response |
+|---|---|---|---|
+| 1 | blocker | Pre-account takeover: an attacker registers the victim's email; the victim's later verify link verifies the attacker's account. `403 email_not_verified` also leaks existence | **Fixed in design.** Registration writes only a `pending_registrations` row (password hash, names, token hash). Users/tenant/membership rows are created **only when the link is used**; several pending rows per email may exist, and the first verified one wins. An unverified account does not exist, so login answers exactly as for a wrong password. `email_not_verified` dropped from the API spec. Registering an existing email still hashes, stores a pending row and sends one email (a notice to the owner), so both branches do the same work |
+| 2 | blocker | Invite token in the URL path, logged by the request log and Caddy | **Fixed.** `POST /invitations/accept` with `{"token"}` in the body (spec updated). Email links carry tokens in the URL **fragment** (`/accept-invite#token=…`), which browsers never send to the server. The request log records the **route template**, not the raw path. The log-capture test covers every token-bearing route |
+| 3 | serious | Failure-path writes (counters, lockout, audit) roll back when the error is raised | **Fixed.** `DomainError` subclasses for auth failures and permission denials carry `commit = True`; the request transaction commits the failure bookkeeping, then the error envelope is returned. Test: 5 wrong passwords → 423, and the audit rows exist |
+| 4 | serious | Counter reset on a correct password allows unlimited TOTP guessing | **Fixed.** The counter resets only after full authentication (MFA passed, or not required). Test: repeated correct-password / wrong-TOTP cycles end in 423 |
+| 5 | serious | `NO FORCE` does not affect `rebate_app` | **Fixed** (§6.2 header; D12 added) |
+| 6 | serious | Negative control could pass for the wrong reason (permission errors) | **Fixed.** The throwaway DB is migrated by `rebate_owner` as usual (identical grants). Only the RLS-disabling DDL runs as a dedicated role `rebate_negctl_ddl`, created for the run with CONNECT on `rebate_negctl` only, dropped afterwards. The driver requires each expected failure to be an `AssertionError` from an isolation assertion (marker `ISOLATION-BREACH`). Any other error fails the job |
+| 7 | serious | `rebate_lookup` mechanics unspecified | **Fixed and implemented** in the first migration. `init-db.sh` creates `rebate_lookup NOLOGIN BYPASSRLS`, granted to `rebate_owner WITH INHERIT FALSE, SET TRUE`. The owner creates the functions, runs `REVOKE ALL … FROM PUBLIC`, grants `EXECUTE` to `rebate_app` (and to the owner, for the runbook), then `ALTER OWNER TO rebate_lookup`. CREATE on `public` is granted only around the ownership change and revoked right after. D13 tests that readonly and ai_writer cannot execute. The startup check refuses a runtime role that is a member of `rebate_lookup` |
+| 8 | serious | Invitation accept is pre-tenant; RLS hides the row | **Fixed.** `fn_invitation_by_token(token_hash)` returns only `tenant_id, invitation_id` (same owner and grant rules); covered by D-tests |
+| 9 | serious | `rebate_readonly` default SELECT reaches global credential tables | **Fixed.** The migration revokes all on `users, sessions, user_tokens, mfa_recovery_codes, rate_limit_counters, pending_registrations` from `rebate_readonly`; D13 |
+| 10 | serious | Meta-test vs tables without `id`; `tenants` not covered | **Fixed.** The lint exempts tables with no `id` column from the composite-unique rule and checks `tenants` RLS by name; lint test extended with both cases (passing) |
+| 11 | serious | Uniform timing only designed for login | **Fixed in design.** Register: Argon2 + one pending row + one async email on both branches. Forgot: both branches write one row (token or decoy counter) and enqueue at most one async email. Accept-invite: always one Argon2. The timing test runs on login, register, forgot and accept, with known users holding several memberships. The extra per-membership audit inserts (D-7) are about 1 ms against ~100 ms of Argon2; the test measures this instead of assuming it |
+| 12 | serious | Audit read roles: docs conflict (SECURITY §3 "all `*.read`" vs SECURITY §7 and API §2.9 "A P V") | **Resolved to the narrower rule: admin, approver, viewer; analyst cannot read the audit log.** Two specific statements outweigh one general one, and the narrower rule weakens nothing. Note added to SECURITY §3 |
+| 13 | serious | `PATCH /users/{id}` could disable a global user | **Fixed in design.** `{id}` is the user id; the PATCH acts only on the membership in the active tenant (`role`, `status`). `users.status` is never changed through the API. Test: A's admin deactivating M leaves M's B membership and B sessions intact |
+| 14 | serious | Runbook SQL errors | **Fixed in design.** The runbook will drive a reviewed psql script with `ON_ERROR_STOP`, a single transaction, all variables required, row-count assertions and `RETURNING`; the completion report will record a dry run |
+| 15 | minor | P2/P3 cannot detect session-level `SET` as claimed | **Fixed** (§6.2: P3 now interleaves no-tenant transactions; P2 claim corrected) |
+| 16 | minor | `fn_user_memberships(any id)` | **Accepted risk**, stated: the only caller passes the authenticated session's user id, and the function returns ids, names and roles only. D10 also asserts another user's id returns only that user's rows |
+| 17 | minor | Permanent lockout DoS | **Fixed.** `lockout_level` decays (reset when the last lockout ended more than 24 h ago); a successful password reset clears lockout and level |
+| 18 | minor | Empty `TRUSTED_PROXY_IPS` behind Caddy makes per-IP limits global | **Fixed.** Required (non-empty) when `APP_ENV` is `staging` or `production`; the client IP is the rightmost `X-Forwarded-For` entry not in the trusted list; spoofed-XFF test |
+| 19 | minor | Email normalisation undefined | **Fixed.** Emails are trimmed and must be ASCII (DB CHECK and API validation); case is handled by `citext` and by lower-casing before the HMAC key. Internationalised addresses are out of scope for Release 1 |
+| 20 | minor | Deactivation scope vs US-03; email-change revocation missing | Membership deactivation revokes every session whose active tenant is that workspace, and every request re-checks membership. US-03 is read per workspace, because one workspace's admin must not end the user's sessions in other workspaces. Email-change confirmation revokes all other sessions (added to tests) |
+| 21 | minor | TOTP replay with ±1 window; recovery-code race | **Fixed.** Reject any step ≤ `mfa_last_used_step`; recovery codes are consumed with `UPDATE … WHERE used_at IS NULL RETURNING` |
+| 22 | minor | smtplib exceptions contain addresses | **Fixed.** Log only the exception class name; test with a refused recipient |
+| 23 | minor | Lint should also catch `engine.connect()` / `begin()` | **Fixed.** The lint test lists the allowed call sites (`core/db.py` role check, health readiness) |
+| 24 | minor | `MFA_ENCRYPTION_KEYS` vs `ENCRYPTION_KEYS`; no AAD | **Fixed** (§4): `ENCRYPTION_KEYS`; `user_id` bound as AES-GCM associated data |
+| 25 | minor | Unstated behaviours | Reset: does **not** log in; clears lockout; revokes all sessions; keeps MFA. Email change by a user without MFA: refused with `403 mfa_enrollment_required` (owner condition: password **and** MFA). Switching into a workspace with `mfa_required` while not enrolled gives an enrolment-limited session. The workspace slug is generated (name + random suffix), never user-chosen, so there is no uniqueness leak |
+| 26 | minor | No redaction rule for audit before/after | **Fixed.** Per-entity allow-lists of audited fields; a test asserts that secret columns (`password_hash`, `mfa_secret_enc`, `*token_hash`, `code_hash`) never appear |
+| 27 | nit | `pg_temp` not last in `search_path` | **Fixed** (`pg_catalog, public, pg_temp`) |
+| 28 | nit | Commit and data file unverified | The reviewer has no git access; `159c50f` exists (`git log`). The data file now exists: 46,146 entries after normalisation and de-duplication, with `NOTICE` |
+| 29 | nit | Idempotency helper beyond S1.1 | **Agreed; scope reduced.** S1 ships the table, RLS and isolation coverage only; the helper arrives with its first user (S3). R10 becomes a DB-level D-test |
+| 30 | nit | `/docs` and `/openapi.json` must be on the public list | **Fixed**: the public list includes them outside production |

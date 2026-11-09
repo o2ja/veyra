@@ -1,0 +1,16 @@
+common-passwords-12plus.txt.gz
+================================
+
+Used only to reject common passwords at registration, reset and change (docs/SECURITY.md §1, S1 decision D-3).
+It contains passwords only (no usernames, emails or other identifiers).
+
+Source: "xato-net-10-million-passwords-1000000.txt" from SecLists
+  https://github.com/danielmiessler/SecLists/tree/master/Passwords/Common-Credentials
+  SecLists licence: MIT, Copyright (c) 2018 Daniel Miessler.
+
+Underlying data: Mark Burnett's "ten million passwords" set (xato.net, February 2015), which its author
+stated he was "releasing to the public domain".
+
+Processing (2026-11-09): Unicode NFKC, case-folded, kept entries of 12 to 256 characters (shorter ones
+are already rejected by the 12-character minimum), dropped lines with undecodable bytes, de-duplicated,
+sorted, gzip. 46,146 entries.

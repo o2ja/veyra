@@ -25,6 +25,12 @@ ALTER ROLE rebate_app       LOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE NOREPLICAT
 ALTER ROLE rebate_ai_writer LOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE NOREPLICATION NOBYPASSRLS PASSWORD :'ai_pw';
 ALTER ROLE rebate_readonly  LOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE NOREPLICATION NOBYPASSRLS PASSWORD :'ro_pw';
 
+-- Owner of the SECURITY DEFINER cross-tenant lookups only (DATABASE_SCHEMA.md §2). Cannot log in.
+-- rebate_owner may SET ROLE to it (needed to hand over function ownership) but does not inherit it.
+SELECT 'CREATE ROLE rebate_lookup' WHERE NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'rebate_lookup') \gexec
+ALTER ROLE rebate_lookup NOLOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE NOREPLICATION BYPASSRLS;
+GRANT rebate_lookup TO rebate_owner WITH INHERIT FALSE, SET TRUE;
+
 SELECT format('CREATE DATABASE %I OWNER rebate_owner', :'db')
 WHERE NOT EXISTS (SELECT 1 FROM pg_database WHERE datname = :'db') \gexec
 

@@ -27,11 +27,23 @@ _TENANT_TABLES = """
     )
 """
 
+# Tables keyed by tenant: those with a tenant_id column, plus `tenants` itself (keyed by id).
+_RLS_TABLES = """
+    WITH rls_tables AS (
+        SELECT c.relname, c.relrowsecurity, c.relforcerowsecurity
+        FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace
+        WHERE n.nspname = :schema AND c.relkind IN ('r', 'p')
+          AND (c.relname = 'tenants' OR EXISTS (
+              SELECT 1 FROM pg_attribute a
+              WHERE a.attrelid = c.oid AND a.attname = 'tenant_id' AND NOT a.attisdropped))
+    )
+"""
+
 _RLS = text(
-    _TENANT_TABLES
+    _RLS_TABLES
     + """
     SELECT format('%s: row level security not enabled and forced', relname)
-    FROM tenant_tables WHERE NOT (relrowsecurity AND relforcerowsecurity)
+    FROM rls_tables WHERE NOT (relrowsecurity AND relforcerowsecurity)
     """
 )
 
@@ -40,7 +52,11 @@ _COMPOSITE_UNIQUE = text(
     + """
     SELECT format('%s: missing UNIQUE (tenant_id, id)', tt.relname)
     FROM tenant_tables tt
-    WHERE NOT EXISTS (
+    -- Tables without an `id` column (1:1 tenant_settings, idempotency_keys keyed by tenant+key) cannot
+    -- be the target of a composite FK on (tenant_id, id), so the rule does not apply to them.
+    WHERE EXISTS (SELECT 1 FROM pg_attribute a
+                  WHERE a.attrelid = tt.oid AND a.attname = 'id' AND NOT a.attisdropped)
+      AND NOT EXISTS (
         SELECT 1 FROM pg_index i
         WHERE i.indrelid = tt.oid AND i.indisunique AND i.indpred IS NULL
           AND (SELECT array_agg(att.attname::text ORDER BY att.attname)

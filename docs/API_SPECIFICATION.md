@@ -39,14 +39,14 @@ All errors:
 | HTTP | `code` examples |
 |---|---|
 | 400 | `bad_request`, `unsupported_media_type` |
-| 401 | `unauthenticated`, `session_expired`, `mfa_required` |
-| 403 | `forbidden`, `csrf_failed`, `four_eyes_violation` |
+| 401 | `unauthenticated`, `session_expired`, `mfa_required`, `reauthentication_required` |
+| 403 | `forbidden`, `csrf_failed`, `four_eyes_violation`, `mfa_enrollment_required` |
 | 404 | `not_found` (also returned for other tenants' resources) |
 | 405 | `method_not_allowed` |
 | 409 | `conflict`, `already_claimed`, `idempotency_conflict`, `version_overlap`, `run_in_progress`, `invalid_state` |
 | 410 | `invitation_expired` |
 | 413 | `payload_too_large` |
-| 422 | `validation_error` |
+| 422 | `validation_error`, `password_too_common` |
 | 423 | `account_locked` |
 | 429 | `rate_limited` |
 | 500 | `internal_error` (generic message; details only in logs) |
@@ -80,7 +80,7 @@ Legend: **R** = roles allowed (A admin, P approver, N analyst, V viewer). Writes
 
 | Method & path | Purpose | Auth | Notes |
 |---|---|---|---|
-| `POST /auth/register` | Create workspace + admin | Public | Rate-limited; generic responses; email verification |
+| `POST /auth/register` | Create workspace + admin | Public | Rate-limited; generic responses. Stores a **pending registration** only; user, workspace and membership are created when the emailed link is used (`POST /auth/verify-email`). An unverified account does not exist, so login treats it as wrong credentials |
 | `POST /auth/verify-email` | Confirm email token | Public | |
 | `POST /auth/login` | Email + password | Public | Returns `mfa_required` or session; lockout after repeated failures |
 | `POST /auth/mfa/verify` | TOTP or recovery code | Partial session | |
@@ -91,8 +91,14 @@ Legend: **R** = roles allowed (A admin, P approver, N analyst, V viewer). Writes
 | `GET /auth/tenants`, `POST /auth/switch-tenant` | My workspaces | Session | |
 | `GET /users`, `PATCH /users/{id}` (role, status) | Manage members | A | Cannot demote last admin |
 | `POST /invitations`, `GET /invitations`, `DELETE /invitations/{id}` | Invite | A | |
-| `POST /invitations/{token}/accept` | Accept, set password | Public | |
+| `POST /invitations/accept` | Body `{"token", …}`: accept, set password (new user) | Public | Token in the body, never the URL path (S1 review). Email links carry tokens in the URL fragment (`#token=`), which is never sent to the server |
 | `GET/PATCH /settings` | Workspace settings | GET all roles, PATCH A | |
+| `GET /auth/csrf` | Issue a pre-session CSRF token (cookie `__Host-csrf`) for public POSTs | Public | Added S1 |
+| `POST /auth/reauthenticate` | Step-up: password (+ TOTP if MFA enabled) → marks the session re-authenticated for 5 min | Session | Added S1 |
+| `POST /auth/password/change` | Current password + new password | Session + step-up | Revokes all other sessions. Added S1 |
+| `POST /auth/mfa/recovery-codes` | Regenerate recovery codes (old ones void); returns them once | Session + step-up | Added S1 |
+| `POST /auth/email/change` | Body: `new_email`, `password`, `mfa_code` (**both required in the request**, S1 D-5) | Session | Sends a confirm link to the new address and a notice to the old one; same response whether or not the new address is taken. Added S1 |
+| `POST /auth/email/confirm` | Confirm token from the link | Public | Single-use, 24 h; revokes all other sessions. Added S1 |
 
 ### 2.2 Files
 

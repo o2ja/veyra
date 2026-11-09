@@ -27,6 +27,7 @@
 | `rebate_app` | API and worker | `SELECT/INSERT/UPDATE/DELETE` on mutable tables, `INSERT/SELECT` only on append-only tables; **no** `BYPASSRLS`, not owner |
 | `rebate_ai_writer` | AI gateway sessions | `INSERT/SELECT/UPDATE(status…)` on `document_extractions`, `ai_invocations`, `agreement_drafts`, `agreement_draft_revisions`, `remittance_extraction_staging`; `SELECT` on `file_objects`; nothing else |
 | `rebate_readonly` | Support/debug (tenant-scoped via RLS) | `SELECT` |
+| `rebate_lookup` | Owner of `fn_user_memberships` only (NOLOGIN, BYPASSRLS) | `SELECT` on `memberships`, `tenants` |
 
 RLS pattern applied to **every** tenant table by the helper `enable_tenant_rls('table')` in `migrations/_rls.py`:
 
@@ -40,8 +41,9 @@ CREATE POLICY tenant_isolation ON t
 
 - `app.tenant_id` is set with `SET LOCAL` semantics (`set_config(..., true)`) at the start of each transaction (`core/db.py`). If unset, `current_setting(..., true)` is NULL, or `''` once the session has used the setting before; `NULLIF` turns both into NULL, so no rows match (fail closed, no error).
 - `tenants` policy: the same expression on `id` (`enable_tenant_rls('tenants', column='id')`).
-- Global tables (no RLS): `users`, `sessions`, `user_tokens`, `mfa_recovery_codes`, `reason_codes` (reference list), Procrastinate tables.
-- Pre-tenant lookups (login → list my workspaces) use `SECURITY DEFINER` functions owned by `rebate_owner` (`fn_user_memberships(user_id)`), which return only that user's rows.
+- Global tables (no RLS): `users`, `sessions`, `user_tokens`, `mfa_recovery_codes`, `pending_registrations`, `rate_limit_counters`, `reason_codes` (reference list), Procrastinate tables. `rebate_readonly` has **no** privileges on the credential tables (`users`, `sessions`, `user_tokens`, `mfa_recovery_codes`, `pending_registrations`, `rate_limit_counters`).
+- Tables without an `id` column (`tenant_settings`, `idempotency_keys`) are exempt from `UNIQUE (tenant_id, id)`; they cannot be composite-FK targets.
+- Pre-tenant lookups (login → list my workspaces) use `SECURITY DEFINER` functions (`fn_user_memberships(user_id)`), which return only that user's rows. *Correction (S1):* because RLS is **forced**, a function owned by `rebate_owner` would see no rows. The function is therefore owned by **`rebate_lookup`**, a `NOLOGIN BYPASSRLS` role created by `init-db.sh` that owns nothing else and holds only `SELECT` on `memberships` and `tenants`. The function sets `search_path = pg_catalog, public` and returns only `tenant_id, tenant_name, role, status`. `rebate_app` gets `EXECUTE` only and must not be a member of `rebate_lookup` (startup self-check).
 - A CI test asserts every table with a `tenant_id` column has RLS enabled and forced, and has `UNIQUE (tenant_id, id)`.
 
 ## 3. Entity catalogue
@@ -50,13 +52,17 @@ Legend: PK primary key · FK composite `(tenant_id, x)` unless noted · `NN` not
 
 ### 3.1 Identity and tenancy
 
-**users** (global): `id`, `email citext NN UNIQUE`, `password_hash text NN`, `full_name`, `email_verified_at`, `mfa_enabled bool NN default false`, `mfa_secret_enc bytea` (application-level encrypted), `status` (`active`,`disabled`), `failed_login_count int`, `locked_until timestamptz`, `last_login_at`, `created_at`.
+**users** (global): `id`, `email citext NN UNIQUE`, `password_hash text NN`, `full_name`, `email_verified_at`, `mfa_enabled bool NN default false`, `mfa_secret_enc bytea` (application-level encrypted), `status` (`active`,`disabled`), `failed_login_count int`, `locked_until timestamptz`, `last_login_at`, `created_at`. Added S1: `password_changed_at`, `mfa_last_used_step bigint` (TOTP replay guard), `lockout_level int NN default 0` (progressive lockout).
 
 **mfa_recovery_codes** (global): `id`, `user_id FK users`, `code_hash text NN`, `used_at`.
 
-**user_tokens** (global): `id`, `user_id`, `purpose` (`email_verify`,`password_reset`), `token_hash text NN UNIQUE`, `expires_at NN`, `used_at`, `created_at`.
+**user_tokens** (global): `id`, `user_id`, `purpose` (`email_verify`,`password_reset`,`email_change`), `token_hash text NN UNIQUE`, `new_email citext` (only for `email_change`), `expires_at NN`, `used_at`, `created_at`.
 
-**sessions** (global): `id text` (SHA-256 of opaque token) PK, `user_id`, `active_tenant_id`, `created_at`, `last_seen_at`, `idle_expires_at`, `absolute_expires_at`, `mfa_verified bool`, `ip inet`, `user_agent`, `revoked_at`. Index `(user_id)`.
+**pending_registrations** (global, added S1 review): `id`, `email citext NN` (not unique), `password_hash NN`, `full_name NN`, `workspace_name NN`, `token_hash NN UNIQUE`, `expires_at NN`, `used_at`, `created_at`. Users, tenants and memberships are created only when a pending registration's token is used, so an attacker cannot pre-register another person's address.
+
+**rate_limit_counters** (global, added S1 D-4): `key text PK` (scope + keyed hash; never a raw email), `window_start timestamptz NN`, `count int NN`, `expires_at NN`. Rows past `expires_at` are pruned on write. Used for rate limits and for lockout of unknown emails.
+
+**sessions** (global): `id text` (SHA-256 of opaque token) PK, `user_id`, `active_tenant_id`, `created_at`, `last_seen_at`, `idle_expires_at`, `absolute_expires_at`, `mfa_verified bool`, `ip inet`, `user_agent`, `revoked_at`. Index `(user_id)`. Added S1: `reauthenticated_at` (step-up), `mfa_failed_count int NN default 0`.
 
 **tenants**: `id`, `name NN`, `slug UNIQUE`, `status` (`active`,`suspended`,`closed`), `created_at`.
 
@@ -68,6 +74,8 @@ Legend: PK primary key · FK composite `(tenant_id, x)` unless noted · `NN` not
 **invitations**: `id`, `email citext NN`, `role NN`, `token_hash NN UNIQUE`, `invited_by`, `expires_at NN`, `accepted_at`, `revoked_at`.
 
 ### 3.2 Audit, files, idempotency
+
+Auth events of a known user that have no single tenant (failed login, lockout, password reset, MFA changes) are written **once per tenant where the user has an active membership** (S1 D-7). Failures for unknown emails produce no audit row; only a structured log line with a keyed hash of the email.
 
 **audit_log** (append-only): `id bigint identity PK`, `tenant_id`, `occurred_at NN`, `actor_type` (`user`,`system`,`ai`), `actor_user_id`, `action NN` (e.g. `agreement.activated`), `entity_type NN`, `entity_id uuid`, `before jsonb`, `after jsonb`, `request_id`, `ip inet`, `user_agent`, `metadata jsonb`. Indexes `(tenant_id, entity_type, entity_id)`, `(tenant_id, occurred_at)`, `(tenant_id, actor_user_id, occurred_at)`.
 

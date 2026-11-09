@@ -17,7 +17,7 @@ from sqlalchemy import Engine, create_engine, make_url, text
 
 BACKEND = Path(__file__).resolve().parents[1]
 TEST_DB = "rebate_test"
-ROLES = ("rebate_owner", "rebate_app", "rebate_ai_writer", "rebate_readonly")
+ROLES = ("rebate_owner", "rebate_app", "rebate_ai_writer", "rebate_readonly", "rebate_lookup")
 
 
 @dataclass(frozen=True)

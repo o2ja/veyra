@@ -7,7 +7,7 @@
 | Item | State |
 |---|---|
 | Phase | **Release 1 build** |
-| Current stage | **S0 Foundation and tooling: implementation complete, awaiting completion report sign-off** (kickoff approved 2026-11-09) |
+| Current stage | **S1 Identity, tenancy, RBAC, audit: in progress** (kickoff and decisions D-1..D-8 approved 2026-11-09; owner signs off S1 personally) |
 | Application code | S0 skeleton: backend core + baseline migration, frontend shell, CI, Compose, Makefile (see §3) |
 | Synthetic test data | Generated and self-checked (`testdata/`) |
 
@@ -48,6 +48,7 @@ Stages S0–S11 per `DEVELOPMENT_ROADMAP.md` / `IMPLEMENTATION_PLAN.md`. Release
 | K-5 | Legal/commercial review (terms, DPA, data retention) not done | Needed before a paid pilot | Owner to engage counsel |
 | K-6 | `minio/minio` images are no longer publicly pullable (Docker Hub: not found; quay.io: 401) | Resolved 2026-11-09: owner approved SeaweedFS for local dev and CI (ADR-017); image added in S2 | Closed |
 | K-7 | Starlette deprecates `httpx` for `TestClient` (warning; suggests `httpx2`) | Test-only warning | Swap the test dependency when convenient |
+| K-9 | **Temporary in-process email sender** (S1.6): SMTP to Mailpit via FastAPI background task after commit; not durable, no retry; refuses to start outside `local`/`ci` | Lost email on crash; no production email | Replace with the `send_email` job in S2.1 (`docs/reports/S1_KICKOFF_REPORT.md` §5) |
 | K-8 | `minimatch` 10.x advisory GHSA-g3hv-75wg-m249 in ESLint tooling (dev only) | None at runtime | npm `overrides` pins minimatch 11.0.5; remove the override once ESLint ships it |
 
 ## 7. Risks being watched
@@ -62,8 +63,9 @@ Top items only; full list in the analysis and `SECURITY.md` §12.
 
 | Stage | Kickoff approved | Completed | Owner sign-off | Notes |
 |---|---|---|---|---|
-| S0 | 2026-11-09 | – | – | In progress |
-| S1–S11 | – | – | – | Not started |
+| S0 | 2026-11-09 | 2026-11-09 | 2026-11-09 | Approved |
+| S1 | 2026-11-09 | – | – | In progress; owner sign-off required |
+| S2–S11 | – | – | – | Not started |
 
 ## 9. Change log
 
@@ -74,3 +76,4 @@ Top items only; full list in the analysis and `SECURITY.md` §12.
 | 2026-11-09 | Owner approved SeaweedFS for local/CI object storage (ADR-017), with S2 test conditions |
 | 2026-11-09 | S0 kickoff approved; doc corrections C-1..C-15 applied (CLAUDE.md, roadmap, schema, API, deployment, tech stack, testing); ADR-027 toolchain versions |
 | 2026-11-09 | S0 local Docker verification; `make up` runs db-init first; `make env` Windows interpreter fix; `infra/runbooks/` pointer |
+| 2026-11-09 | S0 signed off. S1 kickoff approved with D-1..D-8 (negative-control DB, `cryptography`, local breach list, Postgres rate-limit counters, email-change endpoints, no in-app MFA reset + runbook, per-tenant auth audit rows, `segno`). Owner standing delegation recorded in `CLAUDE.md` §18; reviewer subagent `.claude/agents/reviewer.md` |
