@@ -88,7 +88,7 @@ jobs:
       - name: no skipped tests
         run: python3 ../infra/scripts/check-no-skips.py junit-frontend.xml
       - run: npm run build
-      - run: npm audit --audit-level=high
+      - run: npm audit --audit-level=moderate
 
   api-contract:
     runs-on: ubuntu-24.04

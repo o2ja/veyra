@@ -41,7 +41,7 @@ test-isolation: ## tenant-isolation suite (meta-test only until S1 adds tenant t
 
 lint: ## all static gates (backend, frontend, secrets)
 	$(API_RUN) sh -c 'ruff check . && ruff format --check . && mypy && lint-imports --config importlinter.ini && bandit -q -c pyproject.toml -r src migrations && uv export --frozen --no-hashes --no-emit-project -o /tmp/req.txt -q && pip-audit --strict --no-deps --disable-pip -r /tmp/req.txt'
-	$(FE_RUN) sh -c 'npm run lint && npm run typecheck && npm audit --audit-level=high'
+	$(FE_RUN) sh -c 'npm run lint && npm run typecheck && npm audit --audit-level=moderate'
 	gitleaks git --no-banner --redact .
 
 gen-client: ## regenerate frontend/src/api from the backend OpenAPI document
