@@ -15,53 +15,24 @@ A temporary lockout after wrong passwords (`423 account_locked`) is **not** a re
 4. If identity cannot be verified, stop. Do not proceed "to be helpful".
 
 ## 2. Reset MFA (operator, database owner connection)
-Run as `rebate_owner` with `psql` from the operations host (`psql -v user_id=… -v ticket_id=… -v operator_name=…`), inside one transaction. Use the user's id, never a pattern match on email. `users`, `sessions` and `mfa_recovery_codes` are global tables (no RLS); tenant tables need `app.tenant_id` set even for the owner, because RLS is forced.
+Run the reviewed script as `rebate_owner` from the operations host (one transaction, stops on any error, refuses unless exactly one user matches the **id**; never match on email):
 
-> **Not yet executed.** The S1 completion report records a dry run of this runbook against a local database.
-
-```sql
-BEGIN;
--- 1. Find the user (check exactly one row, matches the ticket)
-SELECT id, email, status, mfa_enabled FROM users WHERE email = :'email';
-
--- 2. Clear MFA and void recovery codes
-UPDATE users SET mfa_enabled = false, mfa_secret_enc = NULL, mfa_last_used_step = NULL
- WHERE id = :'user_id';
-DELETE FROM mfa_recovery_codes WHERE user_id = :'user_id';
-
--- 3. Revoke every session of the user
-UPDATE sessions SET revoked_at = now() WHERE user_id = :'user_id' AND revoked_at IS NULL;
-
--- 4. Audit: one row per tenant where the user is an active member.
---    FORCE ROW LEVEL SECURITY applies to rebate_owner too, so the tenant must be set.
---    fn_user_memberships is the sanctioned cross-tenant lookup (owned by the BYPASSRLS lookup role).
-SELECT tenant_id FROM fn_user_memberships(:'user_id'::uuid) WHERE status = 'active';
---    Repeat the next two statements once per tenant_id listed (psql: -v tenant_id=…, or \set tenant_id …):
-SELECT set_config('app.tenant_id', :'tenant_id', true);
-INSERT INTO audit_log (tenant_id, occurred_at, actor_type, action, entity_type, entity_id, metadata)
-VALUES (:'tenant_id'::uuid, now(), 'system', 'auth.mfa_reset_by_operator', 'user', :'user_id'::uuid,
-        jsonb_build_object('ticket', :'ticket_id', 'operator', :'operator_name'));
-COMMIT;
+```sh
+psql -h <db-host> -U rebate_owner -d rebate   -v user_id=<uuid> -v ticket_id=<ticket> -v operator_name='<name>'   -f infra/scripts/ops/mfa-reset.sql
 ```
 
-Every workspace with `mfa_required = true` forces the user to enrol again on next login (`403 mfa_enrollment_required` until done).
+It turns MFA off, clears the secret and recovery codes, revokes every session of the user, and writes one `auth.mfa_reset_by_operator` audit row (actor `system`, ticket and operator in `metadata`) in each workspace where the user is an active member. Every workspace with `mfa_required = true` then forces enrolment at the next sign-in.
 
 ## 3. Sole admin disabled or gone
-If the only admin's membership is disabled, or the person has left and the company names a successor who is already a member:
+If the company names a successor who is **already a member**, promote them (also reactivates a disabled membership):
 
-```sql
-BEGIN;
-SELECT set_config('app.tenant_id', :'tenant_id', true);
-UPDATE memberships SET role = 'admin', status = 'active'
- WHERE tenant_id = :'tenant_id' AND user_id = :'successor_user_id';
-INSERT INTO audit_log (tenant_id, occurred_at, actor_type, action, entity_type, entity_id, before, after, metadata)
-VALUES (:'tenant_id', now(), 'system', 'membership.role_changed_by_operator', 'membership', :'membership_id',
-        jsonb_build_object('role', :'old_role'), jsonb_build_object('role', 'admin'),
-        jsonb_build_object('ticket', :'ticket_id', 'operator', :'operator_name'));
-COMMIT;
+```sh
+psql -h <db-host> -U rebate_owner -d rebate   -v tenant_id=<uuid> -v user_id=<uuid> -v ticket_id=<ticket> -v operator_name='<name>'   -f infra/scripts/ops/promote-admin.sql
 ```
 
-If the successor is not yet a member, do not create accounts by SQL. Promote an existing member, or ask the customer to have the remaining admin-capable path (this runbook, section 2) restore the original admin first.
+It refuses if the user is not a member of that workspace, and writes `membership.role_changed_by_operator` with the old and new role/status. Never create accounts by SQL: if nobody suitable is a member, restore the original admin with §2 first.
+
+**Dry run (2026-11-10, local database, SYNTHETIC data):** missing variable → stopped before any change; unknown user / non-member → "nothing changed", rolled back; real runs → MFA off, 0 recovery codes, 0 live sessions, audit rows present; the user was forced to enrol again at the next sign-in in Chrome. The first run exposed a missing `EXECUTE` grant for `rebate_owner` on `fn_user_memberships`; the script stopped and rolled back everything; fixed by migration `20261110_0900_owner_lookup_exec`.
 
 ## 4. After
 - Tell the user by email (to the address on file) that MFA was reset and they must enrol again.

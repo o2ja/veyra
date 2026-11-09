@@ -8,7 +8,7 @@ import { RouterProvider, createBrowserRouter } from "react-router-dom";
 import { routes } from "./app/routes";
 import { StepUpProvider } from "./components/step-up";
 import { ApiError, SESSION_CODES } from "./lib/api/errors";
-import { ME_KEY, SessionProvider } from "./lib/session";
+import { ME_KEY, SessionProvider, markSessionExpired } from "./lib/session";
 
 const root = document.getElementById("root");
 if (!root) throw new Error("#root element missing");
@@ -21,6 +21,7 @@ function onApiError(error: unknown) {
   if (!(error instanceof ApiError)) return;
   const here = window.location.pathname;
   if (SESSION_CODES.has(error.code) && !here.startsWith("/login")) {
+    if (error.code === "session_expired") markSessionExpired();
     queryClient.setQueryData(ME_KEY, null);
     void router.navigate(`/login?reason=expired&next=${encodeURIComponent(here)}`);
   } else if (error.code === "mfa_enrollment_required") {

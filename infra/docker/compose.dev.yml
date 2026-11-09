@@ -47,6 +47,7 @@ services:
       ENCRYPTION_KEYS: ${ENCRYPTION_KEYS:?set in .env (make env, or see .env.example)}
       DATABASE_URL: postgresql+psycopg://rebate_app:${REBATE_APP_PASSWORD}@postgres:5432/rebate
       LOG_LEVEL: ${LOG_LEVEL:-INFO}
+      SESSION_IDLE_MINUTES: ${SESSION_IDLE_MINUTES:-30}  # shortened only for manual expiry checks
       WATCHFILES_FORCE_POLLING: "true"
     ports:
       - "127.0.0.1:8000:8000"

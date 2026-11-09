@@ -12,11 +12,11 @@ export function RequireSession({
   children: ReactNode;
   allowEnrollment?: boolean;
 }) {
-  const { me, loading } = useSession();
+  const { me, loading, expired } = useSession();
   const location = useLocation();
   if (loading) return <Loading />;
   const next = encodeURIComponent(location.pathname);
-  if (!me) return <Navigate to={`/login?next=${next}`} replace />;
+  if (!me) return <Navigate to={`/login?${expired ? "reason=expired&" : ""}next=${next}`} replace />;
   if (me.mfa_pending) return <Navigate to={`/login/mfa?next=${next}`} replace />;
   if (me.enrollment_required && !allowEnrollment) return <Navigate to="/mfa/setup" replace />;
   return <>{children}</>;

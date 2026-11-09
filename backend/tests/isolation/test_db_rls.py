@@ -257,3 +257,12 @@ def test_d13_idempotency_key_reuse_does_not_cross_tenants(app_engine: Engine, wo
             .all()
         )
     assert bodies == [str(world.a.tenant_id)], breach(f"idempotency replay across tenants: {bodies}")
+
+
+def test_d13_owner_can_run_the_operator_lookup(owner_engine: Engine, world: World) -> None:
+    """Runbook dependency: rebate_owner keeps EXECUTE after ownership moved to rebate_lookup."""
+    with owner_engine.connect() as conn:
+        sql = text("SELECT tenant_id FROM fn_user_memberships(:u)")
+        rows = conn.execute(sql, {"u": world.m_user_id}).all()
+        conn.rollback()
+    assert len(rows) == 2
