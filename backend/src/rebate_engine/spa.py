@@ -237,9 +237,10 @@ def _evaluate_original(
         return
     ev.version = version
     rules = version.rules
-    assert line.product_id is not None  # noqa: S101 - guaranteed by _select_version
-    item = _item(version, line.product_id)
-    assert item is not None  # noqa: S101
+    product_id = line.product_id
+    item = _item(version, product_id) if product_id is not None else None
+    if product_id is None or item is None:  # _select_version guarantees an item for the product
+        raise EngineRuleError("internal: selected version has no item for the line's product")
 
     # SPA reference
     ref = line.spa_reference.strip() if line.spa_reference else ""
@@ -269,7 +270,7 @@ def _evaluate_original(
     if claim_uom is None:
         raise EngineRuleError(f"line {line.line_id}: product base UoM unknown and no claim UoM set")
     ev.claim_uom = claim_uom
-    factor = find_factor(run.conversions, line.product_id, line.uom, claim_uom)
+    factor = find_factor(run.conversions, product_id, line.uom, claim_uom)
     t.step("uom", line_uom=line.uom, claim_uom=claim_uom, factor=factor)
     if factor is None:
         ev.fail(Code.MISSING_UOM_CONVERSION)
@@ -312,7 +313,7 @@ def _evaluate_original(
 
     # Quantity cap (§4.2)
     eligible = q
-    cap_key = (version.agreement_id, line.product_id)
+    cap_key = (version.agreement_id, product_id)
     if item.max_quantity is not None and rules.cap_scope != "none":
         if rules.cap_scope == "per_agreement":
             # Pool size for per_agreement is not defined in BUSINESS_LOGIC.md §4.2: refuse to guess.
@@ -471,23 +472,22 @@ def calculate_spa(run: SpaRunInput) -> tuple[LineResult, ...]:
 
 
 def _round(evals: list[_Eval]) -> None:
-    documents: dict[tuple[str, str], list[_Eval]] = defaultdict(list)
+    documents: dict[tuple[str, str], list[tuple[_Eval, Decimal, RoundingRule]]] = defaultdict(list)
     for ev in evals:
         if ev.raw is None or ev.rounding is None or ev.version is None:
             continue
         if ev.rounding.timing == "per_document":
-            documents[(ev.line.document_number, ev.version.version_id)].append(ev)
+            documents[(ev.line.document_number, ev.version.version_id)].append((ev, ev.raw, ev.rounding))
         else:
             ev.amount = round_line(ev.raw, ev.rounding)
             ev.trace.step(
                 "round", mode=ev.rounding.mode, scale=ev.rounding.scale, timing="per_line", result=ev.amount
             )
     for group in documents.values():
-        rule = group[0].rounding
-        assert rule is not None  # noqa: S101
-        amounts = allocate_document([ev.raw for ev in group if ev.raw is not None], rule)
+        rule = group[0][2]  # one version per group -> one rounding rule
+        amounts = allocate_document([raw for _, raw, _ in group], rule)
         total = sum(amounts, ZERO)
-        for ev, amount in zip(group, amounts, strict=True):
+        for (ev, _, _), amount in zip(group, amounts, strict=True):
             ev.amount = amount
             ev.trace.step(
                 "round",
