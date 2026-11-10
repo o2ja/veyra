@@ -63,6 +63,22 @@ class Action(StrEnum):
     IMPORT_COMPLETED = "import.completed"
     IMPORT_FAILED = "import.failed"
     IMPORT_ERRORS_EXPORTED = "import.errors_exported"
+    AGREEMENT_CREATED = "agreement.created"
+    AGREEMENT_CANCELLED = "agreement.cancelled"
+    AGREEMENT_DRAFT_CREATED = "agreement_draft.created"
+    AGREEMENT_DRAFT_UPDATED = "agreement_draft.updated"
+    AGREEMENT_DRAFT_ITEMS_IMPORTED = "agreement_draft.items_imported"
+    AGREEMENT_DRAFT_VALIDATED = "agreement_draft.validated"
+    AGREEMENT_DRAFT_SUBMITTED = "agreement_draft.submitted"
+    AGREEMENT_DRAFT_RETURNED = "agreement_draft.returned"
+    AGREEMENT_DRAFT_REJECTED = "agreement_draft.rejected"
+    AGREEMENT_DRAFT_APPROVED = "agreement_draft.approved"
+    AGREEMENT_DRAFT_FOUR_EYES_VIOLATION = "agreement_draft.four_eyes_violation"
+    AGREEMENT_VERSION_ACTIVATED = "agreement_version.activated"
+    AGREEMENT_VERSION_SUPERSEDED = "agreement_version.superseded"
+    AGREEMENT_VERSION_EXPIRED = "agreement_version.expired"
+    AGREEMENT_VERSION_CANCELLED = "agreement_version.cancelled"
+    AGREEMENT_VERSION_EXPIRY_ALERT = "agreement_version.expiry_alert"
 
 
 AUDITED_FIELDS: dict[str, frozenset[str]] = {
@@ -130,6 +146,50 @@ AUDITED_FIELDS: dict[str, frozenset[str]] = {
             "mapping_revision",
             "accept_partial",
             "counts",
+        }
+    ),
+    "agreement": frozenset(
+        {
+            "manufacturer_id",
+            "agreement_type",
+            "external_number",
+            "name",
+            "cancelled_at",
+            "effective_date",
+            "reason",
+        }
+    ),
+    "agreement_version": frozenset(
+        {
+            "agreement_id",
+            "version_number",
+            "status",
+            "valid_from",
+            "valid_to",
+            "content_hash",
+            "draft_id",
+            "derived_from_version_id",
+            "supersedes_version_id",
+            "superseded_by_version_id",
+            "days_left",
+        }
+    ),
+    "agreement_draft": frozenset(
+        {
+            "source",
+            "status",
+            "revision",
+            "agreement_id",
+            "amends_version_id",
+            "source_file_id",
+            "change_summary",
+            "item_count",
+            "error_count",
+            "warning_count",
+            "acknowledged_warnings",
+            "rejection_reason",
+            "review_comment",
+            "resulting_version_id",
         }
     ),
 }
