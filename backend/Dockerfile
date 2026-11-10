@@ -12,7 +12,8 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
     PATH=/opt/venv/bin:$PATH
 WORKDIR /app
 # libmagic: magic-byte detection for uploads (python-magic, SECURITY.md §4)
-RUN apt-get update && apt-get install -y --no-install-recommends libmagic1 && rm -rf /var/lib/apt/lists/*
+# ocrmypdf + tesseract-ocr-eng: OCR fallback for scanned PDF pages (TECH_STACK.md, S6; resource-limited subprocess)
+RUN apt-get update && apt-get install -y --no-install-recommends libmagic1 ocrmypdf tesseract-ocr-eng && rm -rf /var/lib/apt/lists/*
 
 FROM base AS deps
 COPY --from=uv /uv /usr/local/bin/uv
