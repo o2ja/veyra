@@ -3,7 +3,7 @@ import { expect, test, type Page } from "@playwright/test";
 
 import { PASSWORD, enrolMfa, signIn, tokenFromMail, uniqueEmail } from "./support";
 
-// WCAG 2.1 A/AA automated checks (NFR-09) on every page S1 added. Automated checks find only part of
+// WCAG 2.1 A/AA automated checks (NFR-09) on every page S1–S3 added. Automated checks find only part of
 // the issues; manual keyboard use was spot-checked during the S1 browser walkthrough.
 async function noViolations(page: Page, name: string) {
   const result = await new AxeBuilder({ page })
@@ -46,6 +46,17 @@ test("S1 pages have no automated WCAG 2.1 AA violations", async ({ page }) => {
     "/account/security",
     "/files",
     "/admin/jobs",
+    // S3 (detail pages and wizard steps are checked in imports.spec.ts and masterdata.spec.ts)
+    "/imports",
+    "/imports/new",
+    "/lines/sales",
+    "/lines/purchases",
+    "/master-data/manufacturers",
+    "/master-data/customers",
+    "/master-data/products",
+    "/master-data/uom",
+    "/master-data/branches",
+    "/master-data/unmapped",
   ]) {
     await page.goto(path);
     await expect(page.getByRole("heading").first()).toBeVisible();
