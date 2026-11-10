@@ -270,9 +270,22 @@ def find_card_number(text: str) -> str | None:
     return None
 
 
+CARD_REMOVED = "[card number removed]"
+
+
 def mask_card_number(text: str) -> str:
     """Replace every card-like run with ``[card number removed]`` so it is never stored."""
     out = text
     while (hit := find_card_number(out)) is not None:
-        out = out.replace(hit, "[card number removed]")
+        out = out.replace(hit, CARD_REMOVED)
     return out
+
+
+def card_like_integer(value: object) -> bool:
+    """A numeric spreadsheet cell holding a 15-19 digit integer. Excel keeps only 15 significant digits, so a
+    card number typed into a numeric cell may no longer pass Luhn: flag it without the Luhn check."""
+    if isinstance(value, bool) or not isinstance(value, int | float):
+        return False
+    if isinstance(value, float) and not value.is_integer():
+        return False
+    return 15 <= len(str(abs(int(value)))) <= 19

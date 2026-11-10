@@ -249,3 +249,29 @@ def test_customer_parents() -> None:
     assert codes(v.validate(5, c("SELF", "SELF"))) == ["own_parent"]
     out = v.finish()
     assert out[2][0].code == "parent_after_child" and out[4][0].code == "unknown_parent"
+
+
+def test_card_number_in_a_mapping_default_is_refused() -> None:
+    with pytest.raises(MappingInvalid) as err:
+        check_mapping(
+            "customers",
+            {"customer_code": "c", "customer_name": "n"},
+            {"defaults": {"external_id": "4111 1111 1111 1111"}},
+            ["c", "n"],
+        )
+    assert ("options.defaults.external_id", "card_number") in {
+        (d["field"], d["code"]) for d in err.value.details
+    }
+    check_mapping(
+        "customers",
+        {"customer_code": "c", "customer_name": "n"},
+        {"defaults": {"external_id": "X1"}},
+        ["c", "n"],
+    )
+
+
+def test_card_number_in_a_template_header_is_refused() -> None:
+    headers = ["c", "n", "4111-1111-1111-1111"]
+    with pytest.raises(MappingInvalid) as err:
+        check_mapping("customers", {"customer_code": "c", "customer_name": "n"}, {}, headers)
+    assert ("headers[2]", "card_number") in {(d["field"], d["code"]) for d in err.value.details}

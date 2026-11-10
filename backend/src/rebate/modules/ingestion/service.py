@@ -44,10 +44,56 @@ from rebate.modules.ingestion.validators import (
 
 STAGE_BATCH = 5000
 LOAD_CHUNK = 5000
-MAX_ROWS = 2_000_000
+MAX_ROWS = 1_000_000  # the tested ceiling (1M-row performance baseline)
+MAX_RUNNING = 3  # imports per workspace in scanning/parsing/loading at the same time
+RUNNING = ("scanning", "parsing", "loading")
 SCAN_WAIT = timedelta(hours=1)
 SCAN_POLL = timedelta(seconds=5)
 TERMINAL = frozenset({"completed", "completed_with_errors", "failed", "rejected"})
+
+
+class TooManyRunningImports(Conflict):
+    code = "too_many_running_imports"
+    message = (
+        f"This workspace already has {MAX_RUNNING} imports being processed. Wait until one finishes "
+        "(Imports page) and try again."
+    )
+
+
+def _limit_running(db: Session, tenant_id: UUID) -> None:
+    """Per-workspace cap on concurrently processed imports; the advisory lock serialises the check."""
+    db.execute(select(func.pg_advisory_xact_lock(func.hashtext(f"imports:{tenant_id}"))))
+    running = db.scalar(
+        select(func.count()).where(ImportBatch.tenant_id == tenant_id, ImportBatch.status.in_(RUNNING))
+    )
+    if (running or 0) >= MAX_RUNNING:
+        raise TooManyRunningImports()
+
+
+def _staged_window(
+    db: Session, batch: ImportBatch, after: int, size: int, *where: Any, columns: Any = None
+) -> list[Any]:
+    """Next staged rows after ``after`` in ``row_number`` windows of ``size`` on the primary key, so a read
+    is a bounded PK range scan whatever the planner statistics say (the app role cannot ANALYZE)."""
+    base = (ImportStagedRow.tenant_id == batch.tenant_id, ImportStagedRow.import_batch_id == batch.id)
+    while True:
+        first = db.scalar(
+            select(func.min(ImportStagedRow.row_number)).where(*base, ImportStagedRow.row_number > after)
+        )
+        if first is None:
+            return []
+        after = first - 1
+        stmt = (
+            (select(*columns) if columns is not None else select(ImportStagedRow))
+            .where(
+                *base, ImportStagedRow.row_number > after, ImportStagedRow.row_number <= after + size, *where
+            )
+            .order_by(ImportStagedRow.row_number)
+        )
+        rows = list(db.execute(stmt) if columns is not None else db.scalars(stmt))
+        if rows:
+            return rows
+        after += size
 
 
 class ImportHasErrors(Conflict):
@@ -145,6 +191,7 @@ def create_import(
     )
     if active is not None:
         raise Conflict("An import of this file is already in progress.")
+    _limit_running(db, tenant_id)
     template = None
     if mapping_template_id is not None:
         template = _template(db, tenant_id, mapping_template_id)
@@ -256,6 +303,10 @@ def _stage(db: Session, ctx: JobContext, batch: ImportBatch, file: files.FileObj
     )
     with source as src:
         recs = readers.records(src, opts.get("header_row"))
+        if any(n.find_card_number(h) or n.CARD_REMOVED in h for h in recs.headers):
+            raise readers.ReadError(
+                "card_number_in_header", "A column header contains a card number. Remove it and upload again."
+            )
         batch.detected_encoding, batch.delimiter, batch.sheet_name = (
             src.encoding,
             src.delimiter,
@@ -302,7 +353,7 @@ def _chunks(
 
 def _pan_safe(raw: dict[str, str]) -> dict[str, str]:
     """PAN guard: card-like numbers never reach the database (SECURITY.md §5)."""
-    hits = [k for k, v in raw.items() if n.find_card_number(v) is not None]
+    hits = [k for k, v in raw.items() if n.CARD_REMOVED in v or n.find_card_number(v) is not None]
     if not hits:
         return raw
     clean = {k: (n.mask_card_number(v) if k in hits else v) for k, v in raw.items()}
@@ -368,13 +419,8 @@ def validate(db: Session, ctx: JobContext, batch: ImportBatch) -> None:
     after = 0
     counts = {"rows_total": 0, "valid": 0, "rejected": 0, "duplicates": 0, "warnings": 0}
     while True:
-        staged = list(
-            db.execute(
-                select(ImportStagedRow.row_number, ImportStagedRow.raw)
-                .where(ImportStagedRow.import_batch_id == batch.id, ImportStagedRow.row_number > after)
-                .order_by(ImportStagedRow.row_number)
-                .limit(STAGE_BATCH)
-            )
+        staged = _staged_window(
+            db, batch, after, STAGE_BATCH, columns=(ImportStagedRow.row_number, ImportStagedRow.raw)
         )
         if not staged:
             break
@@ -397,20 +443,26 @@ def validate(db: Session, ctx: JobContext, batch: ImportBatch) -> None:
     for number, issues in validator.finish().items():
         raw = db.scalar(
             select(ImportStagedRow.raw).where(
-                ImportStagedRow.import_batch_id == batch.id, ImportStagedRow.row_number == number
+                ImportStagedRow.tenant_id == batch.tenant_id,
+                ImportStagedRow.import_batch_id == batch.id,
+                ImportStagedRow.row_number == number,
             )
         )
         db.execute(insert(ImportRowError), _error_rows(batch, number, raw or {}, issues))
         if any(i.severity == "error" for i in issues):
             db.execute(
                 update(ImportStagedRow)
-                .where(ImportStagedRow.import_batch_id == batch.id, ImportStagedRow.row_number == number)
+                .where(
+                    ImportStagedRow.tenant_id == batch.tenant_id,
+                    ImportStagedRow.import_batch_id == batch.id,
+                    ImportStagedRow.row_number == number,
+                )
                 .values(status="error", normalized=None, natural_key=None, row_hash=None)
             )
     by_status = dict(
         db.execute(
             select(ImportStagedRow.status, func.count())
-            .where(ImportStagedRow.import_batch_id == batch.id)
+            .where(ImportStagedRow.tenant_id == batch.tenant_id, ImportStagedRow.import_batch_id == batch.id)
             .group_by(ImportStagedRow.status)
         ).all()
     )
@@ -508,6 +560,7 @@ def confirm(
         raise InvalidState("Only a parsed and mapped import can be confirmed.")
     if batch.counts.get("rejected", 0) and not accept_partial:
         raise ImportHasErrors()
+    _limit_running(db, tenant_id)
     now = clock.now()
     batch.status, batch.accept_partial, batch.confirmed_by, batch.confirmed_at, batch.updated_at = (
         "loading", accept_partial, user_id, now, now,
@@ -539,6 +592,12 @@ def load_chunk(db: Session, ctx: JobContext) -> None:
     cp = dict(batch.checkpoint)
     if batch.status != "loading" or int(ctx.payload["chunk"]) != cp.get("chunk"):
         return  # finished, or a stale duplicate of an already committed chunk
+    if batch.import_type == "customers" and cp["chunk"] == 0:
+        try:
+            masterdata.check_parent_cycles(db, batch.tenant_id, _customer_parents(db, batch))
+        except masterdata.ParentCycle as exc:
+            _fail(db, batch, "failed", exc.message, exc.code)
+            return
     phase, after = int(cp["phase"]), int(cp["after_row"])
     rows = _valid_rows(db, batch, phase, after)
     while not rows and phase == 1:
@@ -549,7 +608,12 @@ def load_chunk(db: Session, ctx: JobContext) -> None:
         return
     counts = loader.Counts()
     staged = [loader.Staged(r.row_number, r.normalized or {}, r.row_hash or "") for r in rows]
-    _load_rows(db, batch, staged, counts)
+    try:
+        with db.begin_nested():  # a refused chunk leaves nothing behind
+            _load_rows(db, batch, staged, counts)
+    except masterdata.ParentCycle as exc:
+        _fail(db, batch, "failed", exc.message, exc.code)
+        return
     totals = dict(batch.counts)
     for key in LOADED_COUNTS:
         totals[key] = totals.get(key, 0) + getattr(counts, key)
@@ -564,19 +628,22 @@ def load_chunk(db: Session, ctx: JobContext) -> None:
     )  # fmt: skip
 
 
+def _customer_parents(db: Session, batch: ImportBatch) -> dict[str, str | None]:
+    code, parent = (ImportStagedRow.normalized[k].astext for k in ("customer_code", "parent_customer_code"))
+    found: dict[str, str | None] = {}
+    after = 0
+    while rows := _staged_window(
+        db, batch, after, LOAD_CHUNK, ImportStagedRow.status == "valid",
+        columns=(ImportStagedRow.row_number, code, parent),
+    ):  # fmt: skip
+        found.update((c, p or None) for _, c, p in rows)
+        after = rows[-1][0]
+    return found
+
+
 def _valid_rows(db: Session, batch: ImportBatch, phase: int, after: int) -> list[ImportStagedRow]:
-    return list(
-        db.scalars(
-            select(ImportStagedRow)
-            .where(
-                ImportStagedRow.import_batch_id == batch.id,
-                ImportStagedRow.status == "valid",
-                ImportStagedRow.phase == phase,
-                ImportStagedRow.row_number > after,
-            )
-            .order_by(ImportStagedRow.row_number)
-            .limit(LOAD_CHUNK)
-        )
+    return _staged_window(
+        db, batch, after, LOAD_CHUNK, ImportStagedRow.status == "valid", ImportStagedRow.phase == phase
     )
 
 
@@ -588,18 +655,21 @@ def _load_rows(db: Session, batch: ImportBatch, staged: list[loader.Staged], cou
     else:
         master = masterdata.LoadCounts()
         rows = [s.normalized for s in staged]
+        if batch.confirmed_by is None:
+            raise InvalidState("A master-data import loads only after a user confirmed it.")
+        # audit rows of the master-data changes are written by the loaders, in this chunk's transaction
+        who = masterdata.Who(batch.tenant_id, batch.confirmed_by, {"request_id": f"import:{batch.id}"})
         if batch.import_type == "customers":
-            masterdata.load_customers(db, batch.tenant_id, rows, master)
+            masterdata.load_customers(db, who, rows, master)
         elif batch.import_type == "products":
-            masterdata.load_products(db, batch.tenant_id, rows, master)
+            masterdata.load_products(db, who, rows, master)
         else:
-            masterdata.load_uom_conversions(db, batch.tenant_id, rows, master)
+            masterdata.load_uom_conversions(db, who, rows, master)
         counts.inserted, counts.unchanged, counts.changed = master.inserted, master.unchanged, master.changed
-        if batch.import_type in ("customers", "products") and batch.confirmed_by is not None:
+        if batch.import_type in ("customers", "products"):
             kind, key = (
                 ("customer", "customer_code") if batch.import_type == "customers" else ("product", "sku")
             )
-            who = masterdata.Who(batch.tenant_id, batch.confirmed_by, {"request_id": f"import:{batch.id}"})
             masterdata.resolve_matching(db, who, kind, [r[key] for r in rows])
 
 
@@ -776,7 +846,7 @@ def preview(db: Session, batch: ImportBatch, limit: int = 20) -> dict[str, Any]:
     rows = list(
         db.scalars(
             select(ImportStagedRow)
-            .where(ImportStagedRow.import_batch_id == batch.id)
+            .where(ImportStagedRow.tenant_id == batch.tenant_id, ImportStagedRow.import_batch_id == batch.id)
             .order_by(ImportStagedRow.row_number)
             .limit(limit)
         )
@@ -793,7 +863,11 @@ def preview(db: Session, batch: ImportBatch, limit: int = 20) -> dict[str, Any]:
         issues.setdefault(e.row_number or 0, []).append(e)
     template = None
     if batch.mapping_template_id is not None:
-        t = db.get(MappingTemplate, batch.mapping_template_id)
+        t = db.scalar(
+            select(MappingTemplate).where(
+                MappingTemplate.tenant_id == batch.tenant_id, MappingTemplate.id == batch.mapping_template_id
+            )
+        )
         template = (
             None if t is None else {"id": t.id, "name": t.name, "version": batch.mapping_template_version}
         )
@@ -821,15 +895,41 @@ def preview(db: Session, batch: ImportBatch, limit: int = 20) -> dict[str, Any]:
 
 
 def list_errors(
-    db: Session, tenant_id: UUID, batch_id: UUID, *, limit: int | None, cursor: str | None
+    db: Session, tenant_id: UUID, batch_id: UUID, *, limit: int, cursor: str | None
 ) -> list[ImportRowError]:
     get_batch(db, tenant_id, batch_id)
     stmt = select(ImportRowError).where(
         ImportRowError.tenant_id == tenant_id, ImportRowError.import_batch_id == batch_id
     )
-    if limit is None:  # CSV export: every error, in file order
-        return list(db.scalars(stmt.order_by(ImportRowError.row_number.nulls_first(), ImportRowError.id)))
     return list(db.scalars(masterdata.keyset(stmt, ImportRowError.id, cursor, limit, newest_first=False)))
+
+
+EXPORT_MAX_ROWS = 100_000
+
+
+def export_errors(
+    db: Session, tenant_id: UUID, batch_id: UUID, *, user_id: UUID, meta: dict[str, Any]
+) -> tuple[list[tuple[Any, ...]], bool]:
+    """Error rows for the CSV export in file order, capped at ``EXPORT_MAX_ROWS`` (SECURITY.md §4);
+    returns ``(rows, truncated)`` and audits the export."""
+    batch = get_batch(db, tenant_id, batch_id)
+    e = ImportRowError
+    rows = [
+        tuple(r)
+        for r in db.execute(
+            select(e.row_number, e.column_name, e.severity, e.code, e.message)
+            .where(e.tenant_id == tenant_id, e.import_batch_id == batch_id)
+            .order_by(e.row_number.nulls_first(), e.id)
+            .limit(EXPORT_MAX_ROWS + 1)
+        )
+    ]
+    truncated = len(rows) > EXPORT_MAX_ROWS
+    rows = rows[:EXPORT_MAX_ROWS]
+    _record(
+        db, batch, Action.IMPORT_ERRORS_EXPORTED, Actor("user", user_id), meta,
+        metadata={"rows": len(rows), "truncated": truncated},
+    )  # fmt: skip
+    return rows, truncated
 
 
 def job_progress(batch: ImportBatch) -> int:

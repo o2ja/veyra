@@ -1,6 +1,7 @@
 """Loader: validated staged rows -> source tables, one chunk per call (DATABASE_SCHEMA.md §5).
 
-Per natural key ``(source_system, document_number, line_number)`` among *current* lines:
+Per natural key ``(source_system, doc_type, document_number, line_number)`` among *current* lines (an
+invoice and a credit note may share a number):
 
 * no current line -> insert version 1 (**inserted**);
 * same ``row_hash`` -> nothing (**unchanged**);
@@ -20,7 +21,9 @@ from decimal import Decimal
 from typing import Any
 from uuid import UUID
 
-from sqlalchemy import Table, select, update
+from sqlalchemy import Table, column, select, update
+from sqlalchemy import values as values_list
+from sqlalchemy.dialects.postgresql import UUID as PG_UUID
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.orm import Session
 
@@ -81,13 +84,18 @@ def _insert_all(db: Session, table: Table, rows: list[dict[str, Any]], key: list
 
 
 def _retire(db: Session, table: Table, pairs: list[tuple[UUID, UUID]]) -> None:
-    """``(old id, new id)``: old leaves the current set; the deferred FK lets new arrive after."""
-    for old, new in pairs:
-        db.execute(
-            update(table)
-            .where(table.c.id == old, table.c.is_current)
-            .values(is_current=False, superseded_by_id=new)
-        )
+    """``(old id, new id)``: old leaves the current set in one statement; the deferred FK and the deferred
+    successor check (``fn_source_successor_check``) let the new version arrive after."""
+    if not pairs:
+        return
+    pairs_t = values_list(column("old", PG_UUID), column("new", PG_UUID), name="retire").data(pairs)
+    n = db.execute(  # type: ignore[attr-defined]
+        update(table)
+        .where(table.c.id == pairs_t.c.old, table.c.is_current)
+        .values(is_current=False, superseded_by_id=pairs_t.c.new)
+    ).rowcount
+    if n != len(pairs):  # someone else retired one of them meanwhile: retry the chunk
+        raise ConcurrentLoad()
 
 
 def _documents(
@@ -167,22 +175,23 @@ def _current_lines(
     db: Session,
     batch: ImportBatch,
     model: Any,
-    keys: list[tuple[str, int]],
-) -> dict[tuple[str, int], Any]:
+    keys: list[tuple[str, str, int]],
+) -> dict[tuple[str, str, int], Any]:
     wanted = set(keys)
     return {
-        (line.document_number, line.line_number): line
+        (line.doc_type, line.document_number, line.line_number): line
         for line in db.scalars(
             select(model)
             .where(
                 model.tenant_id == batch.tenant_id,
                 model.source_system == batch.source_system,
                 model.is_current,
-                model.document_number.in_(sorted({n for n, _ in wanted})),
+                model.doc_type.in_(sorted({t for t, _, _ in wanted})),
+                model.document_number.in_(sorted({n for _, n, _ in wanted})),
             )
             .with_for_update()
         )
-        if (line.document_number, line.line_number) in wanted
+        if (line.doc_type, line.document_number, line.line_number) in wanted
     }
 
 
@@ -195,7 +204,9 @@ def _apply_lines(
     counts: Counts,
 ) -> None:
     table: Table = model.__table__
-    keys = [(r.normalized["document_number"], r.normalized["line_number"]) for r in rows]
+    keys = [
+        (r.normalized["doc_type"], r.normalized["document_number"], r.normalized["line_number"]) for r in rows
+    ]
     current = _current_lines(db, batch, model, keys)
     new_rows: list[dict[str, Any]] = []
     retire: list[tuple[UUID, UUID]] = []
@@ -228,7 +239,9 @@ def _apply_lines(
     counts.source_changed += len(flagged)
     counts.changed_line_ids.extend(new for _, new in retire)
     _retire(db, table, retire)
-    _insert_all(db, table, new_rows, ["tenant_id", "source_system", "document_number", "line_number"])
+    _insert_all(
+        db, table, new_rows, ["tenant_id", "source_system", "doc_type", "document_number", "line_number"]
+    )
 
 
 def load_sales(db: Session, batch: ImportBatch, rows: list[Staged], counts: Counts) -> None:
