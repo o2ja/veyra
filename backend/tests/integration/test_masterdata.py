@@ -226,9 +226,9 @@ def test_purchase_line_filters_and_pagination(ws: Workspace) -> None:
         "VCR-9010",
     ]
     one = ws.api.get("/purchase-lines", params={"document_number": "RCV-9003"}).json()["data"]
-    assert [x["quantity"] for x in one] == ["1300.0000"]
+    assert [x["quantity"] for x in one] == ["1300.000000"]  # NUMERIC(18,6)
     assert len(ws.api.get("/purchase-lines", params={"manufacturer_id": volt}).json()["data"]) == 10
     assert ws.api.get("/purchase-lines", params={"manufacturer_id": nwnd}).json()["data"] == []
     paged = walk(ws, "/purchase-lines", {"limit": 3})
     assert len(paged) == len(set(paged)) == 10
-    assert ws.api.get("/purchase-lines", params={"customer_id": volt}).status_code == 422
+    assert ws.api.get("/purchase-lines", params={"customer_id": volt}).status_code == 400  # unknown filter

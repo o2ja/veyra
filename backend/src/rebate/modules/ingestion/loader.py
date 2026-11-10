@@ -20,7 +20,7 @@ from decimal import Decimal
 from typing import Any
 from uuid import UUID
 
-from sqlalchemy import Table, select, tuple_, update
+from sqlalchemy import Table, select, update
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.orm import Session
 
@@ -98,6 +98,8 @@ def _documents(
 ) -> dict[tuple[str, str], UUID]:
     """Current header per ``(doc_type, number)``: reused when its hash matches, else a new version."""
     table: Table = model.__table__
+    # Scalar IN lists (= ANY(array)) on the natural-key index, exact keys filtered here: a row-value IN over
+    # 5000 keys costs Postgres seconds of planning per chunk (measured in the 1M-row baseline).
     existing = {
         (d.doc_type, d.document_number): d
         for d in db.scalars(
@@ -106,10 +108,12 @@ def _documents(
                 model.tenant_id == batch.tenant_id,
                 model.source_system == batch.source_system,
                 model.is_current,
-                tuple_(model.doc_type, model.document_number).in_(list(headers)),
+                model.doc_type.in_(sorted({t for t, _ in headers})),
+                model.document_number.in_(sorted({n for _, n in headers})),
             )
             .with_for_update()
         )
+        if (d.doc_type, d.document_number) in headers
     }
     ids: dict[tuple[str, str], UUID] = {}
     new_rows: list[dict[str, Any]] = []
@@ -165,6 +169,7 @@ def _current_lines(
     model: Any,
     keys: list[tuple[str, int]],
 ) -> dict[tuple[str, int], Any]:
+    wanted = set(keys)
     return {
         (line.document_number, line.line_number): line
         for line in db.scalars(
@@ -173,10 +178,11 @@ def _current_lines(
                 model.tenant_id == batch.tenant_id,
                 model.source_system == batch.source_system,
                 model.is_current,
-                tuple_(model.document_number, model.line_number).in_(keys),
+                model.document_number.in_(sorted({n for n, _ in wanted})),
             )
             .with_for_update()
         )
+        if (line.document_number, line.line_number) in wanted
     }
 
 
@@ -306,10 +312,10 @@ def _original_lines(
             SalesDocumentLine.source_system == batch.source_system,
             SalesDocumentLine.is_current,
             SalesDocumentLine.doc_type == "invoice",
-            tuple_(SalesDocumentLine.document_number, SalesDocumentLine.line_number).in_(sorted(keys)),
+            SalesDocumentLine.document_number.in_(sorted({n for n, _ in keys})),
         )
     )
-    return {(d, ln): (line_id, doc_id) for d, ln, line_id, doc_id in found}
+    return {(d, ln): (line_id, doc_id) for d, ln, line_id, doc_id in found if (d, ln) in keys}
 
 
 def load_purchases(db: Session, batch: ImportBatch, rows: list[Staged], counts: Counts) -> None:
@@ -363,7 +369,8 @@ def sales_lines_exist(
             SalesDocumentLine.source_system == source_system,
             SalesDocumentLine.is_current,
             SalesDocumentLine.doc_type == "invoice",
-            tuple_(SalesDocumentLine.document_number, SalesDocumentLine.line_number).in_(keys),
+            SalesDocumentLine.document_number.in_(sorted({n for n, _ in keys})),
         )
     )
-    return {(d, ln) for d, ln in found}
+    wanted = set(keys)
+    return {(d, ln) for d, ln in found if (d, ln) in wanted}

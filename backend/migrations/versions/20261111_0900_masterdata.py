@@ -9,6 +9,7 @@ Revision ID: 20261111_0900_masterdata
 Revises: 20261110_1200_s2_review_fixes
 """
 
+import sqlalchemy as sa
 from alembic import op
 
 from migrations._rls import enable_tenant_rls
@@ -127,11 +128,12 @@ def upgrade() -> None:
         )
         """
     )
-    for code, label, category in REASON_CODES:
-        op.execute(
-            f"INSERT INTO reason_codes (code, label, category) VALUES ('{code}', '{label}', '{category}') "
-            "ON CONFLICT (code) DO NOTHING"
-        )
+    op.get_bind().execute(
+        sa.text(
+            "INSERT INTO reason_codes (code, label, category) VALUES (:c, :l, :k) ON CONFLICT (code) DO NOTHING"
+        ),
+        [{"c": c, "l": label, "k": k} for c, label, k in REASON_CODES],
+    )
     op.execute("REVOKE INSERT, UPDATE, DELETE, TRUNCATE ON reason_codes FROM rebate_app")
 
     op.execute(
