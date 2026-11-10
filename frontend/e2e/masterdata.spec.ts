@@ -49,6 +49,7 @@ test("master data: manufacturer and settings, customer and alias, product, UoM c
     .getByRole("navigation", { name: "Master data" })
     .getByRole("link", { name: "Customers" })
     .click();
+  await expect(page.getByRole("heading", { name: "Add a customer" })).toBeVisible(); // page replaced
   await page.getByLabel("Name", { exact: true }).fill("Alder Electric LLC (SYNTHETIC)");
   await page.getByLabel("Code", { exact: true }).fill("ALDER");
   await page.getByRole("button", { name: "Add customer" }).click();
@@ -65,6 +66,7 @@ test("master data: manufacturer and settings, customer and alias, product, UoM c
 
   // product with a leading-zero SKU (kept as text)
   await page.getByRole("navigation", { name: "Master data" }).getByRole("link", { name: "Products" }).click();
+  await expect(page.getByRole("heading", { name: "Add a product" })).toBeVisible(); // page replaced
   await page.getByLabel("SKU", { exact: true }).fill("00418");
   await page.getByLabel("Description", { exact: true }).fill("Connector 00418 (SYNTHETIC)");
   await page
