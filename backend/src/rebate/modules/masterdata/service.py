@@ -192,6 +192,7 @@ def put_manufacturer_settings(
         before=before,
         after=after,
     )
+    db.refresh(row)  # numeric scale as stored (e.g. factor 12 -> 12.00000000)
     return row
 
 
@@ -432,6 +433,7 @@ def create_product(db: Session, who: Who, values: dict[str, Any]) -> Product:
     _flush_unique(db)
     _audit(db, who, Action.PRODUCT_CREATED, "product", row.id, after=_fields(row, PRODUCT_FIELDS))
     _auto_resolve(db, who, "product", row.sku, row.id)
+    db.refresh(row)  # numeric scale as stored (e.g. factor 12 -> 12.00000000)
     return row
 
 
@@ -442,6 +444,7 @@ def update_product(db: Session, who: Who, product_id: UUID, changes: dict[str, A
     before, after = _apply(row, changes)
     _flush_unique(db)
     _audit(db, who, Action.PRODUCT_UPDATED, "product", row.id, before=before, after=after)
+    db.refresh(row)  # numeric scale as stored (e.g. factor 12 -> 12.00000000)
     return row
 
 
@@ -496,6 +499,7 @@ def create_uom_conversion(db: Session, who: Who, values: dict[str, Any]) -> UomC
     db.add(row)
     _flush_unique(db)
     _audit(db, who, Action.UOM_CONVERSION_CREATED, "uom_conversion", row.id, after=_fields(row, UOM_FIELDS))
+    db.refresh(row)  # numeric scale as stored (e.g. factor 12 -> 12.00000000)
     return row
 
 
@@ -504,6 +508,7 @@ def update_uom_conversion(db: Session, who: Who, conversion_id: UUID, factor: De
     before, after = _apply(row, {"factor": factor})
     db.flush()
     _audit(db, who, Action.UOM_CONVERSION_UPDATED, "uom_conversion", row.id, before=before, after=after)
+    db.refresh(row)  # numeric scale as stored (e.g. factor 12 -> 12.00000000)
     return row
 
 

@@ -6,7 +6,15 @@ from decimal import Decimal
 from typing import Annotated, Literal
 from uuid import UUID
 
-from pydantic import AfterValidator, BaseModel, BeforeValidator, ConfigDict, Field, StringConstraints
+from pydantic import (
+    AfterValidator,
+    BaseModel,
+    BeforeValidator,
+    ConfigDict,
+    Field,
+    StringConstraints,
+    model_validator,
+)
 
 from rebate.core.money import Money
 from rebate.core.validation import NO_CONTROL, STRICT, JsonUUID, Name
@@ -127,6 +135,14 @@ class ManufacturerSettingsIn(BaseModel):
     variance_tolerance: Tolerance = Decimal("0.01")
     payment_lag_days_expected: Annotated[int, Field(ge=0, le=3650)] | None = None
     notes: Annotated[str, StringConstraints(max_length=2000)] | None = None
+
+    @model_validator(mode="after")
+    def _pairs(self) -> ManufacturerSettingsIn:
+        if (self.claim_window_days is None) != (self.claim_window_basis is None):
+            raise ValueError("Set both claim_window_days and claim_window_basis, or neither.")
+        if (self.dispute_window_days is None) != (self.dispute_window_basis is None):
+            raise ValueError("Set both dispute_window_days and dispute_window_basis, or neither.")
+        return self
 
 
 class ManufacturerSettingsOut(BaseModel):
@@ -316,6 +332,12 @@ class UomConversionIn(BaseModel):
     from_uom: Uom
     to_uom: Uom
     factor: Factor
+
+    @model_validator(mode="after")
+    def _distinct(self) -> UomConversionIn:
+        if self.from_uom == self.to_uom:
+            raise ValueError("from_uom and to_uom must differ.")
+        return self
 
 
 class UomConversionUpdate(BaseModel):
