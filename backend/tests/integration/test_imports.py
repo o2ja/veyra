@@ -330,7 +330,8 @@ def test_encodings_through_upload(ws: Workspace, admin_engine: Engine, encoding:
 
 
 def test_undecodable_upload_is_rejected_with_a_clear_message(ws: Workspace) -> None:
-    r = upload(ws.api, "u16.csv", "a,b\nc,d\n".encode("utf-16-le"))  # UTF-16 without BOM
+    # text-looking bytes that are neither UTF-8 nor Windows-1252 (0x81 and 0x8D are undefined there)
+    r = upload(ws.api, "bad.csv", b"a,b\nCaf\x81 x,1\nZo\x8d,2\n")
     assert r.status_code == 422
     detail = r.json()["error"]["details"][0]
     assert detail["code"] == "encoding_unsupported" and "UTF-8" in detail["message"]
@@ -353,8 +354,8 @@ def test_pan_guard_never_stores_card_numbers(ws: Workspace, admin_engine: Engine
     assert "4111" not in stored and "card number removed" in stored
 
 
-def test_infected_file_is_rejected_by_the_chain(ws: Workspace) -> None:
-    r = upload(ws.api, "eicar.csv", samples.EICAR)
+def test_infected_file_is_rejected_by_the_chain(ws: Workspace, clk: Any) -> None:
+    r = upload(ws.api, "eicar.csv", samples.eicar())
     assert r.status_code == 201
     started = ws.api.post(
         "/imports",
@@ -362,7 +363,9 @@ def test_infected_file_is_rejected_by_the_chain(ws: Workspace) -> None:
         headers={"Idempotency-Key": str(uuid.uuid4())},
     )
     assert started.status_code == 202 and started.json()["import"]["status"] == "scanning"
-    drain(ws.app)  # scan (infected), then parse sees the outcome
+    drain(ws.app)  # scan (infected); a parse that ran first polls again 5 s later
+    clk.advance(6)
+    drain(ws.app)
     batch = ws.api.get(f"/imports/{started.json()['import']['id']}").json()
     assert batch["status"] == "rejected" and "malware" in batch["error_summary"]
     again = ws.api.post(

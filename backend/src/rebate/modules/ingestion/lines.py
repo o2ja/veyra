@@ -42,7 +42,7 @@ def sales_lines(db: Session, tenant_id: UUID, f: LineFilter, limit: int, cursor:
         stmt = stmt.where(m.invoice_date >= f.date_from)
     if f.date_to is not None:
         stmt = stmt.where(m.invoice_date <= f.date_to)
-    return list(db.execute(masterdata.keyset(_common(stmt, m, f), m.id, cursor, limit)).tuples())
+    return list(db.execute(masterdata.keyset(_common(stmt, m, f), m.id, cursor, limit)).all())
 
 
 def purchase_lines(db: Session, tenant_id: UUID, f: LineFilter, limit: int, cursor: str | None) -> list[Any]:
@@ -52,7 +52,7 @@ def purchase_lines(db: Session, tenant_id: UUID, f: LineFilter, limit: int, curs
         stmt = stmt.where(m.document_date >= f.date_from)
     if f.date_to is not None:
         stmt = stmt.where(m.document_date <= f.date_to)
-    return list(db.execute(masterdata.keyset(_common(stmt, m, f), m.id, cursor, limit)).tuples())
+    return list(db.execute(masterdata.keyset(_common(stmt, m, f), m.id, cursor, limit)).all())
 
 
 def _common(stmt: Select[Any], m: Any, f: LineFilter) -> Select[Any]:
@@ -132,9 +132,7 @@ def changes(
         .where(model.tenant_id == tenant_id, model.import_batch_id == batch.id)
     )
     out = []
-    for new, prev in db.execute(
-        masterdata.keyset(stmt, model.id, cursor, limit, newest_first=False)
-    ).tuples():
+    for new, prev in db.execute(masterdata.keyset(stmt, model.id, cursor, limit, newest_first=False)).all():
         diff = {
             k: [_plain(getattr(prev, k)), _plain(getattr(new, k))]
             for k in fields

@@ -412,7 +412,7 @@ def validate(db: Session, ctx: JobContext, batch: ImportBatch) -> None:
             select(ImportStagedRow.status, func.count())
             .where(ImportStagedRow.import_batch_id == batch.id)
             .group_by(ImportStagedRow.status)
-        ).tuples()
+        ).all()
     )
     counts["valid"], counts["rejected"], counts["duplicates"] = (
         by_status.get("valid", 0), by_status.get("error", 0), by_status.get("duplicate", 0),

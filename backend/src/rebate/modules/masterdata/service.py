@@ -736,9 +736,7 @@ def load_customers(db: Session, tenant_id: UUID, rows: list[dict[str, Any]], cou
             select(Customer.code, Customer.id).where(
                 Customer.tenant_id == tenant_id, Customer.code.in_(parents)
             )
-        )
-        .tuples()
-        .all()
+        ).all()
     )
     now = clock.now()
     for r in rows:
@@ -818,7 +816,7 @@ def resolve_matching(db: Session, who: Who, kind: str, values: list[str]) -> Non
     model, column = (Customer, Customer.code) if kind == "customer" else (Product, Product.sku)
     found = db.execute(
         select(column, model.id).where(model.tenant_id == who.tenant_id, column.in_(values))
-    ).tuples()
+    ).all()
     for value, entity_id in sorted(found, key=lambda t: str(t[0])):
         if value is not None:
             _auto_resolve(db, who, kind, value, entity_id)
