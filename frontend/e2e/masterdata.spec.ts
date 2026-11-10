@@ -82,6 +82,8 @@ test("master data: manufacturer and settings, customer and alias, product, UoM c
     .getByRole("navigation", { name: "Master data" })
     .getByRole("link", { name: "UoM conversions" })
     .click();
+  // the product page has the same conversion form: wait until the UoM page replaced it
+  await expect(page.getByRole("heading", { name: "Unit-of-measure conversions" })).toBeVisible();
   await page.getByLabel("From unit").fill("RL");
   await page.getByLabel("To unit").fill("FT");
   await page.getByLabel("Factor", { exact: true }).fill("500");
