@@ -109,6 +109,7 @@ def test_presigned_url_downloads_then_expires(migrated_db: DbUrls, clk: FakeCloc
         with urllib.request.urlopen(url) as resp:  # noqa: S310 (our own test storage)
             assert resp.read() == samples.CSV + b"y,2\n"
             assert resp.headers["Content-Disposition"] == 'attachment; filename="download.csv"'
+            assert resp.headers["Content-Type"].startswith("text/csv")
         time.sleep(11)  # presigned expiry is enforced by the storage server's real clock
         with pytest.raises(urllib.error.HTTPError) as err:
             urllib.request.urlopen(url)  # noqa: S310

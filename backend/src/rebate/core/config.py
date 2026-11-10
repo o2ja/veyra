@@ -130,6 +130,11 @@ class Settings(BaseSettings):
             raise ValueError("PUBLIC_BASE_URL must be an origin such as https://app.example.com")
         if hosted and url.scheme != "https":
             raise ValueError("PUBLIC_BASE_URL must use https in staging/production")
+        if hosted and not (self.s3_access_key_id and self.s3_secret_access_key):
+            raise ValueError("S3_ACCESS_KEY_ID and S3_SECRET_ACCESS_KEY are required in staging/production")
+        public_s3 = self.s3_public_endpoint_url or self.s3_endpoint_url
+        if hosted and public_s3 is not None and urlsplit(public_s3).scheme != "https":
+            raise ValueError("presigned download URLs must use https in staging/production")
         return self
 
     @property

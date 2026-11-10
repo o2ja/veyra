@@ -43,7 +43,14 @@ def registration_email(db: Session, ctx: JobContext) -> None:
     deliver(ctx.settings, emails.verify_email(ctx.settings, pending.email, token))
 
 
-@job("identity_password_reset", tenant_scoped=False)
+def _drop_reset_request(db: Session, ctx: JobContext) -> None:
+    """Dead letter: the typed address is not kept once no email will be sent."""
+    request = db.get(PasswordResetRequest, UUID(ctx.payload["request_id"]))
+    if request is not None:
+        db.delete(request)
+
+
+@job("identity_password_reset", tenant_scoped=False, on_dead=_drop_reset_request)
 def password_reset(db: Session, ctx: JobContext) -> None:
     from rebate.modules.identity.service import audit_user_event  # service imports this module
 

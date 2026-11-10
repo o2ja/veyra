@@ -55,7 +55,7 @@ Defined by `core/config.py` (pydantic-settings). `.env.example` contains placeho
 | `DATABASE_URL_OWNER` | `…rebate_owner…` | Migrations only; not present in the running API container |
 | `DATABASE_URL_AI` | `…rebate_ai_writer…` | AI gateway sessions |
 | `S3_ENDPOINT_URL`, `S3_REGION`, `S3_BUCKET`, `S3_ACCESS_KEY_ID`, `S3_SECRET_ACCESS_KEY` | | SeaweedFS locally |
-| `S3_PUBLIC_ENDPOINT_URL` | `http://localhost:8333` | Host the browser uses for presigned URLs (signatures include the host) |
+| `S3_PUBLIC_ENDPOINT_URL` | `http://localhost:8333` | Host the browser uses for presigned URLs (signatures include the host). Staging/production refuse to start without S3 credentials or with a non-https public endpoint. Production credentials: object Read/Write/List on the one bucket only (bucket, versioning and default encryption provisioned out of band); the dev/CI SeaweedFS identity has Admin so the worker can create the bucket |
 | `SEAWEEDFS_SSE_KEY` | 64 hex chars | Dev/CI SeaweedFS SSE-S3 key (`make env` generates it) |
 | `PRESIGNED_URL_SECONDS` | `300` | ≤ 300 (SECURITY.md §4) |
 | `UPLOAD_MAX_MB_SPREADSHEET`, `UPLOAD_MAX_MB_PDF` | `50`, `25` | FR-FI-03 |

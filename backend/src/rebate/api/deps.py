@@ -37,7 +37,7 @@ GENERAL_USER_LIMIT = 600  # per minute (API_SPECIFICATION.md §1)
 GENERAL_IP_LIMIT = 120  # per minute, unauthenticated
 
 
-def _origin_ok(request: Request, settings: Settings) -> bool:
+def origin_ok(request: Request, settings: Settings) -> bool:
     origin = request.headers.get("origin")
     if origin is None:
         referer = request.headers.get("referer")
@@ -51,7 +51,7 @@ def _origin_ok(request: Request, settings: Settings) -> bool:
 def _check_csrf(request: Request, c: RequestContext) -> None:
     if request.method not in UNSAFE:
         return
-    if not _origin_ok(request, c.settings):
+    if not origin_ok(request, c.settings):
         raise CsrfFailed()
     sent = request.headers.get("x-csrf-token", "")
     if c.principal is not None:

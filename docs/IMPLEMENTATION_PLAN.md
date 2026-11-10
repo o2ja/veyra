@@ -87,18 +87,18 @@ Common items for **every** stage (copy into each stage's kickoff/completion):
 **Read:** `PRODUCT_REQUIREMENTS.md` §1.3, `SECURITY.md` §4, `ARCHITECTURE.md` §6, §8, ADR-005.
 **Depends on:** S1.
 
-- [ ] S2.1 Job system
-  - [ ] Spike: Procrastinate with sync handlers, transactional enqueue, retries, periodic tasks, tenant-context propagation; **record result in ADR-005** (adopt, or implement the documented fallback behind `core/jobs.py`)
-  - [ ] Worker entrypoint, job registry, retry/backoff/dead-letter policy, per-job tenant context, admin endpoints (`/jobs`)
-  - [ ] Move S1 email sending onto the queue
-- [ ] S2.2 `files` module
-  - [ ] S3 client wrapper in `files/storage.py` (SeaweedFS locally/CI, ADR-017; add the pinned image behind profile `s2`), quarantine → clean key promotion, presigned downloads (≤ 5 min, audited). Any boto3 checksum-header workaround lives only in this client config and is noted
-  - [ ] Streaming upload with size limits, SHA-256, extension + MIME + magic-byte agreement, allow-list
-  - [ ] ClamAV scan job; statuses; admin notification on infected
-  - [ ] Duplicate detection by `(tenant, kind, sha256)`
-- [ ] S2.3 Frontend: upload component (progress, scan status polling), file detail, Jobs admin page (failed jobs, retry)
-- [ ] S2.4 Tests against the **real** storage service: presigned URLs with short expiry (valid, then expired), bucket versioning, server-side encryption, quarantine → clean copy. A failing required feature is reported to the owner before any switch (ADR-017)
-- [ ] S2.5 Tests: EICAR, `.xlsm`, renamed exe, MIME mismatch, oversized, zip bomb, quarantine promotion, job idempotency/retry/dead-letter, worker without tenant context fails, cross-tenant file/job access (isolation suite extended)
+- [x] S2.1 Job system
+  - [x] Spike: Procrastinate with sync handlers, transactional enqueue, retries, periodic tasks, tenant-context propagation; **record result in ADR-005** (adopt, or implement the documented fallback behind `core/jobs.py`)
+  - [x] Worker entrypoint, job registry, retry/backoff/dead-letter policy, per-job tenant context, admin endpoints (`/jobs`)
+  - [x] Move S1 email sending onto the queue
+- [x] S2.2 `files` module
+  - [x] S3 client wrapper in `files/storage.py` (SeaweedFS locally/CI, ADR-017; add the pinned image behind profile `s2`), quarantine → clean key promotion, presigned downloads (≤ 5 min, audited). Any boto3 checksum-header workaround lives only in this client config and is noted
+  - [x] Streaming upload with size limits, SHA-256, extension + MIME + magic-byte agreement, allow-list
+  - [x] ClamAV scan job; statuses; admin notification on infected
+  - [x] Duplicate detection by `(tenant, kind, sha256)`
+- [x] S2.3 Frontend: upload component (progress, scan status polling), file detail, Jobs admin page (failed jobs, retry)
+- [x] S2.4 Tests against the **real** storage service: presigned URLs with short expiry (valid, then expired), bucket versioning, server-side encryption, quarantine → clean copy. A failing required feature is reported to the owner before any switch (ADR-017)
+- [x] S2.5 Tests: EICAR, `.xlsm`, renamed exe, MIME mismatch, oversized, zip bomb, quarantine promotion, job idempotency/retry/dead-letter, worker without tenant context fails, cross-tenant file/job access (isolation suite extended)
 
 **Acceptance:** upload ends `clean` or `infected`; no reader accepts non-clean files; failed jobs visible and retryable; isolation suite covers files and jobs.
 **Expected files:** `core/jobs.py`, `workers/*`, `modules/files/*`, migration `*_files_jobs.py`.

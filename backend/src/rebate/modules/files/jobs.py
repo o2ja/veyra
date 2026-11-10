@@ -1,8 +1,9 @@
-"""files jobs: malware scan with quarantine -> clean promotion; admin notification on infection.
+"""files jobs: malware scan with quarantine -> clean promotion; admins emailed when a file is blocked.
 
 ``files_scan`` is idempotent: a file that already has a final outcome is left alone. A clamd outage
-is transient (retried with backoff); when retries run out, ``on_dead`` marks the file ``error`` so it
-can never be used, and the admin can retry the job from the jobs screen.
+is transient (retried with backoff); when retries run out, ``on_dead`` marks the file ``error`` (never
+usable) and emails the admins, who can retry the job from the jobs screen. The quarantine object is
+deleted by a follow-up job, i.e. only after the promotion has committed.
 """
 
 from uuid import UUID
@@ -30,21 +31,47 @@ def _file(db: Session, ctx: JobContext) -> FileObject:
     return row
 
 
+def _enqueue_for(db: Session, kind: str, row: FileObject, key: str) -> None:
+    jobs.enqueue(db, kind, tenant_id=row.tenant_id, payload={"file_id": str(row.id)}, dedupe_key=key)
+
+
+def _notify_admins(db: Session, row: FileObject) -> None:
+    _enqueue_for(db, "files_notify_blocked", row, f"files_notify_blocked:{row.id}:{row.scan_status}")
+
+
 def _scan_dead(db: Session, ctx: JobContext) -> None:
     row = _file(db, ctx)
-    if row.scan_status in ("pending", "error"):
-        before = service.scan_outcome(db, row, "error", "scan could not be completed", None)
-        audit.record(
-            db,
-            tenant_id=row.tenant_id,
-            actor=Actor("system"),
-            action=Action.FILE_SCAN_ERROR,
-            entity_type="file",
-            entity_id=row.id,
-            before=before,
-            after={"scan_status": "error"},
-            meta={"request_id": f"job:{ctx.id}"},
+    if row.scan_status != "pending":
+        return  # an earlier dead letter already marked it error (and notified)
+    before = service.scan_outcome(db, row, "error", "scan could not be completed", None)
+    audit.record(
+        db,
+        tenant_id=row.tenant_id,
+        actor=Actor("system"),
+        action=Action.FILE_SCAN_ERROR,
+        entity_type="file",
+        entity_id=row.id,
+        before=before,
+        after={"scan_status": "error"},
+        meta={"request_id": f"job:{ctx.id}"},
+    )
+    _notify_admins(db, row)
+
+
+def _superseding_duplicate(db: Session, row: FileObject) -> FileObject | None:
+    """A failed-scan file whose content was uploaded again meanwhile: the newer row owns the content
+    (unique per tenant, kind and SHA-256 among non-error rows), so this one stays ``error``."""
+    if row.scan_status != "error":
+        return None
+    return db.scalar(
+        select(FileObject).where(
+            FileObject.tenant_id == row.tenant_id,
+            FileObject.kind == row.kind,
+            FileObject.sha256 == row.sha256,
+            FileObject.scan_status != "error",
+            FileObject.id != row.id,
         )
+    )
 
 
 @job("files_scan", tenant_scoped=True, max_attempts=5, on_dead=_scan_dead)
@@ -54,13 +81,14 @@ def scan_file(db: Session, ctx: JobContext) -> None:
         return  # already decided (idempotent re-run)
     if ctx.tenant_id is None:  # guaranteed by the runner for tenant-scoped jobs
         raise PermanentError("tenant-scoped job without tenant context")
+    if (dup := _superseding_duplicate(db, row)) is not None:
+        row.scan_detail = f"superseded by re-upload {dup.id}"
+        return
     result = scanner.scan(ctx.settings, storage.read_chunks(ctx.settings, row.storage_key))
     meta = {"request_id": f"job:{ctx.id}"}
     if result.clean:
         target = storage.clean_key(ctx.tenant_id, row.kind, row.id, clock.now())
-        if row.storage_key != target:
-            storage.copy(ctx.settings, row.storage_key, target)
-        quarantine = row.storage_key
+        storage.copy(ctx.settings, row.storage_key, target)
         before = service.scan_outcome(db, row, "clean", None, target)
         audit.record(
             db,
@@ -73,9 +101,7 @@ def scan_file(db: Session, ctx: JobContext) -> None:
             after={"scan_status": "clean"},
             meta=meta,
         )
-        db.flush()
-        if quarantine != target:
-            storage.delete(ctx.settings, quarantine)  # versioning keeps the history
+        _enqueue_for(db, "files_purge_quarantine", row, f"files_purge_quarantine:{row.id}")
         return
     before = service.scan_outcome(db, row, "infected", result.signature, None)  # stays in quarantine
     audit.record(
@@ -90,30 +116,47 @@ def scan_file(db: Session, ctx: JobContext) -> None:
         meta=meta,
         metadata={"signature": result.signature},
     )
-    jobs.enqueue(
-        db,
-        "files_notify_infected",
-        tenant_id=row.tenant_id,
-        payload={"file_id": str(row.id)},
-        dedupe_key=f"files_notify_infected:{row.id}",
-    )
+    _notify_admins(db, row)
 
 
-@job("files_notify_infected", tenant_scoped=True)
-def notify_infected(db: Session, ctx: JobContext) -> None:
+@job("files_purge_quarantine", tenant_scoped=True)
+def purge_quarantine(db: Session, ctx: JobContext) -> None:
+    """Delete the quarantine copy of a promoted file (versioning keeps the history)."""
+    row = _file(db, ctx)
+    if row.scan_status != "clean" or ctx.tenant_id is None:
+        raise PermanentError("only a promoted file's quarantine copy is purged")
+    storage.delete(ctx.settings, storage.quarantine_key(ctx.tenant_id, row.id))
+
+
+@job("files_notify_blocked", tenant_scoped=True)
+def notify_blocked(db: Session, ctx: JobContext) -> None:
+    """Email the workspace admins about an infected file or a scan that could not be completed."""
     row = _file(db, ctx)
     if ctx.tenant_id is None:
         raise PermanentError("tenant-scoped job without tenant context")
+    if row.scan_status == "infected":
+        template, subject, what = (
+            "file_infected",
+            "Veyra Recover blocked an infected upload",
+            "was flagged by the malware scanner and blocked",
+        )
+    elif row.scan_status == "error":
+        template, subject, what = (
+            "file_scan_failed",
+            "Veyra Recover could not scan an upload",
+            "could not be scanned for malware, so it is blocked (an admin can retry the scan on the Jobs page)",
+        )
+    else:
+        return  # resolved meanwhile (an admin retry made it clean)
     for email in identity.admin_emails(db, ctx.tenant_id):
         deliver(
             ctx.settings,
             Mail(
-                template="file_infected",
+                template=template,
                 to=email,
-                subject="Veyra Recover blocked an infected upload",
+                subject=subject,
                 body=(
-                    "A file uploaded to your workspace was flagged by the malware scanner and blocked. "
-                    "It cannot be downloaded or processed.\n\n"
+                    f"A file uploaded to your workspace {what}. It cannot be downloaded or processed.\n\n"
                     f"File: {row.original_name}\nScanner result: {row.scan_detail}\n\n"
                     f"Review uploads at {ctx.settings.public_origin}/files"
                 ),

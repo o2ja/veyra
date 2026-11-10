@@ -55,4 +55,9 @@ test("upload a clean file and an infected file; only the clean one is downloadab
   const download = page.waitForEvent("download");
   await cleanRow.getByRole("button", { name: "Download" }).click();
   expect((await download).suggestedFilename()).toBe(clean);
+
+  await cleanRow.getByRole("link", { name: clean }).click();
+  await expect(page.getByRole("heading", { name: clean })).toBeVisible();
+  await expect(page.getByRole("status")).toHaveText("Clean");
+  await expect(page.getByText("SHA-256")).toBeVisible();
 });

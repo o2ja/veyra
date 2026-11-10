@@ -20,7 +20,7 @@
 
 1. **Application layer:** session carries active tenant; `core/db.py` opens each request transaction with `SET LOCAL app.tenant_id`; no code path accepts `tenant_id` from clients; repositories never build queries that omit the tenant context.
 2. **Database layer:** composite FKs `(tenant_id, id)`; **RLS enabled and forced** on every tenant table; `rebate_app` has no `BYPASSRLS` and does not own tables; fail-closed when the setting is missing.
-3. **Workers:** every job payload includes `tenant_id`; the worker sets tenant context before touching tenant data; jobs without it fail loudly.
+3. **Workers:** every tenant-scoped job row carries `tenant_id`; the worker sets tenant context per job transaction before touching tenant data; a tenant-scoped job without it fails before its handler runs. Global identity jobs (`tenant_scoped=False`) carry no tenant and touch only global tables. Payloads hold ids only: no tokens, no email addresses (the job mints a token and stores only its hash). The `jobs` table has no RLS (the worker claims across tenants); every API read filters `tenant_id` explicitly and the isolation suite covers it.
 4. **Object storage:** keys prefixed `tenants/{tenant_id}/…`; downloads only via presigned URLs generated after a DB policy check; bucket not public.
 5. **Everything else:** logs include `tenant_id` but no data; caches (none initially) keyed by tenant; exports and AI calls are tenant-scoped; error reports scrubbed.
 6. **Verification:** automated isolation suite (`TESTING_STRATEGY.md` §8) runs on every CI build: two tenants; every route, job, export, file URL attempted across the boundary; RLS tested by using the app role with a mismatched `app.tenant_id`; a meta-test fails CI if a tenant table lacks RLS.
@@ -61,9 +61,9 @@ Roles: `admin`, `approver`, `analyst`, `viewer`. Permissions are enforced in the
 | Triple check | Extension, declared MIME, and magic bytes (`python-magic`) must agree |
 | Size | CSV/XLSX ≤ 50 MB, PDF ≤ 25 MB (config); streaming upload with running size check; reject early |
 | Storage | Stream to quarantine key; never to local disk beyond a temp file in a per-request dir; random object keys; original name stored as metadata only (sanitised, never used in paths) |
-| Malware | ClamAV `clamd` scan job before any parsing; `infected`/`error` → file unusable, admin notified; signatures updated daily |
+| Malware | ClamAV `clamd` scan job before any parsing; `infected`/`error` → file unusable, admin notified; signatures updated daily. Content clamd cannot fully scan (over `MaxFileSize`/`MaxScanSize`/`MaxRecursion`, encrypted, OLE2 macros) is reported as a finding (`AlertExceedsMax`, `AlertEncrypted`, `AlertOLE2Macros`), never as clean |
 | Parsing sandbox | Parsers run in workers with CPU/memory/time limits; XLSX read-only mode, no macros, no external-link resolution, no formula evaluation, zip-bomb guard (max uncompressed size/entries ratio), XML entity expansion disabled (defusedxml); PDFs parsed with `pdfplumber`/`pypdfium2` with page and time caps; no JavaScript execution; OCR in a restricted container |
-| Download | Presigned URL ≤ 5 min, `Content-Disposition: attachment`, `X-Content-Type-Options: nosniff`; audited |
+| Download | Presigned URL ≤ 5 min, `Content-Disposition: attachment` and an explicit `Content-Type`; audited. **S2 deviation:** a presigned GET cannot add `X-Content-Type-Options: nosniff` (SeaweedFS does not send it); `attachment` disposition means the browser saves rather than renders. Add the header at a proxy in front of the storage host when one exists (OD-3/OD-4) |
 | Exports | **Formula-injection protection:** any exported cell beginning with `=`, `+`, `-`, `@`, tab, or CR is prefixed with `'` (text) in CSV/XLSX; numbers are written as typed numbers, text as strings |
 | Retention | Raw files kept per workspace retention; deletion is an audited admin process |
 

@@ -6,7 +6,11 @@ import { ApiError, unwrap } from "../../lib/api/errors";
 
 const KIND_TEXT: Record<string, string> = {
   files_scan: "Malware scan",
-  files_notify_infected: "Infected-file email",
+  files_notify_blocked: "Blocked-file email",
+  files_purge_quarantine: "Quarantine clean-up",
+  identity_registration_email: "Verification email",
+  identity_password_reset: "Password reset email",
+  identity_email_change: "Email change confirmation",
   tenancy_invitation_email: "Invitation email",
 };
 

@@ -150,19 +150,20 @@ REST/JSON over HTTPS, versioned under `/api/v1`, OpenAPI at `/api/v1/openapi.jso
 
 ## 6. Background workers
 
-Same codebase, separate process (`python -m rebate.workers`). Queue: Procrastinate on Postgres.
+Same codebase, separate process (`python -m rebate.workers`). Queue: Postgres `jobs` table behind `core/jobs.py` (ADR-005 fallback; the Procrastinate spike was not adopted).
 
 Rules:
 - Enqueue **inside the same transaction** as the data change (no "saved but never queued").
-- Every job payload carries `tenant_id` and `actor_id` (or `system`). The worker re-establishes tenant context (`SET LOCAL app.tenant_id`) before touching tenant data. A job without tenant context for tenant-scoped work fails.
-- Jobs are idempotent (safe to run twice) and resumable (checkpoint progress in a status row).
-- Retries: bounded (default 5) with exponential backoff and jitter for transient errors; permanent errors (validation, schema) fail immediately. Terminal state `failed` is visible in the admin UI and alerts.
+- Every tenant-scoped job row carries `tenant_id` (and `created_by` or none for `system`); payloads carry ids only. The worker re-establishes tenant context (`SET LOCAL app.tenant_id`) per job transaction before touching tenant data. A tenant-scoped job without tenant context fails before its handler runs. Global jobs (`tenant_scoped=False`: registration, password reset, email change) have no tenant and touch only global tables.
+- Jobs are idempotent (safe to run twice); long jobs are resumable (checkpoint progress in a status row; first needed in S3). Delivery is at-least-once: a job whose transaction fails after an external side effect (an email) runs again, so the email can arrive twice (for token emails the second link supersedes the first).
+- A claim takes a 10-minute lease; a crashed worker's job is reclaimed when the lease expires, a job reclaimed after its final attempt is dead-lettered instead of re-run, and a worker that lost its lease cannot overwrite the job's state (updates are conditional on its attempt).
+- Retries: bounded (default 5) with exponential backoff and jitter for transient errors; permanent errors (validation, schema) fail immediately. Terminal state `failed` is visible in the admin Jobs page and retryable there; an `on_dead` hook runs in the same transaction (e.g. a dead scan marks the file `error` and emails the admins). External alerting on failed jobs comes with monitoring (S9).
 - Long jobs (imports, calculation runs) process in chunks, committing per chunk with progress counters.
 - Calculation runs take a per-tenant advisory lock so two runs for the same scope cannot overlap.
 
 | Job | Trigger | Output |
 |---|---|---|
-| `scan_file` | upload | `file_objects.scan_status` |
+| `files_scan` | upload | `file_objects.scan_status`; then `files_purge_quarantine` (clean) or `files_notify_blocked` (infected/error) |
 | `parse_import` | file clean | staged rows + errors |
 | `load_import` | user confirms | source tables |
 | `suggest_mapping` | unmapped header | mapping suggestion (AI, optional) |
@@ -198,7 +199,7 @@ The **only** path from AI output to a financial rule is: extraction → validato
 ## 8. File storage architecture
 
 - Bucket layout: `tenants/{tenant_id}/{kind}/{yyyy}/{mm}/{file_id}`; kinds: `imports`, `agreements`, `remittances`, `exports`, `attachments`. Quarantine prefix `quarantine/{tenant_id}/{file_id}` until scan = clean, then copied to final key.
-- API uploads stream to quarantine, compute SHA-256, create `file_objects` (`scan_status=pending`) and enqueue `scan_file`.
+- API uploads stream to quarantine, compute SHA-256, create `file_objects` (`scan_status=pending`) and enqueue `files_scan`.
 - Downloads use presigned URLs (≤ 5 min), generated only after a policy check, and logged.
 - Objects are server-side encrypted; versioning enabled; separate bucket for backups.
 
@@ -255,7 +256,7 @@ Each workflow lists FE (frontend), BE (backend API), DB, WK (worker), AI, and fa
 ### W3 Import sales/purchase data
 - FE: upload → file listed as `scanning` → mapping step → preview with errors → confirm.
 - BE: `POST /files` (stream, hash, quarantine) → `POST /imports` (file, type, template) → job chain. `POST /imports/{id}/confirm`.
-- WK: `scan_file` → `parse_import` (strings only, staged rows, errors) → on confirm `load_import` (chunks, `INSERT … ON CONFLICT`, content-hash compare).
+- WK: `files_scan` → `parse_import` (strings only, staged rows, errors) → on confirm `load_import` (chunks, `INSERT … ON CONFLICT`, content-hash compare).
 - DB: `file_objects`, `import_batches`, `import_row_errors`, source tables (with `import_batch_id` and `source_row_number`).
 - Failures: infected file → `rejected`, visible reason; parse crash/timeouts → batch `failed`, retriable; mid-load crash → resumable by chunk checkpoint, idempotent by natural key; duplicate file → "already imported on …".
 

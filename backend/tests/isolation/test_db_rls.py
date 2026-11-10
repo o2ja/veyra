@@ -53,7 +53,10 @@ def test_d2_select_by_foreign_id_returns_nothing(app_engine: Engine, world: Worl
             text("SELECT id FROM invitations WHERE id = ANY(:ids)"), {"ids": world.b.invitation_ids}
         ).all()
         tenant = conn.execute(text("SELECT id FROM tenants WHERE id = :b"), {"b": world.b.tenant_id}).all()
-    assert rows == [] and inv == [] and tenant == [], breach("A reads B's rows by id")
+        files = conn.execute(
+            text("SELECT id FROM file_objects WHERE id = ANY(:ids)"), {"ids": world.b.file_ids}
+        ).all()
+    assert rows == [] and inv == [] and tenant == [] and files == [], breach("A reads B's rows by id")
 
 
 def test_d3_update_foreign_row_affects_nothing(app_engine: Engine, world: World) -> None:
@@ -66,7 +69,12 @@ def test_d3_update_foreign_row_affects_nothing(app_engine: Engine, world: World)
             text("UPDATE tenant_settings SET mfa_required = false WHERE tenant_id = :b"),
             {"b": world.b.tenant_id},
         ).rowcount
-    assert n == 0 and s == 0, breach(f"A updated {n} membership(s) and {s} settings row(s) of B")
+        f = conn.execute(
+            text("UPDATE file_objects SET scan_detail = 'x' WHERE id = ANY(:ids)"), {"ids": world.b.file_ids}
+        ).rowcount
+    assert n == 0 and s == 0 and f == 0, breach(
+        f"A updated {n} membership(s), {s} settings row(s) and {f} file(s) of B"
+    )
 
 
 def test_d4_delete_foreign_row_affects_nothing(app_engine: Engine, world: World) -> None:
@@ -106,6 +114,13 @@ def test_d5_insert_into_foreign_tenant_is_rejected(app_engine: Engine, world: Wo
                 "INSERT INTO audit_log (tenant_id, occurred_at, actor_type, action, entity_type) "
                 "VALUES (:t, now(), 'system', 'probe.forged', 'probe')",
                 {"t": b},
+            ),
+            "file_objects": _insert_rejected(
+                conn,
+                "INSERT INTO file_objects (tenant_id, id, kind, original_name, storage_key, size_bytes, "
+                "sha256, detected_mime, uploaded_by) VALUES (:t, :id, 'attachment', 'x.csv', :k, 1, "
+                "repeat('a', 64), 'text/csv', :u)",
+                {"t": b, "id": (fid := new_id()), "k": f"quarantine/{b}/{fid}", "u": world.a.admin_user_id},
             ),
             "tenants": _insert_rejected(
                 conn,
@@ -233,6 +248,8 @@ def test_d12_force_rls_applies_to_the_owner(owner_engine: Engine, world: World) 
         "SELECT count(*) FROM mfa_recovery_codes",
         "SELECT count(*) FROM pending_registrations",
         "SELECT count(*) FROM rate_limit_counters",
+        "SELECT count(*) FROM jobs",
+        "SELECT count(*) FROM password_reset_requests",
     ],
 )
 def test_d13_other_roles_cannot_reach_lookups_or_credentials(

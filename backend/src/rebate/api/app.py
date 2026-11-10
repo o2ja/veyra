@@ -1,5 +1,6 @@
 """FastAPI app factory: request ids, error envelope, health routes, startup role self-check."""
 
+import hmac
 import time
 from collections.abc import AsyncIterator, Awaitable, Callable
 from contextlib import asynccontextmanager
@@ -9,17 +10,19 @@ import structlog
 from fastapi import FastAPI, Request, Response
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
+from starlette.concurrency import run_in_threadpool
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from rebate.api import health, jobs_router
-from rebate.api.deps import RequestContextDep
+from rebate.api.deps import RequestContextDep, origin_ok
 from rebate.api.paths import API_PREFIX, route_template
 from rebate.core.config import Settings, get_settings
-from rebate.core.db import assert_safe_role, make_engine
-from rebate.core.errors import DomainError, error_body
+from rebate.core.db import assert_safe_role, make_engine, transaction
+from rebate.core.errors import CsrfFailed, DomainError, RateLimited, Unauthenticated, error_body
 from rebate.core.ids import new_id
 from rebate.core.logging import configure_logging
 from rebate.modules import audit, files, identity, tenancy
+from rebate.modules.identity import ratelimit
 
 log = structlog.get_logger("rebate.api")
 
@@ -38,11 +41,47 @@ UPLOAD_PATH = f"{API_PREFIX}/files"
 UPLOAD_OVERHEAD = 1024 * 1024  # multipart framing + the kind field
 
 
-def _too_large(request: Request) -> JSONResponse | None:
-    """Reject oversized uploads before the body is read (SECURITY.md §4: reject early)."""
+UPLOAD_USER_LIMIT = 30  # uploads per user per minute (pre-body gate)
+
+
+def _error(exc: DomainError, request_id: str | None) -> JSONResponse:
+    return JSONResponse(error_body(exc.code, exc.message, request_id, exc.details), exc.status_code)
+
+
+def _upload_caller(request: Request) -> JSONResponse | None:
+    """Before any body byte is read: a live session, Origin and session-bound CSRF token, and a
+    per-user upload rate limit. Everything else (MFA state, permission, audited denial) is enforced
+    by the route's dependencies as for every other request."""
+    settings: Settings = request.app.state.settings
+    rid = _request_id(request)
+    token = request.cookies.get(identity.SESSION_COOKIE)
+    sent = request.headers.get("x-csrf-token", "")
+    if not origin_ok(request, settings) or not sent:
+        return _error(CsrfFailed(), rid)
+    if not token:
+        return _error(Unauthenticated(), rid)
+    with transaction(request.app.state.engine) as db:
+        principal, _ = identity.resolve_principal(db, settings, token)
+        if principal is None:
+            return _error(Unauthenticated(), rid)
+        if not hmac.compare_digest(sent, identity.csrf_for(settings, principal.session_id)):
+            return _error(CsrfFailed(), rid)
+        try:
+            ratelimit.hit(db, f"upload:user:{principal.user_id}", limit=UPLOAD_USER_LIMIT, window_seconds=60)
+        except RateLimited as exc:
+            return _error(exc, rid)  # the counter increment still commits
+    return None
+
+
+async def _upload_gate(request: Request) -> JSONResponse | None:
+    """Reject uploads before the body is read (SECURITY.md §4: reject early)."""
     if request.method != "POST" or request.url.path != UPLOAD_PATH:
         return None
     settings: Settings = request.app.state.settings
+    if "transfer-encoding" in request.headers:  # chunked framing would override the checked length
+        return JSONResponse(
+            error_body("length_required", "Send the upload with a Content-Length.", _request_id(request)), 411
+        )
     limit = (
         max(settings.upload_max_mb_spreadsheet, settings.upload_max_mb_pdf) * 1024 * 1024 + UPLOAD_OVERHEAD
     )
@@ -53,7 +92,7 @@ def _too_large(request: Request) -> JSONResponse | None:
         )
     if int(length) > limit:
         return JSONResponse(error_body("payload_too_large", "The file is too large.", None), 413)
-    return None
+    return await run_in_threadpool(_upload_caller, request)
 
 
 async def _request_context(request: Request, call_next: Callable[[Request], Awaitable[Response]]) -> Response:
@@ -63,7 +102,7 @@ async def _request_context(request: Request, call_next: Callable[[Request], Awai
     structlog.contextvars.bind_contextvars(request_id=request_id)
     started = time.perf_counter()
     try:
-        early = _too_large(request)
+        early = await _upload_gate(request)
         response = early if early is not None else await call_next(request)
     except Exception:
         log.exception("unhandled_error")

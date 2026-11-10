@@ -62,7 +62,10 @@ _UNSAFE = re.compile(r'[\x00-\x1f\x7f"\\/:*?<>|]')
 def sanitise_filename(name: str) -> str:
     """Display/attachment name only (never used in storage keys): base name, ASCII, no quotes/controls."""
     base = name.replace("\\", "/").rsplit("/", 1)[-1]
-    ascii_name = unicodedata.normalize("NFKD", base).encode("ascii", "ignore").decode()
+    folded = unicodedata.normalize("NFKD", base)
+    # accents fold to ASCII; any other non-ASCII character becomes "_" (never dropped, so "отчёт.csv"
+    # keeps its extension and stays recognisable as one name)
+    ascii_name = "".join(ch if ch.isascii() else "_" for ch in folded if not unicodedata.combining(ch))
     cleaned = _UNSAFE.sub("_", ascii_name).strip(" .")
     return (cleaned or "file")[-255:]
 
@@ -104,6 +107,10 @@ def check_content(ext: str, head: bytes, body: IO[bytes]) -> Checked:
     return Checked(ext, detected, CONTENT_TYPE[ext])
 
 
+# Active content: VBA (vbaProject.bin), Excel 4 macro sheets, OLE embeddings, ActiveX, external links
+ACTIVE_PARTS = ("xl/macrosheets/", "xl/embeddings/", "xl/activex/", "xl/externallinks/")
+
+
 def _check_xlsx(body: IO[bytes]) -> None:
     body.seek(0)
     try:
@@ -112,8 +119,10 @@ def _check_xlsx(body: IO[bytes]) -> None:
             if len(infos) > MAX_ZIP_ENTRIES:
                 raise _reject("archive_too_complex")
             total = 0
-            names = set()
+            names: set[str] = set()
             for info in infos:
+                if info.filename in names:  # readers disagree on which duplicate wins
+                    raise _reject("archive_too_complex")
                 if info.flag_bits & 0x1:
                     raise _reject("encrypted")
                 total += info.file_size
@@ -124,10 +133,14 @@ def _check_xlsx(body: IO[bytes]) -> None:
                 names.add(info.filename)
             if "[Content_Types].xml" not in names or "xl/workbook.xml" not in names:
                 raise _reject("not_a_workbook")
-            if any(n.lower().endswith("vbaproject.bin") for n in names):
+            lowered = [n.lower() for n in names]
+            if any(n.endswith("vbaproject.bin") or n.startswith(ACTIVE_PARTS) for n in lowered):
                 raise _reject("macros")
-            content_types = zf.read("[Content_Types].xml")[:65536].lower()
-            if b"macroenabled" in content_types:
+            if zf.getinfo("[Content_Types].xml").file_size > 65536:
+                raise _reject("not_a_workbook")
+            with zf.open("[Content_Types].xml") as ct:  # bounded read (no whole-entry inflate)
+                content_types = ct.read(65536).lower()
+            if b"macroenabled" in content_types or b"macrosheet" in content_types:
                 raise _reject("macros")
     except zipfile.BadZipFile:
         raise _reject("content_type_mismatch") from None

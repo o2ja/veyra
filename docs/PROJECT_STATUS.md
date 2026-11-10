@@ -7,7 +7,7 @@
 | Item | State |
 |---|---|
 | Phase | **Release 1 build** |
-| Current stage | **S1 signed off 2026-11-10**; S2 not started (kickoff report next) |
+| Current stage | **S2 complete 2026-11-10**, awaiting owner review (`docs/reports/S2_COMPLETION_REPORT.md`) |
 | Application code | S0 skeleton + S1: identity, tenancy, audit modules; auth/MFA/sessions/CSRF; admin UI; isolation suite with negative control |
 | Synthetic test data | Generated and self-checked (`testdata/`) |
 
@@ -45,11 +45,14 @@ Stages S0–S11 per `DEVELOPMENT_ROADMAP.md` / `IMPLEMENTATION_PLAN.md`. Release
 | K-1 | Synthetic data has no scanned, rotated, password-protected, non-English, >60-page or amendment PDFs | AI extraction robustness is untested on those shapes | Add in S6 or replace with real anonymised samples (A-12) |
 | K-2 | No real customer documents or exports have been seen | Layout, terminology and edge-case assumptions are unvalidated | Obtain samples from pilot candidates before S3/S6 sign-off |
 | K-3 | Market sizing, pricing and cost figures in the docs are estimates, not verified | Business planning only | Validate with customer interviews |
-| K-4 | Procrastinate suitability for sync handlers and tenant context is unproven | Job system choice | S2 spike; fallback in ADR-005 |
+| K-4 | Procrastinate suitability | — | **Closed in S2**: spike showed no enqueue inside our transaction; in-house queue per ADR-005 fallback |
 | K-5 | Legal/commercial review (terms, DPA, data retention) not done | Needed before a paid pilot | Owner to engage counsel |
 | K-6 | `minio/minio` images are no longer publicly pullable (Docker Hub: not found; quay.io: 401) | Resolved 2026-11-09: owner approved SeaweedFS for local dev and CI (ADR-017); image added in S2 | Closed |
 | K-7 | Starlette deprecates `httpx` for `TestClient` (warning; suggests `httpx2`) | Test-only warning | Swap the test dependency when convenient |
 | K-9 | Temporary in-process background pool (S1) | — | **Closed in S2**: all email and the forgot-password work run as queued jobs with retries and a visible dead-letter state |
+| K-10 | Presigned downloads come straight from SeaweedFS without `X-Content-Type-Options: nosniff` (SECURITY.md §4 deviation) | Low: `Content-Disposition: attachment` + explicit type | Header at a proxy in front of storage with the hosting choice (OD-3/OD-4) |
+| K-11 | Finished `jobs` rows are never purged; no external alert on dead letters | Table growth; failures seen only on the Jobs page and in logs | Retention sweep and alerting with S9 operations |
+| K-12 | Email delivery is at-least-once (a job can send twice if its commit fails after SMTP accepted) | Rare duplicate email; for token emails the later link wins | Accepted; documented in ARCHITECTURE.md §6 |
 | K-8 | `minimatch` 10.x advisory GHSA-g3hv-75wg-m249 in ESLint tooling (dev only) | None at runtime | npm `overrides` pins minimatch 11.0.5; remove the override once ESLint ships it |
 
 ## 7. Risks being watched
@@ -66,7 +69,8 @@ Top items only; full list in the analysis and `SECURITY.md` §12.
 |---|---|---|---|---|
 | S0 | 2026-11-09 | 2026-11-09 | 2026-11-09 | Approved |
 | S1 | 2026-11-09 | 2026-11-10 | 2026-11-10 | Approved |
-| S2–S11 | – | – | – | Not started |
+| S2 | 2026-11-10 | 2026-11-10 | – | Complete, awaiting owner review |
+| S3–S11 | – | – | – | Not started |
 
 ## 9. Change log
 
@@ -79,3 +83,4 @@ Top items only; full list in the analysis and `SECURITY.md` §12.
 | 2026-11-09 | S0 local Docker verification; `make up` runs db-init first; `make env` Windows interpreter fix; `infra/runbooks/` pointer |
 | 2026-11-09 | S0 signed off. S1 kickoff approved with D-1..D-8 (negative-control DB, `cryptography`, local breach list, Postgres rate-limit counters, email-change endpoints, no in-app MFA reset + runbook, per-tenant auth audit rows, `segno`). Owner standing delegation recorded in `CLAUDE.md` §18; reviewer subagent `.claude/agents/reviewer.md` |
 | 2026-11-10 | S1 complete: audit shows actor names; runbook operator scripts + dry run (found and fixed a missing EXECUTE grant, migration `20261110_0900`); session-ended message; axe on S1 pages; completion report |
+| 2026-11-10 | S2 complete: job queue (ADR-005 fallback), worker, files module (SeaweedFS + ClamAV, quarantine → clean), Files/Jobs pages; two independent reviews (8 serious findings fixed); K-4, K-9 closed; K-10..K-12 opened |

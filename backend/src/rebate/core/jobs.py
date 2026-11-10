@@ -15,11 +15,11 @@ import random
 from collections.abc import Callable
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta
-from typing import Any
+from typing import Any, cast
 from uuid import UUID
 
 import structlog
-from sqlalchemy import Engine, ForeignKey, Index, Integer, Text, select, text, update
+from sqlalchemy import CursorResult, Engine, ForeignKey, Index, Integer, Result, Text, select, text, update
 from sqlalchemy.dialects.postgresql import JSONB, insert
 from sqlalchemy.orm import Mapped, Session, mapped_column
 from sqlalchemy.types import DateTime
@@ -120,8 +120,11 @@ def enqueue(
     dedupe_key: str | None = None,
     run_at: datetime | None = None,
 ) -> UUID | None:
-    """Insert a job in the caller's transaction. With ``dedupe_key``, a second enqueue is a no-op
-    (returns None). Payload values are ids (strings) only."""
+    """Insert a job in the caller's transaction. Payload values are ids (strings) only.
+
+    ``dedupe_key`` is unique forever and across all tenants and statuses: a second enqueue with the
+    same key is a no-op (returns None), even after the first job finished. Keys must therefore embed
+    a globally unique id (e.g. ``files_scan:{file_id}``); re-running a failed job is ``retry()``."""
     jt = REGISTRY.get(kind)
     if jt is None:
         raise ValueError(f"unknown job kind {kind!r}")
@@ -161,7 +164,9 @@ def _safe_error(exc: BaseException) -> str:
     return type(exc).__name__[:500]
 
 
-def _claim(engine: Engine) -> Job | None:
+def _claim(engine: Engine) -> tuple[Job, bool] | None:
+    """Claim one due job. ``lost`` = a worker died holding its final attempt (lease expired): the job
+    is not run again but dead-lettered, so a job that crashes the process cannot loop forever."""
     now = clock.now()
     with transaction(engine) as db:
         row = db.scalar(
@@ -176,41 +181,63 @@ def _claim(engine: Engine) -> Job | None:
         )
         if row is None:
             return None
-        row.status, row.attempts = "running", row.attempts + 1
-        row.locked_until, row.updated_at = now + LEASE, now
+        lost = row.status == "running" and row.attempts >= row.max_attempts
+        if not lost:
+            row.attempts += 1
+        row.status, row.locked_until, row.updated_at = "running", now + LEASE, now
         db.flush()
         db.expunge(row)
-        return row
+        return row, lost
 
 
-def _finish(db: Session, job_id: UUID, status: str, error: str | None = None) -> None:
+class LeaseLost(Exception):
+    """Another worker reclaimed this job (lease expired mid-run): this run's outcome is discarded."""
+
+
+def _mine(job: Job) -> Any:
+    """Updates apply only while this run still owns the job (same attempt, still running)."""
+    return (Job.id == job.id) & (Job.status == "running") & (Job.attempts == job.attempts)
+
+
+def _owned(result: Result[Any]) -> None:
+    if cast(CursorResult[Any], result).rowcount != 1:
+        raise LeaseLost
+
+
+def _finish(db: Session, job: Job, status: str, error: str | None = None) -> None:
     now = clock.now()
-    db.execute(
+    result = db.execute(
         update(Job)
-        .where(Job.id == job_id)
+        .where(_mine(job))
         .values(status=status, finished_at=now, updated_at=now, locked_until=None, last_error=error)
     )
+    _owned(result)
 
 
 def run_once(engine: Engine, settings: Settings) -> bool:
     """Claim and run one due job. Returns False when nothing was due."""
-    claimed = _claim(engine)
-    if claimed is None:
+    got = _claim(engine)
+    if got is None:
         return False
+    claimed, lost = got
     ctx = JobContext(
         settings, claimed.id, claimed.tenant_id, dict(claimed.payload), claimed.attempts, claimed.created_by
     )
     jt = REGISTRY.get(claimed.kind)
     structlog.contextvars.bind_contextvars(job_id=str(claimed.id), job_kind=claimed.kind)
     try:
+        if lost:
+            raise PermanentError("worker stopped during the final attempt")
         if jt is None:
             raise PermanentError(f"no handler registered for {claimed.kind!r}")
         if jt.tenant_scoped and claimed.tenant_id is None:
             raise PermanentError("tenant-scoped job without tenant context")
         with transaction(engine, claimed.tenant_id if jt.tenant_scoped else None) as db:
             jt.handler(db, ctx)
-            _finish(db, claimed.id, "succeeded")
+            _finish(db, claimed, "succeeded")
         log.info("job.succeeded", attempt=claimed.attempts)
+    except LeaseLost:
+        log.warning("job.lease_lost", attempt=claimed.attempts)  # handler effects rolled back
     except Exception as exc:  # the job outcome is recorded; the worker keeps running
         _record_failure(engine, claimed, jt, ctx, exc)
     finally:
@@ -219,32 +246,42 @@ def run_once(engine: Engine, settings: Settings) -> bool:
 
 
 def _record_failure(engine: Engine, job: Job, jt: JobType | None, ctx: JobContext, exc: Exception) -> None:
+    """Requeue with backoff, or dead-letter. ``on_dead`` runs in the same transaction as the
+    ``failed`` mark (inside a savepoint: a failing hook is logged and never blocks the dead letter)."""
     error = _safe_error(exc)
     dead = isinstance(exc, PermanentError) or job.attempts >= job.max_attempts
-    with transaction(engine) as db:
-        if dead:
-            _finish(db, job.id, "failed", error)
-        else:
-            now = clock.now()
-            db.execute(
-                update(Job)
-                .where(Job.id == job.id)
-                .values(
-                    status="queued",
-                    run_at=now + backoff(job.attempts),
-                    locked_until=None,
-                    last_error=error,
-                    updated_at=now,
+    tenant = job.tenant_id if jt is not None and jt.tenant_scoped else None
+    try:
+        with transaction(engine, tenant) as db:
+            if dead:
+                _finish(db, job, "failed", error)
+                if jt is not None and jt.on_dead is not None:
+                    hook = db.begin_nested()
+                    try:
+                        jt.on_dead(db, ctx)
+                        hook.commit()
+                    except Exception as hook_exc:
+                        hook.rollback()
+                        log.error("job.on_dead_failed", error=type(hook_exc).__name__)
+            else:
+                now = clock.now()
+                _owned(
+                    db.execute(
+                        update(Job)
+                        .where(_mine(job))
+                        .values(
+                            status="queued",
+                            run_at=now + backoff(job.attempts),
+                            locked_until=None,
+                            last_error=error,
+                            updated_at=now,
+                        )
+                    )
                 )
-            )
+    except LeaseLost:
+        log.warning("job.lease_lost", attempt=job.attempts)
+        return
     log.warning("job.failed" if dead else "job.retry", attempt=job.attempts, error=error)
-    if dead and jt is not None and jt.on_dead is not None:
-        try:
-            tenant = job.tenant_id if jt.tenant_scoped else None
-            with transaction(engine, tenant) as db:
-                jt.on_dead(db, ctx)
-        except Exception as hook_exc:
-            log.error("job.on_dead_failed", error=type(hook_exc).__name__)
 
 
 def retry(db: Session, job_id: UUID) -> bool:

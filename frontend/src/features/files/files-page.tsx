@@ -1,5 +1,6 @@
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useRef, useState } from "react";
+import { Link } from "react-router-dom";
 
 import type { components } from "../../api/schema";
 import { Alert, Button, Card, Empty, ErrorAlert, Loading } from "../../components/ui";
@@ -17,7 +18,7 @@ const KIND_TYPES: Record<Kind, string> = {
   attachment: ".pdf,.csv,.xlsx",
 };
 
-const STATUS_TEXT: Record<string, string> = {
+export const STATUS_TEXT: Record<string, string> = {
   pending: "Scanning…",
   clean: "Clean",
   infected: "Blocked: malware found",
@@ -183,7 +184,11 @@ export function FilesPage() {
             <tbody>
               {files.data.data.map((f) => (
                 <tr key={f.id} className="border-t border-line">
-                  <td className="py-2">{f.original_name}</td>
+                  <td className="py-2">
+                    <Link to={`/files/${f.id}`} className="text-brand underline">
+                      {f.original_name}
+                    </Link>
+                  </td>
                   <td>{f.kind}</td>
                   <td>
                     {f.size_bytes < 1024 ? `${f.size_bytes} B` : `${(f.size_bytes / 1024).toFixed(1)} KB`}
