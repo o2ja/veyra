@@ -91,7 +91,7 @@ def test_retirement_must_point_at_the_next_current_version_of_the_same_key(
     v2 = run_import(ws, clean_file(ws, "v2.csv", f"{HEADER}\n{changed}\n".encode()), "sales")
     assert v2["counts"]["changed"] == 1, v2
     with as_app(app_engine, ws.tenant_id) as conn:
-        ids = dict(
+        ids: dict[str, Any] = dict(
             conn.execute(
                 text("SELECT document_number, id FROM sales_document_lines WHERE is_current ORDER BY 1")
             )

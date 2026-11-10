@@ -62,6 +62,7 @@ class Action(StrEnum):
     IMPORT_CONFIRMED = "import.confirmed"
     IMPORT_COMPLETED = "import.completed"
     IMPORT_FAILED = "import.failed"
+    IMPORT_ERRORS_EXPORTED = "import.errors_exported"
 
 
 AUDITED_FIELDS: dict[str, frozenset[str]] = {

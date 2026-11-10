@@ -16,7 +16,7 @@ from uuid import UUID
 from sqlalchemy import Select, func, or_, select
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.exc import IntegrityError
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, aliased
 
 from rebate.core import clock
 from rebate.core.errors import Conflict, InvalidState, NotFound, PreconditionFailed, ValidationFailed
@@ -733,6 +733,32 @@ class ParentCycle(InvalidState):
         )
 
 
+def check_parent_cycles(db: Session, tenant_id: UUID, parents: dict[str, str | None]) -> None:
+    """Whole-import check before any chunk loads: the hierarchy after applying ``parents`` (code -> parent
+    code, from every row of the file) on top of the workspace's customers stays acyclic, so a cycle refuses
+    the import before an earlier chunk could commit. Raises ``ParentCycle``."""
+    parent = aliased(Customer)
+    rows = db.execute(
+        select(Customer.code, parent.code)
+        .outerjoin(
+            parent, (parent.tenant_id == Customer.tenant_id) & (parent.id == Customer.parent_customer_id)
+        )
+        .where(Customer.tenant_id == tenant_id)
+    )
+    graph: dict[str, str | None] = {str(code): parent_code for code, parent_code in rows}
+    graph.update(parents)
+    done: set[str] = set()
+    for start in parents:
+        path: set[str] = set()
+        node: str | None = start
+        while node is not None and node not in done:
+            if node in path:
+                raise ParentCycle(node, graph.get(node) or "")
+            path.add(node)
+            node = graph.get(node)
+        done |= path
+
+
 def _imported(
     db: Session, who: Who, action: Action, entity: str, row: Any, after: dict[str, Any], before: Any = None
 ) -> None:
@@ -776,7 +802,13 @@ def load_customers(db: Session, who: Who, rows: list[dict[str, Any]], counts: Lo
         if r["parent_customer_code"] and values["parent_customer_id"] is None:
             raise InvalidState(f"parent customer {r['parent_customer_code']} vanished during the import")
         current = existing.get(r["customer_code"])
-        if values["parent_customer_id"] is not None:
+        # A new customer has no children, so it cannot close a cycle; only a changed parent of an existing
+        # customer is walked (one query per ancestor). The whole file was checked before the first chunk.
+        if (
+            current is not None
+            and values["parent_customer_id"] is not None
+            and values["parent_customer_id"] != current.parent_customer_id
+        ):
             try:
                 _check_parent(db, tenant_id, current.id if current else None, values["parent_customer_id"])
             except ValidationFailed:
