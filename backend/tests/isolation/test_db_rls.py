@@ -307,8 +307,8 @@ S3_ROWS: dict[str, tuple[str, str]] = {
     "purchase_documents": ("id", "pdoc"),
     "purchase_document_lines": ("id", "pline"),
 }
-# Append-only/versioned: no DELETE grant and a BEFORE UPDATE trigger that rejects a tenant change before RLS
-# is reached (both covered in tests/integration/test_masterdata.py and test_d9_s3_source_tables_*).
+# Append-only/versioned: no DELETE grant and UPDATE granted only on is_current/superseded_by_id, so a tenant
+# change is refused before RLS (both covered in tests/integration/test_masterdata.py and test_d9_s3_source_tables_*).
 S3_SOURCE = ("sales_documents", "sales_document_lines", "purchase_documents", "purchase_document_lines")
 S3_MUTABLE = sorted(set(S3_ROWS) - set(S3_SOURCE))
 
@@ -361,9 +361,9 @@ def test_d2_s3_select_by_foreign_id_returns_nothing(app_engine: Engine, world: W
 def test_d3_s3_update_foreign_row_affects_nothing(app_engine: Engine, world: World, table: str) -> None:
     column, key = S3_ROWS[table]
     with as_app(app_engine, world.a.tenant_id) as conn:
-        got = _outcome(
-            conn, f"UPDATE {table} SET tenant_id = tenant_id WHERE {column} = :id", {"id": world.b.s3[key]}
-        )
+        # source tables: the app role may only update the versioning columns (column-level grant)
+        target = "is_current = is_current" if table in S3_SOURCE else "tenant_id = tenant_id"
+        got = _outcome(conn, f"UPDATE {table} SET {target} WHERE {column} = :id", {"id": world.b.s3[key]})
     assert got == "n=0", breach(f"A updated B's {table} row ({got})")
 
 
@@ -414,4 +414,6 @@ def test_d9_s3_source_tables_cannot_be_deleted_or_moved(app_engine: Engine, worl
             {"b": world.b.tenant_id, "id": world.a.s3[key]},
         )
     assert deleted.startswith("error: permission denied"), deleted
-    assert moved.startswith("error:") and "versioned" in moved, moved
+    assert moved.startswith("error: permission denied"), (
+        moved
+    )  # UPDATE granted on is_current/superseded_by_id only

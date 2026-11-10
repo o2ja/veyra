@@ -20,15 +20,20 @@ from contextlib import contextmanager
 from dataclasses import dataclass
 from datetime import date, datetime, time
 from itertools import chain
+from typing import Any
 
 from openpyxl import load_workbook  # type: ignore[import-untyped]
 
 from rebate.modules.files import decode_text
+from rebate.modules.ingestion.normalizers import CARD_REMOVED, card_like_integer
 
 DELIMITERS = (",", ";", "\t", "|")
 MAX_COLUMNS = 200
 HEADER_SCAN_ROWS = 30
 MAX_CELL = 5000
+# XLSX: a sheet can declare (or contain) a million formatted-but-empty rows; refuse instead of iterating them
+MAX_EMPTY_RUN = 10_000
+MAX_EMPTY_TOTAL = 100_000
 EXTRA_CELLS = "\x1fextra"  # marker key: the row had more filled cells than the header
 
 
@@ -110,13 +115,28 @@ def xlsx_source(data: bytes, sheet: str | None = None) -> Iterator[Source]:
         if sheet is not None and sheet not in wb.sheetnames:
             raise ReadError("sheet_not_found", "The workbook has no sheet with that name.")
         ws = wb[sheet] if sheet is not None else wb.worksheets[0]
-        rows = (
-            (number, [cell_text(v) for v in values[:MAX_COLUMNS]])
-            for number, values in enumerate(ws.iter_rows(values_only=True), start=1)
-        )
-        yield Source("xlsx", None, ws.title, rows)
+        ws.reset_dimensions()  # never trust the declared <dimension> (e.g. A1:XFD1048576)
+        yield Source("xlsx", None, ws.title, _xlsx_rows(ws))
     finally:
         wb.close()
+
+
+def _xlsx_rows(ws: Any) -> Iterator[Row]:
+    run = total = 0
+    for number, values in enumerate(ws.iter_rows(max_col=MAX_COLUMNS, values_only=True), start=1):
+        cells = [CARD_REMOVED if card_like_integer(v) else cell_text(v) for v in values]
+        while cells and not cells[-1]:  # max_col pads every row to MAX_COLUMNS
+            cells.pop()
+        if any(c.strip() for c in cells):
+            run = 0
+        else:
+            run, total = run + 1, total + 1
+            if run > MAX_EMPTY_RUN or total > MAX_EMPTY_TOTAL:
+                raise ReadError(
+                    "too_many_empty_rows",
+                    "The sheet contains too many empty rows. Delete the empty rows below the data and save again.",
+                )
+        yield number, cells
 
 
 def _filled(cells: list[str]) -> int:
