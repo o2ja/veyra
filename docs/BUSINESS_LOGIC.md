@@ -228,7 +228,7 @@ Rounding is applied to the **cumulative** figure only. **Entry delta = `earned_c
 
 **Example R1 (retroactive catch-up; product plan/research figures).** Tiers: 0 → 1.5%; 1,000,000 → 2.5%; 2,000,000 → 3.5%, retroactive, purchases basis.
 - Cumulative 990,000 → tier 1 → earned 14,850.00 (accrued 14,850.00).
-- Purchases reach exactly 1,000,000 → tier 2 → earned 25,000.00 → **delta = 25,000.00 − 15,000.00 = 10,000.00** (the catch-up).
+- Purchases reach exactly 1,000,000 → tier 2 → earned 25,000.00 → **delta = 25,000.00 − 14,850.00 = 10,150.00** (= 10,000.00 catch-up on the 990,000 + 150.00 on the new 10,000; owner-approved correction 2026-11-10, the earlier text subtracted 15,000.00, which was never accrued).
 - If instead a 20,000 receipt takes cumulative from 990,000 to 1,010,000: earned 25,250.00; **delta = 25,250.00 − 14,850.00 = 10,400.00** (= 9,900.00 catch-up on prior volume + 500.00 on the new 20,000).
 
 **Example R2 (claw-back).** Cumulative 1,010,000, accrued 25,250.00. A vendor credit of 20,000 → cumulative 990,000 → tier 1 → earned 14,850.00 → **delta = −10,400.00**. Negative deltas are never placed in a claim batch as claim lines; they become `rebate_clawback` adjustments requiring approval.
@@ -239,7 +239,7 @@ Rounding is applied to the **cumulative** figure only. **Entry delta = `earned_c
 
 ### 5.4 Identifying SPA lines (for `spa_lines`)
 
-A sales line is an SPA line if it has a non-null `spa_reference` **or** its calculation result in the same run has `status = eligible` under an SPA agreement. SPA calculation therefore runs before rebate calculation within a run. If both signals disagree, the trace records both and the `spa_reference` wins.
+A sales line is an SPA line if it has a non-null `spa_reference` **or** its calculation result in the same run has `status = eligible` under an SPA agreement. SPA calculation therefore runs before rebate calculation within a run. Either signal suffices (owner decision 2026-11-10): a line with no `spa_reference` that is `eligible` under an SPA agreement is an SPA line, and so is a line with a reference whose SPA result is not eligible. The trace records both signals.
 
 ### 5.5 Rebate claims
 
@@ -465,7 +465,7 @@ Rules: all numbers are strings; step order is fixed; the trace is canonicalised 
 | GL-S10 | Date basis ship vs invoice | `expired_agreement` vs eligible |
 | GL-S11 | Price mismatch | `price_mismatch`, amount 0 claimed |
 | GL-S12 | Conflict: equal priority / higher priority | `conflicting_agreements` / winner by priority |
-| GL-R1 | Retro crossing | delta 10,000.00 and 10,400.00 |
+| GL-R1 | Retro crossing | delta 10,150.00 and 10,400.00 |
 | GL-R2 | Claw-back | −10,400.00 |
 | GL-R3 | Qualify-only / exclude / boundary | 25,000.00; 25,000.00; 14,999.99 |
 | GL-R4 | Incremental | 27,500.00 |

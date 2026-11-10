@@ -58,7 +58,7 @@ r1, r2t, r3t = D("0.015"), D("0.025"), D("0.035")
 earned_990 = r2(D(990000) * r1)
 results.append(check("R1 earned 990k", earned_990, D("14850.00")))
 earned_1m = r2(D(1000000) * r2t)
-results.append(check("R1 delta at 1.0M", earned_1m - r2(D(1000000) * r1), D("10000.00")))
+results.append(check("R1 delta at 1.0M", earned_1m - earned_990, D("10150.00")))
 results.append(check("R1 delta 990k->1.01M", r2(D(1010000) * r2t) - earned_990, D("10400.00")))
 # R2
 results.append(check("R2 clawback", earned_990 - r2(D(1010000) * r2t), D("-10400.00")))
