@@ -85,7 +85,12 @@ test("master data: manufacturer and settings, customer and alias, product, UoM c
   await page.getByLabel("From unit").fill("RL");
   await page.getByLabel("To unit").fill("FT");
   await page.getByLabel("Factor", { exact: true }).fill("500");
+  const created = page.waitForResponse(
+    (r) => r.url().endsWith("/api/v1/uom-conversions") && r.request().method() === "POST",
+  );
   await page.getByRole("button", { name: "Add conversion" }).click();
+  const res = await created;
+  expect(res.status(), await res.text()).toBe(201);
   await expect(page.getByText("Conversion added.")).toBeVisible();
   await expect(
     page.getByRole("table", { name: "Unit-of-measure conversions" }).getByText("500"),
