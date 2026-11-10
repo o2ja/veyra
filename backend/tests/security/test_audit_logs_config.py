@@ -119,7 +119,10 @@ def test_no_secret_column_ever_reaches_the_audit_log(admin_engine: Engine) -> No
             .scalars()
             .all()
         )
-    assert not {k for k in keys if re.search(r"hash|secret|token|password|code", k)}
+    # "code" alone is the master-data business identifier (manufacturer/customer/branch code, e.g. VOLT);
+    # anything else naming a code (recovery_code, code_hash, ...) is still refused.
+    business = {"code"}
+    assert not {k for k in keys if re.search(r"hash|secret|token|password|code", k)} - business
 
 
 def test_permission_denials_are_audited_and_rate_limited(app: FastAPI, api: Api) -> None:

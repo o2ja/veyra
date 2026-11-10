@@ -1,6 +1,8 @@
 """Upload validation (SECURITY.md §4, FR-FI-02/03): allow-list per kind, extension + declared MIME +
-magic bytes must agree, size limits, XLSX container checks (zip bomb, macros, encryption)."""
+magic bytes must agree, size limits, XLSX container checks (zip bomb, macros, encryption), CSV text in a
+supported encoding (UTF-8 with or without BOM, Windows-1252, UTF-16 LE/BE with BOM; S3)."""
 
+import codecs
 import re
 import unicodedata
 import zipfile
@@ -100,11 +102,63 @@ def check_content(ext: str, head: bytes, body: IO[bytes]) -> Checked:
     detected = magic.from_buffer(head, mime=True)
     if detected not in DETECTED[ext]:
         raise _reject("content_type_mismatch")
-    if ext == "csv" and b"\0" in head:
-        raise _reject("content_type_mismatch")
+    if ext == "csv":
+        body.seek(0)
+        try:
+            decode_text(body.read())  # bounded by the size limit checked before
+        except UndecodableText as exc:
+            raise UploadRejected(
+                details=[{"field": "file", "code": exc.code, "message": exc.message}]
+            ) from None
+        finally:
+            body.seek(0)
     if ext == "xlsx":
         _check_xlsx(body)
     return Checked(ext, detected, CONTENT_TYPE[ext])
+
+
+class UndecodableText(DomainError):
+    """CSV bytes that are not text in a supported encoding (user-facing; also raised by the importer)."""
+
+    code = "encoding_unsupported"
+    status_code = 422
+    message = (
+        "The file is not readable text. Save it as CSV in UTF-8 (recommended), Windows-1252 (ANSI) "
+        "or Unicode (UTF-16 with byte-order mark)."
+    )
+
+
+TEXT_ENCODINGS = ("utf-8", "utf-8-sig", "cp1252", "utf-16-le", "utf-16-be")
+
+
+def decode_text(data: bytes) -> tuple[str, str]:
+    """Detect and decode CSV bytes: ``(encoding, text)``. A byte-order mark decides (UTF-8, UTF-16 LE/BE);
+    without one, strict UTF-8 is tried first, then Windows-1252 (the ANSI code page of US Excel). Text
+    with NUL characters (binary content, or UTF-16 without a byte-order mark) is rejected."""
+    if data.startswith(codecs.BOM_UTF8):
+        encoding, payload = "utf-8-sig", data[len(codecs.BOM_UTF8) :]
+    elif data.startswith(codecs.BOM_UTF16_LE):
+        encoding, payload = "utf-16-le", data[2:]
+    elif data.startswith(codecs.BOM_UTF16_BE):
+        encoding, payload = "utf-16-be", data[2:]
+    else:
+        encoding, payload = "utf-8", data
+    try:
+        text = payload.decode("utf-8" if encoding == "utf-8-sig" else encoding)
+    except UnicodeDecodeError:
+        if encoding != "utf-8":
+            raise UndecodableText() from None
+        try:
+            encoding, text = "cp1252", payload.decode("cp1252")
+        except UnicodeDecodeError:
+            raise UndecodableText() from None
+    if "\x00" in text:
+        raise UndecodableText()
+    return encoding, text
+
+
+def detect_text_encoding(data: bytes) -> str:
+    return decode_text(data)[0]
 
 
 # Active content: VBA (vbaProject.bin), Excel 4 macro sheets, OLE embeddings, ActiveX, external links

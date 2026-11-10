@@ -39,6 +39,29 @@ class Action(StrEnum):
     FILE_SCAN_ERROR = "file.scan_error"
     FILE_DOWNLOAD_URL_ISSUED = "file.download_url_issued"
     JOB_RETRIED = "job.retried"
+    MANUFACTURER_CREATED = "manufacturer.created"
+    MANUFACTURER_UPDATED = "manufacturer.updated"
+    MANUFACTURER_SETTINGS_UPDATED = "manufacturer.settings_updated"
+    REASON_CODE_MAPPINGS_REPLACED = "manufacturer.reason_code_mappings_replaced"
+    CUSTOMER_CREATED = "customer.created"
+    CUSTOMER_UPDATED = "customer.updated"
+    CUSTOMER_ALIAS_ADDED = "customer.alias_added"
+    PRODUCT_CREATED = "product.created"
+    PRODUCT_UPDATED = "product.updated"
+    PRODUCT_ALIAS_ADDED = "product.alias_added"
+    BRANCH_CREATED = "branch.created"
+    UOM_CONVERSION_CREATED = "uom_conversion.created"
+    UOM_CONVERSION_UPDATED = "uom_conversion.updated"
+    UOM_CONVERSION_DELETED = "uom_conversion.deleted"
+    UNMAPPED_ENTITY_RESOLVED = "unmapped_entity.resolved"
+    MAPPING_TEMPLATE_CREATED = "mapping_template.created"
+    MAPPING_TEMPLATE_UPDATED = "mapping_template.updated"
+    MAPPING_TEMPLATE_DELETED = "mapping_template.deleted"
+    IMPORT_CREATED = "import.created"
+    IMPORT_MAPPING_SET = "import.mapping_set"
+    IMPORT_CONFIRMED = "import.confirmed"
+    IMPORT_COMPLETED = "import.completed"
+    IMPORT_FAILED = "import.failed"
 
 
 AUDITED_FIELDS: dict[str, frozenset[str]] = {
@@ -59,4 +82,53 @@ AUDITED_FIELDS: dict[str, frozenset[str]] = {
     "permission": frozenset({"permission", "method", "route"}),
     "file": frozenset({"kind", "original_name", "size_bytes", "sha256", "scan_status"}),
     "job": frozenset({"kind", "status", "attempts"}),
+    "manufacturer": frozenset({"name", "code", "external_id", "active"}),
+    "manufacturer_settings": frozenset(
+        {
+            "claim_window_days",
+            "claim_window_basis",
+            "dispute_window_days",
+            "dispute_window_basis",
+            "allow_negative_claims",
+            "conflict_policy",
+            "variance_tolerance",
+            "payment_lag_days_expected",
+            "notes",
+        }
+    ),
+    "customer": frozenset(
+        {"name", "code", "external_id", "customer_type", "parent_customer_id", "active", "alias"}
+    ),
+    "product": frozenset(
+        {
+            "sku",
+            "description",
+            "manufacturer_id",
+            "manufacturer_part_number",
+            "base_uom",
+            "category",
+            "list_cost",
+            "active",
+            "alias",
+            "alias_type",
+        }
+    ),
+    "branch": frozenset({"name", "code"}),
+    "uom_conversion": frozenset({"product_id", "from_uom", "to_uom", "factor"}),
+    "unmapped_entity": frozenset({"status", "resolved_entity_id", "external_value"}),
+    "mapping_template": frozenset(
+        {"name", "import_type", "header_signature", "mapping", "options", "version"}
+    ),
+    "import_batch": frozenset(
+        {
+            "import_type",
+            "file_id",
+            "source_system",
+            "status",
+            "mapping_template_id",
+            "mapping_revision",
+            "accept_partial",
+            "counts",
+        }
+    ),
 }
