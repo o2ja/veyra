@@ -200,7 +200,9 @@ export function ProductsPage() {
             loading={list.isPending}
             error={list.error}
             rows={list.data?.data}
-            empty={q || manufacturer ? "No product matches." : "No products yet. Import a product file or add one."}
+            empty={
+              q || manufacturer ? "No product matches." : "No products yet. Import a product file or add one."
+            }
             columns={[
               {
                 header: "SKU",
@@ -239,7 +241,12 @@ function EditProduct({ p }: { p: Product }) {
   });
   const save = useMutation({
     mutationFn: () =>
-      unwrap(api.PATCH("/api/v1/products/{product_id}", { params: { path: { product_id: p.id } }, body: body(form) })),
+      unwrap(
+        api.PATCH("/api/v1/products/{product_id}", {
+          params: { path: { product_id: p.id } },
+          body: body(form),
+        }),
+      ),
     onSuccess: () => void client.invalidateQueries({ queryKey: ["products"] }),
   });
   const error = save.error as ApiError | null;
@@ -342,7 +349,10 @@ export function ProductDetailPage() {
             empty="No aliases."
             columns={[
               { header: "Alias", cell: (a) => <span className="font-mono">{a.alias}</span> },
-              { header: "Type", cell: (a) => ALIAS_TYPES.find(([v]) => v === a.alias_type)?.[1] ?? a.alias_type },
+              {
+                header: "Type",
+                cell: (a) => ALIAS_TYPES.find(([v]) => v === a.alias_type)?.[1] ?? a.alias_type,
+              },
               { header: "Added (UTC)", cell: (a) => utc(a.created_at) },
             ]}
           />

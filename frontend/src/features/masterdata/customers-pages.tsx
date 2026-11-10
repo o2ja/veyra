@@ -44,7 +44,13 @@ function TypeSelect({ value, onChange }: { value: string; onChange: (v: Customer
 
 function CreateCustomer() {
   const client = useQueryClient();
-  const empty = { name: "", code: "", external_id: "", customer_type: "contractor" as CustomerType, parent: "" };
+  const empty = {
+    name: "",
+    code: "",
+    external_id: "",
+    customer_type: "contractor" as CustomerType,
+    parent: "",
+  };
   const [form, setForm] = useState(empty);
   const create = useMutation({
     mutationFn: () =>
@@ -56,6 +62,7 @@ function CreateCustomer() {
             external_id: orNull(form.external_id),
             customer_type: form.customer_type,
             parent_customer_id: orNull(form.parent),
+            active: true,
           },
         }),
       ),
@@ -119,7 +126,9 @@ export function CustomersPage() {
     queryKey: ["customers", q, pager.cursor],
     queryFn: () =>
       unwrap(
-        api.GET("/api/v1/customers", { params: { query: { q: q || null, cursor: pager.cursor, limit: 50 } } }),
+        api.GET("/api/v1/customers", {
+          params: { query: { q: q || null, cursor: pager.cursor, limit: 50 } },
+        }),
       ),
   });
   return (
@@ -160,7 +169,10 @@ export function CustomersPage() {
                 ),
               },
               { header: "Code", cell: (c) => c.code ?? "—" },
-              { header: "Type", cell: (c) => TYPES.find(([v]) => v === c.customer_type)?.[1] ?? c.customer_type },
+              {
+                header: "Type",
+                cell: (c) => TYPES.find(([v]) => v === c.customer_type)?.[1] ?? c.customer_type,
+              },
               { header: "Status", cell: (c) => (c.active ? "Active" : "Inactive") },
             ]}
           />

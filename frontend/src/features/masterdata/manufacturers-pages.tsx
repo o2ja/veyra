@@ -29,7 +29,7 @@ function CreateManufacturer() {
     mutationFn: () =>
       unwrap(
         api.POST("/api/v1/manufacturers", {
-          body: { name: form.name, code: form.code, external_id: orNull(form.external_id) },
+          body: { name: form.name, code: form.code, external_id: orNull(form.external_id), active: true },
         }),
       ),
     onSuccess: () => {
@@ -139,9 +139,13 @@ function SettingsForm({ manufacturerId, initial }: { manufacturerId: string; ini
           },
           body: {
             claim_window_days: form.claim_window_days,
-            claim_window_basis: form.claim_window_basis as SettingsIn["claim_window_basis"],
+            claim_window_basis: form.claim_window_basis as NonNullable<
+              SettingsIn["claim_window_basis"]
+            > | null,
             dispute_window_days: form.dispute_window_days,
-            dispute_window_basis: form.dispute_window_basis as SettingsIn["dispute_window_basis"],
+            dispute_window_basis: form.dispute_window_basis as NonNullable<
+              SettingsIn["dispute_window_basis"]
+            > | null,
             variance_tolerance: form.variance_tolerance,
             conflict_policy: form.conflict_policy as NonNullable<SettingsIn["conflict_policy"]>,
             allow_negative_claims: form.allow_negative_claims,
@@ -320,13 +324,17 @@ function ReasonCodeMappings({ manufacturerId }: { manufacturerId: string }) {
       }}
     >
       <p className="text-sm text-muted">
-        Translate the manufacturer&apos;s own deduction or rejection codes into Veyra reason codes (for example{" "}
-        <code>price_mismatch</code>). Saving replaces the whole list.
+        Translate the manufacturer&apos;s own deduction or rejection codes into Veyra reason codes (for
+        example <code>price_mismatch</code>). Saving replaces the whole list.
       </p>
       <ErrorAlert error={(query.error as ApiError | null) ?? (save.error as ApiError | null)} />
       {current.length === 0 && <p className="text-sm text-muted">No mappings yet.</p>}
       {current.map((r, i) => (
-        <fieldset key={i} disabled={!editable} className="grid gap-2 sm:grid-cols-[1fr_2fr_1fr_auto] sm:items-end">
+        <fieldset
+          key={i}
+          disabled={!editable}
+          className="grid gap-2 sm:grid-cols-[1fr_2fr_1fr_auto] sm:items-end"
+        >
           <legend className="sr-only">Mapping {i + 1}</legend>
           <Field
             label="Manufacturer code"

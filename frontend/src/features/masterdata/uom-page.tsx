@@ -87,7 +87,9 @@ export function UomConversions({ productId }: { productId?: string }) {
   });
   const remove = useMutation({
     mutationFn: (id: string) =>
-      unwrap(api.DELETE("/api/v1/uom-conversions/{conversion_id}", { params: { path: { conversion_id: id } } })),
+      unwrap(
+        api.DELETE("/api/v1/uom-conversions/{conversion_id}", { params: { path: { conversion_id: id } } }),
+      ),
     onSuccess: refresh,
   });
   const error = create.error as ApiError | null;

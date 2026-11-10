@@ -1,6 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
 import { useRef, useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 
 import type { components } from "../../api/schema";
 import { Alert, Button, Card, ErrorAlert, Field, fieldError } from "../../components/ui";
@@ -60,7 +60,12 @@ export function NewImportPage() {
       const r = await unwrap(
         api.POST("/api/v1/imports", {
           params: { header: { "idempotency-key": idempotencyKey.current } },
-          body: { file_id: id, import_type: type, source_system: system, mapping_template_id: template || null },
+          body: {
+            file_id: id,
+            import_type: type,
+            source_system: system,
+            mapping_template_id: template || null,
+          },
         }),
       );
       navigate(`/imports/${r.import.id}`);
@@ -68,7 +73,9 @@ export function NewImportPage() {
       // refused by the server: a corrected retry is a new request. A network error keeps the key (the
       // request may have arrived), so retrying replays it instead of starting a second import.
       if (!(e instanceof ApiError && e.status === 0)) idempotencyKey.current = crypto.randomUUID();
-      setError(e instanceof ApiError ? e : new ApiError(0, "internal_error", "Something went wrong.", [], null));
+      setError(
+        e instanceof ApiError ? e : new ApiError(0, "internal_error", "Something went wrong.", [], null),
+      );
     } finally {
       setBusy(false);
       setProgress(null);
@@ -81,7 +88,12 @@ export function NewImportPage() {
         <fieldset className="flex flex-col gap-2">
           <legend className="mb-1 text-sm font-medium">File</legend>
           <label className="flex items-center gap-2 text-sm">
-            <input type="radio" name="source" checked={source === "upload"} onChange={() => setSource("upload")} />
+            <input
+              type="radio"
+              name="source"
+              checked={source === "upload"}
+              onChange={() => setSource("upload")}
+            />
             Upload a new file (CSV or XLSX)
           </label>
           <label className="flex items-center gap-2 text-sm">
@@ -99,10 +111,22 @@ export function NewImportPage() {
             <label htmlFor="import-file" className="text-sm font-medium">
               File to upload
             </label>
-            <input id="import-file" ref={input} type="file" accept=".csv,.xlsx" required className="text-sm" />
+            <input
+              id="import-file"
+              ref={input}
+              type="file"
+              accept=".csv,.xlsx"
+              required
+              className="text-sm"
+            />
           </div>
         ) : (
-          <SelectField label="Uploaded file" required value={fileId} onChange={(e) => setFileId(e.target.value)}>
+          <SelectField
+            label="Uploaded file"
+            required
+            value={fileId}
+            onChange={(e) => setFileId(e.target.value)}
+          >
             <option value="">{files.isPending ? "Loading…" : "Choose…"}</option>
             {importable?.map((f) => (
               <option key={f.id} value={f.id}>
@@ -111,7 +135,11 @@ export function NewImportPage() {
             ))}
           </SelectField>
         )}
-        <SelectField label="What the file contains" value={type} onChange={(e) => setType(e.target.value as ImportType)}>
+        <SelectField
+          label="What the file contains"
+          value={type}
+          onChange={(e) => setType(e.target.value as ImportType)}
+        >
           {Object.entries(TYPE_TEXT).map(([v, t]) => (
             <option key={v} value={v}>
               {t}
@@ -127,7 +155,11 @@ export function NewImportPage() {
           onChange={(e) => setSystem(e.target.value.trim())}
         />
         {can("mapping.write") && (
-          <SelectField label="Column mapping template" value={template} onChange={(e) => setTemplate(e.target.value)}>
+          <SelectField
+            label="Column mapping template"
+            value={template}
+            onChange={(e) => setTemplate(e.target.value)}
+          >
             <option value="">Automatic (reuse a saved template for these headers, else map now)</option>
             {templates.data?.data.map((t) => (
               <option key={t.id} value={t.id}>
@@ -143,10 +175,16 @@ export function NewImportPage() {
         )}
         {error?.code === "duplicate_file" ? (
           <Alert>
-            This file was already uploaded. Choose “Use a file that is already uploaded” and pick it from the list.
+            This file was already uploaded. Choose “Use a file that is already uploaded” and pick it from the
+            list.
           </Alert>
         ) : (
           <ErrorAlert error={error} />
+        )}
+        {error?.code === "too_many_running_imports" && (
+          <Link to="/imports" className="text-brand underline">
+            See the imports being processed
+          </Link>
         )}
         <div>
           <Button type="submit" disabled={busy}>

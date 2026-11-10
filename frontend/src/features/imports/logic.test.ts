@@ -11,7 +11,11 @@ const fields = [
 
 test("each server status maps to one wizard step", () => {
   const at = (status: string, needs_mapping = false) => stepOf({ status, needs_mapping });
-  expect(["uploaded", "scanning", "parsing"].map((s) => at(s))).toEqual(["processing", "processing", "processing"]);
+  expect(["uploaded", "scanning", "parsing"].map((s) => at(s))).toEqual([
+    "processing",
+    "processing",
+    "processing",
+  ]);
   expect(at("awaiting_confirmation", true)).toBe("map");
   expect(at("awaiting_confirmation", false)).toBe("review");
   expect(at("loading")).toBe("loading");
@@ -34,9 +38,11 @@ test("required fields need a column or a default; defaults for mapped fields are
   expect(unmappedRequired(fields, mapping, {})).toEqual(["currency_code"]);
   expect(unmappedRequired(fields, mapping, { currency_code: "  " })).toEqual(["currency_code"]);
   expect(unmappedRequired(fields, mapping, { currency_code: "USD" })).toEqual([]);
-  expect(cleanDefaults(mapping, { currency_code: " USD ", document_number: "X", spa_reference: "" })).toEqual({
-    currency_code: "USD",
-  });
+  expect(cleanDefaults(mapping, { currency_code: " USD ", document_number: "X", spa_reference: "" })).toEqual(
+    {
+      currency_code: "USD",
+    },
+  );
 });
 
 test("keyset pager keeps a cursor stack for previous/next", () => {

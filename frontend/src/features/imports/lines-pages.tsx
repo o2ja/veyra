@@ -5,7 +5,15 @@ import type { components } from "../../api/schema";
 import { Card, ErrorAlert, Field, Loading } from "../../components/ui";
 import { api } from "../../lib/api/client";
 import { ApiError, unwrap } from "../../lib/api/errors";
-import { Checkbox, DataTable, EntityPicker, ManufacturerSelect, PagerControls, SelectField, usePager } from "../masterdata/common";
+import {
+  Checkbox,
+  DataTable,
+  EntityPicker,
+  ManufacturerSelect,
+  PagerControls,
+  SelectField,
+  usePager,
+} from "../masterdata/common";
 
 type Lineage = components["schemas"]["Lineage"];
 type Kind = "sales" | "purchases";
@@ -34,7 +42,9 @@ function LinesNav() {
         <NavLink
           key={k}
           to={`/lines/${k}`}
-          className={({ isActive }) => (isActive ? "font-medium underline underline-offset-4" : "text-muted hover:text-ink")}
+          className={({ isActive }) =>
+            isActive ? "font-medium underline underline-offset-4" : "text-muted hover:text-ink"
+          }
         >
           {k === "sales" ? "Sales lines" : "Purchase lines"}
         </NavLink>
@@ -88,7 +98,9 @@ export function LinesPage({ kind }: { kind: Kind }) {
     queryFn: () =>
       unwrap(
         api.GET("/api/v1/purchase-lines", {
-          params: { query: { ...filters, doc_type: (docType || null) as "receipt" | "vendor_credit" | null } },
+          params: {
+            query: { ...filters, doc_type: (docType || null) as "receipt" | "vendor_credit" | null },
+          },
         }),
       ),
     enabled: kind === "purchases",
@@ -105,7 +117,11 @@ export function LinesPage({ kind }: { kind: Kind }) {
             value={get("manufacturer_id")}
             onChange={(v) => set("manufacturer_id", v)}
           />
-          <SelectField label="Document type" value={docType} onChange={(e) => set("doc_type", e.target.value)}>
+          <SelectField
+            label="Document type"
+            value={docType}
+            onChange={(e) => set("doc_type", e.target.value)}
+          >
             <option value="">All</option>
             {kind === "sales" ? (
               <>
@@ -125,8 +141,18 @@ export function LinesPage({ kind }: { kind: Kind }) {
             value={get("document_number")}
             onChange={(e) => set("document_number", e.target.value.trim())}
           />
-          <Field label="Date from" type="date" value={get("date_from")} onChange={(e) => set("date_from", e.target.value)} />
-          <Field label="Date to" type="date" value={get("date_to")} onChange={(e) => set("date_to", e.target.value)} />
+          <Field
+            label="Date from"
+            type="date"
+            value={get("date_from")}
+            onChange={(e) => set("date_from", e.target.value)}
+          />
+          <Field
+            label="Date to"
+            type="date"
+            value={get("date_to")}
+            onChange={(e) => set("date_to", e.target.value)}
+          />
           <Field
             label="Import batch ID"
             value={get("import_batch_id")}
@@ -140,7 +166,12 @@ export function LinesPage({ kind }: { kind: Kind }) {
               onChange={(v) => set("customer_id", v)}
             />
           )}
-          <EntityPicker kind="product" label="Product" value={get("product_id")} onChange={(v) => set("product_id", v)} />
+          <EntityPicker
+            kind="product"
+            label="Product"
+            value={get("product_id")}
+            onChange={(v) => set("product_id", v)}
+          />
           <Checkbox
             label="Include superseded versions"
             checked={Boolean(get("all_versions"))}
@@ -166,9 +197,23 @@ export function LinesPage({ kind }: { kind: Kind }) {
               { header: "Type", cell: (l) => (l.doc_type === "credit_note" ? "Credit note" : "Invoice") },
               { header: "Invoice date", cell: (l) => l.invoice_date },
               { header: "SKU", cell: (l) => <span className="font-mono">{l.sku_raw}</span> },
-              { header: "Quantity", cell: (l) => <span className="font-mono">{l.quantity} {l.uom}</span> },
+              {
+                header: "Quantity",
+                cell: (l) => (
+                  <span className="font-mono">
+                    {l.quantity} {l.uom}
+                  </span>
+                ),
+              },
               { header: "Unit price", cell: (l) => <span className="font-mono">{l.unit_price}</span> },
-              { header: "Amount", cell: (l) => <span className="font-mono">{l.extended_amount} {l.currency_code}</span> },
+              {
+                header: "Amount",
+                cell: (l) => (
+                  <span className="font-mono">
+                    {l.extended_amount} {l.currency_code}
+                  </span>
+                ),
+              },
               { header: "Source", cell: (l) => <LineageCell l={l.lineage} /> },
             ]}
           />
@@ -184,9 +229,23 @@ export function LinesPage({ kind }: { kind: Kind }) {
               { header: "Type", cell: (l) => (l.doc_type === "vendor_credit" ? "Vendor credit" : "Receipt") },
               { header: "Date", cell: (l) => l.document_date },
               { header: "SKU", cell: (l) => <span className="font-mono">{l.sku_raw}</span> },
-              { header: "Quantity", cell: (l) => <span className="font-mono">{l.quantity} {l.uom}</span> },
+              {
+                header: "Quantity",
+                cell: (l) => (
+                  <span className="font-mono">
+                    {l.quantity} {l.uom}
+                  </span>
+                ),
+              },
               { header: "Unit cost", cell: (l) => <span className="font-mono">{l.unit_cost}</span> },
-              { header: "Amount", cell: (l) => <span className="font-mono">{l.extended_amount} {l.currency_code}</span> },
+              {
+                header: "Amount",
+                cell: (l) => (
+                  <span className="font-mono">
+                    {l.extended_amount} {l.currency_code}
+                  </span>
+                ),
+              },
               { header: "Source", cell: (l) => <LineageCell l={l.lineage} /> },
             ]}
           />
@@ -201,7 +260,8 @@ export function SalesLinePage() {
   const { lineId = "" } = useParams();
   const line = useQuery({
     queryKey: ["lines", "sales", lineId],
-    queryFn: () => unwrap(api.GET("/api/v1/sales-lines/{line_id}", { params: { path: { line_id: lineId } } })),
+    queryFn: () =>
+      unwrap(api.GET("/api/v1/sales-lines/{line_id}", { params: { path: { line_id: lineId } } })),
   });
   const l = line.data;
   const rows: [string, React.ReactNode][] = l
@@ -209,9 +269,28 @@ export function SalesLinePage() {
         ["Type", l.doc_type === "credit_note" ? "Credit note" : "Invoice"],
         ["Invoice date", l.invoice_date],
         ["Ship date", l.ship_date ?? "—"],
-        ["Customer", <Link key="c" to={`/master-data/customers/${l.customer_id}`} className="text-brand underline">Open customer</Link>],
-        ["SKU in file", <span key="s" className="font-mono">{l.sku_raw}</span>],
-        ["Product", l.product_id ? <Link key="p" to={`/master-data/products/${l.product_id}`} className="text-brand underline">Open product</Link> : "Not matched"],
+        [
+          "Customer",
+          <Link key="c" to={`/master-data/customers/${l.customer_id}`} className="text-brand underline">
+            Open customer
+          </Link>,
+        ],
+        [
+          "SKU in file",
+          <span key="s" className="font-mono">
+            {l.sku_raw}
+          </span>,
+        ],
+        [
+          "Product",
+          l.product_id ? (
+            <Link key="p" to={`/master-data/products/${l.product_id}`} className="text-brand underline">
+              Open product
+            </Link>
+          ) : (
+            "Not matched"
+          ),
+        ],
         ["Description", l.description ?? "—"],
         ["Quantity", `${l.quantity} ${l.uom}`],
         ["Unit price", l.unit_price],
@@ -220,11 +299,38 @@ export function SalesLinePage() {
         ["Amount", `${l.extended_amount} ${l.currency_code}`],
         ["SPA reference", l.spa_reference ?? "—"],
         ["Project reference", l.project_reference ?? "—"],
-        ["Original line", l.original_line_id ? <Link key="o" to={`/lines/sales/${l.original_line_id}`} className="text-brand underline">Open original invoice line</Link> : "—"],
+        [
+          "Original line",
+          l.original_line_id ? (
+            <Link key="o" to={`/lines/sales/${l.original_line_id}`} className="text-brand underline">
+              Open original invoice line
+            </Link>
+          ) : (
+            "—"
+          ),
+        ],
         ["Source", <LineageCell key="src" l={l.lineage} />],
         ["Source system", l.lineage.source_system],
-        ["Previous version", l.previous_version_id ? <Link key="pv" to={`/lines/sales/${l.previous_version_id}`} className="text-brand underline">Open previous version</Link> : "—"],
-        ["Newer version", l.lineage.superseded_by_id ? <Link key="nv" to={`/lines/sales/${l.lineage.superseded_by_id}`} className="text-brand underline">Open newer version</Link> : "—"],
+        [
+          "Previous version",
+          l.previous_version_id ? (
+            <Link key="pv" to={`/lines/sales/${l.previous_version_id}`} className="text-brand underline">
+              Open previous version
+            </Link>
+          ) : (
+            "—"
+          ),
+        ],
+        [
+          "Newer version",
+          l.lineage.superseded_by_id ? (
+            <Link key="nv" to={`/lines/sales/${l.lineage.superseded_by_id}`} className="text-brand underline">
+              Open newer version
+            </Link>
+          ) : (
+            "—"
+          ),
+        ],
         ["Changed after claim", l.source_changed ? "Yes" : "No"],
       ]
     : [];

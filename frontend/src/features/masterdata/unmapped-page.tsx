@@ -76,8 +76,8 @@ export function UnmappedPage() {
       <MasterDataNav />
       <Card title="Unmapped customers and products">
         <p className="mb-4 text-sm text-muted">
-          Values from imported files that match no customer or product. Rows that use them were held back;
-          map each value to a record (or ignore it), then import the file again to load those rows.
+          Values from imported files that match no customer or product. Rows that use them were held back; map
+          each value to a record (or ignore it), then import the file again to load those rows.
         </p>
         <div className="mb-4 grid max-w-xl gap-3 sm:grid-cols-2">
           <SelectField

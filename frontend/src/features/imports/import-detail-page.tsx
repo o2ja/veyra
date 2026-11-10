@@ -70,7 +70,9 @@ function MappingForm({ i, preview, onDone }: { i: ImportOut; preview: Preview; o
   const opts = i.options as Options;
   const [defaults, setDefaults] = useState<Record<string, string>>(opts.defaults ?? {});
   const [dateOrder, setDateOrder] = useState<NonNullable<Options["date_order"]>>(opts.date_order ?? "MDY");
-  const [decimal, setDecimal] = useState<NonNullable<Options["decimal_separator"]>>(opts.decimal_separator ?? ".");
+  const [decimal, setDecimal] = useState<NonNullable<Options["decimal_separator"]>>(
+    opts.decimal_separator ?? ".",
+  );
   const [template, setTemplate] = useState("");
   const [ai, setAi] = useState<ApiError | null>(null);
   const save = useMutation({
@@ -80,7 +82,11 @@ function MappingForm({ i, preview, onDone }: { i: ImportOut; preview: Preview; o
           params: { path: { import_id: i.id } },
           body: {
             mapping,
-            options: { date_order: dateOrder, decimal_separator: decimal, defaults: cleanDefaults(mapping, defaults) },
+            options: {
+              date_order: dateOrder,
+              decimal_separator: decimal,
+              defaults: cleanDefaults(mapping, defaults),
+            },
             save_as_template: template.trim() ? { name: template.trim() } : null,
           },
         }),
@@ -90,7 +96,9 @@ function MappingForm({ i, preview, onDone }: { i: ImportOut; preview: Preview; o
   async function suggest() {
     setAi(null);
     try {
-      await unwrap(api.POST("/api/v1/imports/{import_id}/suggest-mapping", { params: { path: { import_id: i.id } } }));
+      await unwrap(
+        api.POST("/api/v1/imports/{import_id}/suggest-mapping", { params: { path: { import_id: i.id } } }),
+      );
     } catch (e) {
       setAi(e instanceof ApiError ? e : null);
     }
@@ -107,15 +115,20 @@ function MappingForm({ i, preview, onDone }: { i: ImportOut; preview: Preview; o
     >
       <p className="text-sm text-muted">
         Choose the column for each field. The choices are pre-filled from the column names
-        {preview.template ? ` and the template “${preview.template.name}”` : ""}; check them before you continue.
+        {preview.template ? ` and the template “${preview.template.name}”` : ""}; check them before you
+        continue.
       </p>
       <div className="overflow-x-auto">
         <table className="w-full text-left text-sm">
           <caption className="sr-only">Column mapping</caption>
           <thead className="text-muted">
             <tr>
-              <th scope="col" className="py-2 pr-4">Field</th>
-              <th scope="col" className="pr-4">Column in the file</th>
+              <th scope="col" className="py-2 pr-4">
+                Field
+              </th>
+              <th scope="col" className="pr-4">
+                Column in the file
+              </th>
               <th scope="col">Fixed value if not in the file</th>
             </tr>
           </thead>
@@ -126,7 +139,9 @@ function MappingForm({ i, preview, onDone }: { i: ImportOut; preview: Preview; o
                   {label(f.name)}
                   {f.required && <span className="text-danger"> (required)</span>}
                   {fieldError(error, `mapping.${f.name}`) && (
-                    <span className="block text-xs text-danger">{fieldError(error, `mapping.${f.name}`)}</span>
+                    <span className="block text-xs text-danger">
+                      {fieldError(error, `mapping.${f.name}`)}
+                    </span>
                   )}
                 </th>
                 <td className="pr-4">
@@ -160,11 +175,19 @@ function MappingForm({ i, preview, onDone }: { i: ImportOut; preview: Preview; o
         </table>
       </div>
       <div className="grid max-w-2xl gap-3 sm:grid-cols-3">
-        <SelectField label="Date order" value={dateOrder} onChange={(e) => setDateOrder(e.target.value as "MDY" | "DMY")}>
+        <SelectField
+          label="Date order"
+          value={dateOrder}
+          onChange={(e) => setDateOrder(e.target.value as "MDY" | "DMY")}
+        >
           <option value="MDY">Month/day/year (6/12/2026 = June 12)</option>
           <option value="DMY">Day/month/year (6/12/2026 = 6 December)</option>
         </SelectField>
-        <SelectField label="Decimal separator" value={decimal} onChange={(e) => setDecimal(e.target.value as "." | ",")}>
+        <SelectField
+          label="Decimal separator"
+          value={decimal}
+          onChange={(e) => setDecimal(e.target.value as "." | ",")}
+        >
           <option value=".">Point (1,234.56)</option>
           <option value=",">Comma (1.234,56)</option>
         </SelectField>
@@ -176,9 +199,7 @@ function MappingForm({ i, preview, onDone }: { i: ImportOut; preview: Preview; o
           onChange={(e) => setTemplate(e.target.value)}
         />
       </div>
-      {missing.length > 0 && (
-        <Alert tone="info">Still needed: {missing.map(label).join(", ")}.</Alert>
-      )}
+      {missing.length > 0 && <Alert tone="info">Still needed: {missing.map(label).join(", ")}.</Alert>}
       {ai && (
         <Alert tone="info">
           {ai.code === "ai_not_enabled" ? ai.message : `AI suggestion failed: ${ai.message}`}
@@ -260,7 +281,10 @@ function RowErrors({ i }: { i: ImportOut }) {
       />
       <PagerControls pager={pager} page={list.data?.page} />
       {Boolean(list.data?.data.length) && (
-        <a href={`/api/v1/imports/${i.id}/errors?format=csv`} className="mt-3 inline-block text-brand underline">
+        <a
+          href={`/api/v1/imports/${i.id}/errors?format=csv`}
+          className="mt-3 inline-block text-brand underline"
+        >
           Download all row errors (CSV)
         </a>
       )}
@@ -336,7 +360,15 @@ function Changes({ i }: { i: ImportOut }) {
   );
 }
 
-function Review({ i, preview, onMapAgain }: { i: ImportOut; preview: Preview | undefined; onMapAgain: () => void }) {
+function Review({
+  i,
+  preview,
+  onMapAgain,
+}: {
+  i: ImportOut;
+  preview: Preview | undefined;
+  onMapAgain: () => void;
+}) {
   const client = useQueryClient();
   const [partial, setPartial] = useState(false);
   const confirm = useMutation({
@@ -354,8 +386,8 @@ function Review({ i, preview, onMapAgain }: { i: ImportOut; preview: Preview | u
     <div className="flex flex-col gap-4">
       {rejected > 0 ? (
         <Alert>
-          {rejected} of {i.counts.rows_total} rows have errors and cannot be loaded. Fix the file and import it
-          again, or load only the valid rows.
+          {rejected} of {i.counts.rows_total} rows have errors and cannot be loaded. Fix the file and import
+          it again, or load only the valid rows.
         </Alert>
       ) : (
         <Alert tone="ok">All {i.counts.valid} rows passed the checks.</Alert>
@@ -369,6 +401,11 @@ function Review({ i, preview, onMapAgain }: { i: ImportOut; preview: Preview | u
         />
       )}
       <ErrorAlert error={confirm.error as ApiError | null} />
+      {(confirm.error as ApiError | null)?.code === "too_many_running_imports" && (
+        <Link to="/imports" className="text-brand underline">
+          See the imports being processed
+        </Link>
+      )}
       <div className="flex flex-wrap gap-3">
         <Button disabled={confirm.isPending || (rejected > 0 && !partial)} onClick={() => confirm.mutate()}>
           Confirm import
@@ -428,7 +465,12 @@ export function ImportDetailPage() {
               <dd>{i.source_system}</dd>
               <dt className="text-muted">Format</dt>
               <dd>
-                {[i.detected_encoding, i.delimiter && `delimiter “${i.delimiter}”`, i.sheet_name && `sheet ${i.sheet_name}`, i.header_row && `header in row ${i.header_row}`]
+                {[
+                  i.detected_encoding,
+                  i.delimiter && `delimiter “${i.delimiter}”`,
+                  i.sheet_name && `sheet ${i.sheet_name}`,
+                  i.header_row && `header in row ${i.header_row}`,
+                ]
                   .filter(Boolean)
                   .join(", ") || "—"}
               </dd>
@@ -495,7 +537,9 @@ export function ImportDetailPage() {
       {i && step === "done" && (
         <Card title="Result">
           {i.status === "completed_with_errors" ? (
-            <Alert tone="info">Loaded the valid rows; {i.counts.rejected} rows were rejected (see below).</Alert>
+            <Alert tone="info">
+              Loaded the valid rows; {i.counts.rejected} rows were rejected (see below).
+            </Alert>
           ) : (
             <Alert tone="ok">Import completed.</Alert>
           )}

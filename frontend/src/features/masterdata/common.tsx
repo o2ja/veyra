@@ -175,12 +175,7 @@ export function ManufacturerSelect({
 }) {
   const list = useManufacturers();
   return (
-    <SelectField
-      label={label}
-      value={value}
-      required={required}
-      onChange={(e) => onChange(e.target.value)}
-    >
+    <SelectField label={label} value={value} required={required} onChange={(e) => onChange(e.target.value)}>
       <option value="">{allowAny ?? "Choose…"}</option>
       {list.data?.data.map((m) => (
         <option key={m.id} value={m.id}>
