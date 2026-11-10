@@ -8,7 +8,10 @@ transaction; spike recorded in ADR-005). ARCHITECTURE.md §6 rules, as implement
 * The handler's effects and the job's ``succeeded`` mark commit in the same transaction.
 * Retries: bounded (``max_attempts``), exponential backoff with jitter; ``PermanentError`` fails at once.
   Terminal state ``failed`` (dead letter) is visible in the admin API; ``on_dead`` hooks run then.
-* A crashed worker's job is reclaimed when its lease (``locked_until``) expires.
+* A crashed worker's job is reclaimed when its lease (``locked_until``) expires. A handler that may run
+  longer than the lease calls ``ctx.renew_lease()`` periodically (S3): a short separate transaction that
+  extends the lease only while this attempt still owns the job, else raises ``LeaseLost`` (the handler's
+  uncommitted work is then rolled back). Chunked jobs instead keep every chunk well inside the lease.
 """
 
 import random
@@ -77,6 +80,20 @@ class JobContext:
     payload: dict[str, Any]
     attempt: int
     created_by: UUID | None
+    engine: Engine | None = None
+
+    def renew_lease(self) -> None:
+        """Extend this attempt's lease by ``LEASE`` from now. Raises ``LeaseLost`` if it was reclaimed."""
+        if self.engine is None:
+            raise RuntimeError("renew_lease needs the worker engine")
+        now = clock.now()
+        with transaction(self.engine) as db:
+            result = db.execute(
+                update(Job)
+                .where(Job.id == self.id, Job.status == "running", Job.attempts == self.attempt)
+                .values(locked_until=now + LEASE, updated_at=now)
+            )
+            _owned(result)
 
 
 Handler = Callable[[Session, JobContext], None]
@@ -221,7 +238,13 @@ def run_once(engine: Engine, settings: Settings) -> bool:
         return False
     claimed, lost = got
     ctx = JobContext(
-        settings, claimed.id, claimed.tenant_id, dict(claimed.payload), claimed.attempts, claimed.created_by
+        settings,
+        claimed.id,
+        claimed.tenant_id,
+        dict(claimed.payload),
+        claimed.attempts,
+        claimed.created_by,
+        engine,
     )
     jt = REGISTRY.get(claimed.kind)
     structlog.contextvars.bind_contextvars(job_id=str(claimed.id), job_kind=claimed.kind)
