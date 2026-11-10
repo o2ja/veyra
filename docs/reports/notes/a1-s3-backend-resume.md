@@ -1,41 +1,27 @@
 # A1 S3 backend: resume notes (WIP, branch `s3-backend`)
 
-## Done (built)
-- Migrations `20261111_0900_masterdata` (down 20261110_1200_s2_review_fixes) and `20261111_1000_import_pipeline`
-  (down 20261111_0900_masterdata). Models mirror; `tests/db` incl. `alembic check` PASS.
-- `modules/masterdata`: models, service (CRUD, settings If-Match, reason-code mappings PUT, aliases, parent-cycle
-  check, UoM CRUD, unmapped queue + resolve map/ignore, auto-resolve, bulk loads for imports), schemas, router, pagination.
-- `modules/ingestion`: normalizers, readers (CSV encodings via files.decode_text, XLSX read-only/data_only), validators
-  (fields per import type, suggest/check mapping, cross-row rules), loader (versioned upsert, ON CONFLICT, claims hook),
-  service (job chain parse -> confirm -> chunked load with checkpoint), jobs, lines (browse/changes), idempotency
-  (POST /imports), claims_hook (returns no claims before S7, documented), router.
-- core/jobs: `JobContext.engine` + `renew_lease()`. files/validation: UTF-8/BOM/cp1252/UTF-16-BOM accepted, clear
-  `encoding_unsupported`. files/__init__ exports get/read_clean/decode_text (outside owned files: flag in report).
-- Permissions: `manufacturer_settings.write` (A P). Audit actions + AUDITED_FIELDS entries. Routers registered,
-  worker registers ingestion jobs, import-linter contracts for both modules.
-- origin/main merged (httpx2 fix).
+Built and earlier test results: see `a1-s3-backend.md` §1 (folded in). Items 1-2 of the original list are done
+(commit b03bf80).
 
-## Tested
-- tests/unit/test_ingestion_{normalizers,readers,validators}.py: 93 PASS.
-
-## In progress (exact state)
-- tests/integration/test_imports.py + conftest.py written, first run fails in fixture: `import_parse` after
-  PUT mapping raises **TypeError** (job retry). Likely in service.validate (bulk `update(ImportStagedRow)` params,
-  or `insert(ImportRowError)`), debug by calling validate directly / printing traceback. Also `.tuples()` deprecation
-  warning in service.py ~415 (replace with plain rows).
+## Written in session 3, NOT yet run against Postgres (shared Docker services were down: all
+`veyra-recover-*` containers Exited (255); COMMON forbids starting them)
+- `tests/isolation/conftest.py`: TENANT_TABLES + one World row per S3 table (`TenantData.s3`).
+- `tests/isolation/test_db_rls.py`: guard `test_every_tenant_isolated_table_is_in_the_isolation_suite`
+  (pg_policies tenant_isolation == TENANT_TABLES), S3 D2/D3/D5 (all 18 tables), D4/D6 (14 non-source tables),
+  `test_d9_s3_source_tables_cannot_be_deleted_or_moved` (passes with RLS off by design).
+- `tests/isolation/test_routes.py`: S3 seed per side (`_seed_s3`), PARAM_SOURCES for 8 new params, `_call` PUT
+  with If-Match "1", per-path valid BODIES, S3 list R2, foreign-id filter R2, S3 R3.
+- `tests/integration/conftest.py`: `seed_master`, `walk` helpers. `test_masterdata.py`: sales-lines pagination,
+  `test_purchase_line_filters_and_pagination`.
+- `tests/integration/test_import_performance.py` (+ marker/deselect in tests/conftest.py).
+- Lint (ruff, format, mypy) green; unit validators green. Client regenerated. SECURITY.md encoding row.
 
 ## Remaining, in order
-1. Fix TypeError; get tests/integration/test_imports.py green.
-2. Tests: lease-outlive (monkeypatch jobs.LEASE short, threads, admin connection holding a lock, second worker
-   reclaims, assert no duplicate rows); crash/resume mid-load (LOAD_CHUNK small, exception in 2nd chunk, retry);
-   renew_lease unit test; masterdata API tests (CRUD, If-Match, audit rows); DB trigger tests (source rows immutable,
-   no DELETE as app role); sales-lines/purchase-lines filters + pagination.
-3. Performance test `@pytest.mark.performance` (register marker + deselect by default in conftest; pyproject not
-   owned). 1M-row CSV ~150 MB exceeds 50 MB upload cap: seed file object directly; record rows/s + memory in notes.
-4. Isolation: TENANT_TABLES + World rows for all new tables, D-series coverage, PARAM_SOURCES for new path params
-   (manufacturer_id, customer_id, product_id, conversion_id, entry_id, import_id, template_id, line_id), route
-   matrix `_call` must handle PUT; raise negative_control MIN_TESTS; run negative control.
-5. Regenerate frontend client (`make gen-client` equivalent). Docs: DATABASE_SCHEMA (list_cost, severity, phase,
-   batch columns, source_changed, currency on lines, upper-case canonical codes), API_SPECIFICATION (endpoints,
-   ai_not_enabled 409, import_has_errors), SECURITY/ARCHITECTURE (encodings). Notes file `a1-s3-backend.md`.
-6. Full suite + lint, push, PR, CI green, final report.
+1. Run: tests/integration/test_masterdata.py -k "line or products_uom"; tests/isolation (all); fix.
+2. Count isolation tests, set negative_control MIN_TESTS to that count; run negative control (db rebate_negctl):
+   `REBATE_TEST_DB=rebate_negctl python -m tests.isolation.negative_control`.
+3. Perf: 1M file already generated at scratchpad `perf/gen/sales/sales_volume_1000000.csv` (163 MB; regenerate:
+   ephemeral `pip install --target /tmp/gd reportlab`, `PYTHONPATH=/tmp/gd python /testdata/generate.py
+   --volume 1000000 --out /perf/gen`). Run with `-v <dir>:/perf -e PERF_SALES_CSV=/perf/gen/sales/...
+   pytest -m performance -s tests/integration/test_import_performance.py`; record into notes §6.
+4. Fill notes §5 (criterion -> test), full suite + lint once, delete this file, commit, push, PR, CI.

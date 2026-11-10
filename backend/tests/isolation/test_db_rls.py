@@ -283,3 +283,135 @@ def test_d13_owner_can_run_the_operator_lookup(owner_engine: Engine, world: Worl
         rows = conn.execute(sql, {"u": world.m_user_id}).all()
         conn.rollback()
     assert len(rows) == 2
+
+
+# ---- S3 tables (master data, import pipeline, source lines) -----------------------------------------
+# table -> (column identifying the fixture row, key into TenantData.s3)
+S3_ROWS: dict[str, tuple[str, str]] = {
+    "manufacturers": ("id", "mfr"),
+    "manufacturer_settings": ("manufacturer_id", "mfr"),
+    "reason_code_mappings": ("id", "rcm"),
+    "customers": ("id", "cust"),
+    "customer_aliases": ("id", "calias"),
+    "branches": ("id", "branch"),
+    "products": ("id", "prod"),
+    "product_aliases": ("id", "palias"),
+    "uom_conversions": ("id", "uom"),
+    "unmapped_entities": ("id", "unm"),
+    "mapping_templates": ("id", "tpl"),
+    "import_batches": ("id", "batch"),
+    "import_staged_rows": ("import_batch_id", "batch"),
+    "import_row_errors": ("id", "err"),
+    "sales_documents": ("id", "sdoc"),
+    "sales_document_lines": ("id", "sline"),
+    "purchase_documents": ("id", "pdoc"),
+    "purchase_document_lines": ("id", "pline"),
+}
+# Append-only/versioned: no DELETE grant and a BEFORE UPDATE trigger that rejects a tenant change before RLS
+# is reached (both covered in tests/integration/test_masterdata.py and test_d9_s3_source_tables_*).
+S3_SOURCE = ("sales_documents", "sales_document_lines", "purchase_documents", "purchase_document_lines")
+S3_MUTABLE = sorted(set(S3_ROWS) - set(S3_SOURCE))
+
+
+def test_every_tenant_isolated_table_is_in_the_isolation_suite(admin_engine: Engine) -> None:
+    """Every table carrying the tenant_isolation policy is attacked by D1/D7/D8/D12, and every S3 one by the
+    S3 D-series below (policies survive the negative control's DISABLE ROW LEVEL SECURITY)."""
+    with admin_engine.connect() as conn:
+        policed = set(
+            conn.execute(
+                text("SELECT tablename FROM pg_policies WHERE policyname = 'tenant_isolation'")
+            ).scalars()
+        )
+    s2 = {
+        "tenants",
+        "tenant_settings",
+        "memberships",
+        "invitations",
+        "audit_log",
+        "idempotency_keys",
+        "file_objects",
+    }
+    assert policed == set(TENANT_TABLES), policed ^ set(TENANT_TABLES)
+    assert policed - s2 == set(S3_ROWS), (policed - s2) ^ set(S3_ROWS)
+
+
+def _outcome(conn: Connection, sql: str, params: dict[str, object]) -> str:
+    """'rls' if row-level security rejected it, 'n=<rows>' if it ran, else the other error (= row was reachable)."""
+    savepoint = conn.begin_nested()
+    try:
+        n = conn.execute(text(sql), params).rowcount
+    except DBAPIError as exc:
+        savepoint.rollback()
+        return "rls" if "row-level security" in str(exc.orig) else f"error: {str(exc.orig).splitlines()[0]}"
+    savepoint.rollback()
+    return f"n={n}"
+
+
+@pytest.mark.parametrize("table", sorted(S3_ROWS))
+def test_d2_s3_select_by_foreign_id_returns_nothing(app_engine: Engine, world: World, table: str) -> None:
+    column, key = S3_ROWS[table]
+    with as_app(app_engine, world.a.tenant_id) as conn:
+        rows = conn.execute(
+            text(f"SELECT 1 FROM {table} WHERE {column} = :id"), {"id": world.b.s3[key]}
+        ).all()
+    assert rows == [], breach(f"A reads B's {table} row by id")
+
+
+@pytest.mark.parametrize("table", sorted(S3_ROWS))
+def test_d3_s3_update_foreign_row_affects_nothing(app_engine: Engine, world: World, table: str) -> None:
+    column, key = S3_ROWS[table]
+    with as_app(app_engine, world.a.tenant_id) as conn:
+        got = _outcome(
+            conn, f"UPDATE {table} SET tenant_id = tenant_id WHERE {column} = :id", {"id": world.b.s3[key]}
+        )
+    assert got == "n=0", breach(f"A updated B's {table} row ({got})")
+
+
+@pytest.mark.parametrize("table", S3_MUTABLE)
+def test_d4_s3_delete_foreign_row_affects_nothing(app_engine: Engine, world: World, table: str) -> None:
+    column, key = S3_ROWS[table]
+    with as_app(app_engine, world.a.tenant_id) as conn:
+        got = _outcome(conn, f"DELETE FROM {table} WHERE {column} = :id", {"id": world.b.s3[key]})
+    assert got == "n=0", breach(f"A deleted B's {table} row ({got})")
+
+
+@pytest.mark.parametrize("table", sorted(S3_ROWS))
+def test_d5_s3_insert_into_foreign_tenant_is_rejected(app_engine: Engine, world: World, table: str) -> None:
+    """Copies A's own fixture row with tenant_id = B (and a fresh id); RLS WITH CHECK must reject it."""
+    with as_app(app_engine, world.a.tenant_id) as conn:
+        got = _outcome(
+            conn,
+            f"INSERT INTO {table} SELECT (jsonb_populate_record(NULL::{table}, to_jsonb(x) || "
+            f"jsonb_build_object('tenant_id', CAST(:b AS uuid), 'id', gen_random_uuid()))).* "
+            f"FROM {table} x WHERE tenant_id = :a",
+            {"a": world.a.tenant_id, "b": world.b.tenant_id},
+        )
+    assert got == "rls", breach(f"insert of a {table} row into tenant B was not rejected by RLS ({got})")
+
+
+@pytest.mark.parametrize("table", S3_MUTABLE)
+def test_d6_s3_moving_a_row_to_another_tenant_is_rejected(
+    app_engine: Engine, world: World, table: str
+) -> None:
+    column, key = S3_ROWS[table]
+    with as_app(app_engine, world.a.tenant_id) as conn:
+        got = _outcome(
+            conn,
+            f"UPDATE {table} SET tenant_id = :b WHERE {column} = :id",
+            {"b": world.b.tenant_id, "id": world.a.s3[key]},
+        )
+    assert got == "rls", breach(f"A moved its {table} row into tenant B ({got})")
+
+
+@pytest.mark.parametrize("table", S3_SOURCE)
+def test_d9_s3_source_tables_cannot_be_deleted_or_moved(app_engine: Engine, world: World, table: str) -> None:
+    column, key = S3_ROWS[table]
+    with as_app(app_engine, world.a.tenant_id) as conn:
+        deleted = _outcome(conn, f"DELETE FROM {table} WHERE {column} = :id", {"id": world.a.s3[key]})
+        moved = _outcome(
+            conn,
+            f"UPDATE {table} SET tenant_id = :b WHERE {column} = :id",
+            {"b": world.b.tenant_id, "id": world.a.s3[key]},
+        )
+    assert deleted.startswith("error: permission denied"), deleted
+    assert moved.startswith("error:") and "versioned" in moved, moved

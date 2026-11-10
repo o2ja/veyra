@@ -331,6 +331,77 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/branches": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List Branches */
+        get: operations["branch_list"];
+        put?: never;
+        /** Create Branch */
+        post: operations["branch_create"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/customers": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List Customers */
+        get: operations["customer_list"];
+        put?: never;
+        /** Create Customer */
+        post: operations["customer_create"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/customers/{customer_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Customer */
+        get: operations["customer_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /** Update Customer */
+        patch: operations["customer_update"];
+        trace?: never;
+    };
+    "/api/v1/customers/{customer_id}/aliases": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Add Customer Alias */
+        post: operations["customer_alias_add"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/files": {
         parameters: {
             query?: never;
@@ -411,6 +482,143 @@ export interface paths {
         get: operations["health_ready"];
         put?: never;
         post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/imports": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List Imports */
+        get: operations["import_list"];
+        put?: never;
+        /** Create Import */
+        post: operations["import_create"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/imports/{import_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Import */
+        get: operations["import_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/imports/{import_id}/changes": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Changes */
+        get: operations["import_changes"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/imports/{import_id}/confirm": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Confirm */
+        post: operations["import_confirm"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/imports/{import_id}/errors": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Errors */
+        get: operations["import_errors"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/imports/{import_id}/mapping": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /** Set Mapping */
+        put: operations["import_set_mapping"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/imports/{import_id}/preview": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Preview */
+        get: operations["import_preview"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/imports/{import_id}/suggest-mapping": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Suggest Mapping */
+        post: operations["import_suggest_mapping"];
         delete?: never;
         options?: never;
         head?: never;
@@ -523,6 +731,219 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/manufacturers": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List Manufacturers */
+        get: operations["manufacturer_list"];
+        put?: never;
+        /** Create Manufacturer */
+        post: operations["manufacturer_create"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/manufacturers/{manufacturer_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Manufacturer */
+        get: operations["manufacturer_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /** Update Manufacturer */
+        patch: operations["manufacturer_update"];
+        trace?: never;
+    };
+    "/api/v1/manufacturers/{manufacturer_id}/reason-code-mappings": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List Reason Code Mappings */
+        get: operations["reason_code_mapping_list"];
+        /** Replace Reason Code Mappings */
+        put: operations["reason_code_mapping_replace"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/manufacturers/{manufacturer_id}/settings": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Settings */
+        get: operations["manufacturer_settings_get"];
+        /** Put Settings */
+        put: operations["manufacturer_settings_put"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/mapping-templates": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List Templates */
+        get: operations["mapping_template_list"];
+        put?: never;
+        /** Create Template */
+        post: operations["mapping_template_create"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/mapping-templates/{template_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Template */
+        get: operations["mapping_template_get"];
+        /** Update Template */
+        put: operations["mapping_template_update"];
+        post?: never;
+        /** Delete Template */
+        delete: operations["mapping_template_delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/products": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List Products */
+        get: operations["product_list"];
+        put?: never;
+        /** Create Product */
+        post: operations["product_create"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/products/{product_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Product */
+        get: operations["product_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /** Update Product */
+        patch: operations["product_update"];
+        trace?: never;
+    };
+    "/api/v1/products/{product_id}/aliases": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Add Product Alias */
+        post: operations["product_alias_add"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/purchase-lines": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List Purchase Lines */
+        get: operations["purchase_line_list"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/sales-lines": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List Sales Lines */
+        get: operations["sales_line_list"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/sales-lines/{line_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Sales Line */
+        get: operations["sales_line_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/settings": {
         parameters: {
             query?: never;
@@ -539,6 +960,76 @@ export interface paths {
         head?: never;
         /** Patch Settings */
         patch: operations["settings_update"];
+        trace?: never;
+    };
+    "/api/v1/unmapped-entities": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List Unmapped */
+        get: operations["unmapped_entity_list"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/unmapped-entities/{entry_id}/resolve": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Resolve Unmapped */
+        post: operations["unmapped_entity_resolve"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/uom-conversions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List Uom Conversions */
+        get: operations["uom_conversion_list"];
+        put?: never;
+        /** Create Uom Conversion */
+        post: operations["uom_conversion_create"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/uom-conversions/{conversion_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /** Update Uom Conversion */
+        put: operations["uom_conversion_update"];
+        post?: never;
+        /** Delete Uom Conversion */
+        delete: operations["uom_conversion_delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
         trace?: never;
     };
     "/api/v1/users": {
@@ -651,6 +1142,216 @@ export interface components {
              */
             kind: "import" | "agreement" | "remittance" | "attachment";
         };
+        /** BranchIn */
+        BranchIn: {
+            /** Code */
+            code: string;
+            /** Name */
+            name: string;
+        };
+        /** BranchList */
+        BranchList: {
+            /** Data */
+            data: components["schemas"]["BranchOut"][];
+            page: components["schemas"]["Page"];
+        };
+        /** BranchOut */
+        BranchOut: {
+            /** Code */
+            code: string;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Name */
+            name: string;
+        };
+        /** ChangeList */
+        ChangeList: {
+            /** Data */
+            data: components["schemas"]["ChangeOut"][];
+            page: components["schemas"]["Page"];
+        };
+        /** ChangeOut */
+        ChangeOut: {
+            /** Changed Fields */
+            changed_fields: {
+                [key: string]: (string | null)[];
+            };
+            /** Document Number */
+            document_number: string;
+            /**
+             * Line Id
+             * Format: uuid
+             */
+            line_id: string;
+            /** Line Number */
+            line_number: number;
+            /**
+             * Previous Import Batch Id
+             * Format: uuid
+             */
+            previous_import_batch_id: string;
+            /**
+             * Previous Line Id
+             * Format: uuid
+             */
+            previous_line_id: string;
+            /** Source Changed */
+            source_changed: boolean;
+            /** Source Row Number */
+            source_row_number: number;
+            /** Version */
+            version: number;
+        };
+        /** ConfirmIn */
+        ConfirmIn: {
+            /**
+             * Accept Partial
+             * @default false
+             */
+            accept_partial: boolean;
+        };
+        /** CustomerAliasIn */
+        CustomerAliasIn: {
+            /** Alias */
+            alias: string;
+            /** Source */
+            source?: string | null;
+        };
+        /** CustomerAliasOut */
+        CustomerAliasOut: {
+            /** Alias */
+            alias: string;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /**
+             * Customer Id
+             * Format: uuid
+             */
+            customer_id: string;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Source */
+            source: string | null;
+        };
+        /** CustomerDetail */
+        CustomerDetail: {
+            /** Active */
+            active: boolean;
+            /** Aliases */
+            aliases: components["schemas"]["CustomerAliasOut"][];
+            /** Code */
+            code: string | null;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /** Customer Type */
+            customer_type: string;
+            /** External Id */
+            external_id: string | null;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Name */
+            name: string;
+            /** Parent Customer Id */
+            parent_customer_id: string | null;
+            /**
+             * Updated At
+             * Format: date-time
+             */
+            updated_at: string;
+        };
+        /** CustomerIn */
+        CustomerIn: {
+            /**
+             * Active
+             * @default true
+             */
+            active: boolean;
+            /** Code */
+            code?: string | null;
+            /**
+             * Customer Type
+             * @default other
+             * @enum {string}
+             */
+            customer_type: "contractor" | "end_user" | "branch" | "other";
+            /** External Id */
+            external_id?: string | null;
+            /** Name */
+            name: string;
+            /** Parent Customer Id */
+            parent_customer_id?: string | null;
+        };
+        /** CustomerList */
+        CustomerList: {
+            /** Data */
+            data: components["schemas"]["CustomerOut"][];
+            page: components["schemas"]["Page"];
+        };
+        /** CustomerOut */
+        CustomerOut: {
+            /** Active */
+            active: boolean;
+            /** Code */
+            code: string | null;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /** Customer Type */
+            customer_type: string;
+            /** External Id */
+            external_id: string | null;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Name */
+            name: string;
+            /** Parent Customer Id */
+            parent_customer_id: string | null;
+            /**
+             * Updated At
+             * Format: date-time
+             */
+            updated_at: string;
+        };
+        /** CustomerPatch */
+        CustomerPatch: {
+            /** Active */
+            active?: boolean | null;
+            /** Code */
+            code?: string | null;
+            /** Customer Type */
+            customer_type?: ("contractor" | "end_user" | "branch" | "other") | null;
+            /** External Id */
+            external_id?: string | null;
+            /** Name */
+            name?: string | null;
+            /** Parent Customer Id */
+            parent_customer_id?: string | null;
+        };
         /** DownloadUrl */
         DownloadUrl: {
             /** Expires In Seconds */
@@ -666,6 +1367,15 @@ export interface components {
             new_email: string;
             /** Password */
             password: string;
+        };
+        /** FieldOut */
+        FieldOut: {
+            /** Kind */
+            kind: string;
+            /** Name */
+            name: string;
+            /** Required */
+            required: boolean;
         };
         /** FileList */
         FileList: {
@@ -726,6 +1436,126 @@ export interface components {
              */
             status: "ok";
         };
+        /** ImportAccepted */
+        ImportAccepted: {
+            import: components["schemas"]["ImportOut"];
+            job: components["schemas"]["JobRef"];
+        };
+        /** ImportCounts */
+        ImportCounts: {
+            /** Changed */
+            changed: number;
+            /** Duplicates */
+            duplicates: number;
+            /** Inserted */
+            inserted: number;
+            /** Rejected */
+            rejected: number;
+            /** Rows Total */
+            rows_total: number;
+            /** Source Changed */
+            source_changed: number;
+            /** Unchanged */
+            unchanged: number;
+            /** Valid */
+            valid: number;
+            /** Warnings */
+            warnings: number;
+        };
+        /** ImportIn */
+        ImportIn: {
+            /**
+             * File Id
+             * Format: uuid
+             */
+            file_id: string;
+            /**
+             * Import Type
+             * @enum {string}
+             */
+            import_type: "sales" | "purchases" | "customers" | "products" | "uom";
+            /** Mapping Template Id */
+            mapping_template_id?: string | null;
+            /**
+             * Source System
+             * @default default
+             */
+            source_system: string;
+        };
+        /** ImportList */
+        ImportList: {
+            /** Data */
+            data: components["schemas"]["ImportOut"][];
+            page: components["schemas"]["Page"];
+        };
+        /** ImportOut */
+        ImportOut: {
+            /** Accept Partial */
+            accept_partial: boolean;
+            /** Completed At */
+            completed_at: string | null;
+            /** Confirmed At */
+            confirmed_at: string | null;
+            /** Confirmed By */
+            confirmed_by: string | null;
+            counts: components["schemas"]["ImportCounts"];
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /**
+             * Created By
+             * Format: uuid
+             */
+            created_by: string;
+            /** Delimiter */
+            delimiter: string | null;
+            /** Detected Encoding */
+            detected_encoding: string | null;
+            /** Error Summary */
+            error_summary: string | null;
+            /**
+             * File Id
+             * Format: uuid
+             */
+            file_id: string;
+            /** Header Row */
+            header_row: number | null;
+            /** Headers */
+            headers: string[] | null;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Import Type */
+            import_type: string;
+            /** Mapping */
+            mapping: {
+                [key: string]: string | null;
+            } | null;
+            /** Mapping Revision */
+            mapping_revision: number;
+            /** Mapping Template Id */
+            mapping_template_id: string | null;
+            /** Mapping Template Version */
+            mapping_template_version: number | null;
+            /** Needs Mapping */
+            needs_mapping: boolean;
+            /** Options */
+            options: {
+                [key: string]: unknown;
+            };
+            /** Sheet Name */
+            sheet_name: string | null;
+            /** Source System */
+            source_system: string;
+            /** Started At */
+            started_at: string | null;
+            /** Status */
+            status: string;
+        };
         /** InvitationIn */
         InvitationIn: {
             /** Email */
@@ -772,6 +1602,17 @@ export interface components {
             /** Role */
             role: string;
         };
+        /** IssueOut */
+        IssueOut: {
+            /** Code */
+            code: string;
+            /** Column */
+            column: string | null;
+            /** Message */
+            message: string;
+            /** Severity */
+            severity: string;
+        };
         /** JobList */
         JobList: {
             /** Data */
@@ -807,6 +1648,43 @@ export interface components {
             /** Status */
             status: string;
         };
+        /** JobRef */
+        JobRef: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Progress */
+            progress: number;
+            /** Result Url */
+            result_url: string;
+            /** Status */
+            status: string;
+        };
+        /** Lineage */
+        Lineage: {
+            /**
+             * File Id
+             * Format: uuid
+             */
+            file_id: string;
+            /**
+             * Import Batch Id
+             * Format: uuid
+             */
+            import_batch_id: string;
+            /** Is Current */
+            is_current: boolean;
+            /** Source Row Number */
+            source_row_number: number;
+            /** Source System */
+            source_system: string;
+            /** Superseded By Id */
+            superseded_by_id: string | null;
+            /** Version */
+            version: number;
+        };
         /** LoginIn */
         LoginIn: {
             /** Email */
@@ -821,6 +1699,166 @@ export interface components {
              * @enum {string}
              */
             status: "signed_in" | "mfa_required";
+        };
+        /** ManufacturerIn */
+        ManufacturerIn: {
+            /**
+             * Active
+             * @default true
+             */
+            active: boolean;
+            /** Code */
+            code: string;
+            /** External Id */
+            external_id?: string | null;
+            /** Name */
+            name: string;
+        };
+        /** ManufacturerList */
+        ManufacturerList: {
+            /** Data */
+            data: components["schemas"]["ManufacturerOut"][];
+            page: components["schemas"]["Page"];
+        };
+        /** ManufacturerOut */
+        ManufacturerOut: {
+            /** Active */
+            active: boolean;
+            /** Code */
+            code: string;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /** External Id */
+            external_id: string | null;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Name */
+            name: string;
+            /**
+             * Updated At
+             * Format: date-time
+             */
+            updated_at: string;
+        };
+        /** ManufacturerPatch */
+        ManufacturerPatch: {
+            /** Active */
+            active?: boolean | null;
+            /** External Id */
+            external_id?: string | null;
+            /** Name */
+            name?: string | null;
+        };
+        /**
+         * ManufacturerSettingsIn
+         * @description PUT replaces every field (unset optional fields become null / their default).
+         */
+        ManufacturerSettingsIn: {
+            /**
+             * Allow Negative Claims
+             * @default false
+             */
+            allow_negative_claims: boolean;
+            /** Claim Window Basis */
+            claim_window_basis?: ("invoice_date" | "ship_date" | "period_end") | null;
+            /** Claim Window Days */
+            claim_window_days?: number | null;
+            /**
+             * Conflict Policy
+             * @default flag
+             * @enum {string}
+             */
+            conflict_policy: "flag" | "priority";
+            /** Dispute Window Basis */
+            dispute_window_basis?: ("remittance_date" | "submission_date") | null;
+            /** Dispute Window Days */
+            dispute_window_days?: number | null;
+            /** Notes */
+            notes?: string | null;
+            /** Payment Lag Days Expected */
+            payment_lag_days_expected?: number | null;
+            /**
+             * Variance Tolerance
+             * @default 0.01
+             */
+            variance_tolerance: number | string;
+        };
+        /** ManufacturerSettingsOut */
+        ManufacturerSettingsOut: {
+            /** Allow Negative Claims */
+            allow_negative_claims: boolean;
+            /** Claim Window Basis */
+            claim_window_basis: string | null;
+            /** Claim Window Days */
+            claim_window_days: number | null;
+            /** Conflict Policy */
+            conflict_policy: string;
+            /** Dispute Window Basis */
+            dispute_window_basis: string | null;
+            /** Dispute Window Days */
+            dispute_window_days: number | null;
+            /**
+             * Manufacturer Id
+             * Format: uuid
+             */
+            manufacturer_id: string;
+            /** Notes */
+            notes: string | null;
+            /** Payment Lag Days Expected */
+            payment_lag_days_expected: number | null;
+            /** Revision */
+            revision: number;
+            /**
+             * Updated At
+             * Format: date-time
+             */
+            updated_at: string;
+            /** Variance Tolerance */
+            variance_tolerance: string;
+        };
+        /** MappingIn */
+        MappingIn: {
+            /** Mapping */
+            mapping: {
+                [key: string]: string | null;
+            };
+            /**
+             * @default {
+             *       "date_order": "MDY",
+             *       "decimal_separator": ".",
+             *       "defaults": {}
+             *     }
+             */
+            options: components["schemas"]["MappingOptions"];
+            save_as_template?: components["schemas"]["TemplateRef"] | null;
+        };
+        /** MappingOptions */
+        MappingOptions: {
+            /**
+             * Date Order
+             * @default MDY
+             * @enum {string}
+             */
+            date_order: "MDY" | "DMY";
+            /**
+             * Decimal Separator
+             * @default .
+             * @enum {string}
+             */
+            decimal_separator: "." | ",";
+            /**
+             * Defaults
+             * @default {}
+             */
+            defaults: {
+                [key: string]: string;
+            };
         };
         /** MeOut */
         MeOut: {
@@ -900,6 +1938,279 @@ export interface components {
             /** New Password */
             new_password: string;
         };
+        /** PreviewOut */
+        PreviewOut: {
+            /** Fields */
+            fields: components["schemas"]["FieldOut"][];
+            /** Headers */
+            headers: string[];
+            import: components["schemas"]["ImportOut"];
+            /** Rows */
+            rows: components["schemas"]["PreviewRow"][];
+            /** Suggested Mapping */
+            suggested_mapping: {
+                [key: string]: string | null;
+            };
+            template: components["schemas"]["TemplateSummary"] | null;
+        };
+        /** PreviewRow */
+        PreviewRow: {
+            /** Issues */
+            issues: components["schemas"]["IssueOut"][];
+            /** Normalized */
+            normalized: {
+                [key: string]: unknown;
+            } | null;
+            /** Raw */
+            raw: {
+                [key: string]: string;
+            };
+            /** Row Number */
+            row_number: number;
+            /** Status */
+            status: string;
+        };
+        /** ProductAliasIn */
+        ProductAliasIn: {
+            /** Alias */
+            alias: string;
+            /**
+             * Alias Type
+             * @enum {string}
+             */
+            alias_type: "erp_sku" | "manufacturer_part" | "upc" | "other";
+        };
+        /** ProductAliasOut */
+        ProductAliasOut: {
+            /** Alias */
+            alias: string;
+            /** Alias Type */
+            alias_type: string;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /**
+             * Product Id
+             * Format: uuid
+             */
+            product_id: string;
+        };
+        /** ProductDetail */
+        ProductDetail: {
+            /** Active */
+            active: boolean;
+            /** Aliases */
+            aliases: components["schemas"]["ProductAliasOut"][];
+            /** Base Uom */
+            base_uom: string;
+            /** Category */
+            category: string | null;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /** Description */
+            description: string | null;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** List Cost */
+            list_cost: string | null;
+            /**
+             * Manufacturer Id
+             * Format: uuid
+             */
+            manufacturer_id: string;
+            /** Manufacturer Part Number */
+            manufacturer_part_number: string | null;
+            /** Sku */
+            sku: string;
+            /**
+             * Updated At
+             * Format: date-time
+             */
+            updated_at: string;
+        };
+        /** ProductIn */
+        ProductIn: {
+            /**
+             * Active
+             * @default true
+             */
+            active: boolean;
+            /** Base Uom */
+            base_uom: string;
+            /** Category */
+            category?: string | null;
+            /** Description */
+            description?: string | null;
+            /** List Cost */
+            list_cost?: number | string | null;
+            /**
+             * Manufacturer Id
+             * Format: uuid
+             */
+            manufacturer_id: string;
+            /** Manufacturer Part Number */
+            manufacturer_part_number?: string | null;
+            /** Sku */
+            sku: string;
+        };
+        /** ProductList */
+        ProductList: {
+            /** Data */
+            data: components["schemas"]["ProductOut"][];
+            page: components["schemas"]["Page"];
+        };
+        /** ProductOut */
+        ProductOut: {
+            /** Active */
+            active: boolean;
+            /** Base Uom */
+            base_uom: string;
+            /** Category */
+            category: string | null;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /** Description */
+            description: string | null;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** List Cost */
+            list_cost: string | null;
+            /**
+             * Manufacturer Id
+             * Format: uuid
+             */
+            manufacturer_id: string;
+            /** Manufacturer Part Number */
+            manufacturer_part_number: string | null;
+            /** Sku */
+            sku: string;
+            /**
+             * Updated At
+             * Format: date-time
+             */
+            updated_at: string;
+        };
+        /** ProductPatch */
+        ProductPatch: {
+            /** Active */
+            active?: boolean | null;
+            /** Base Uom */
+            base_uom?: string | null;
+            /** Category */
+            category?: string | null;
+            /** Description */
+            description?: string | null;
+            /** List Cost */
+            list_cost?: number | string | null;
+            /** Manufacturer Id */
+            manufacturer_id?: string | null;
+            /** Manufacturer Part Number */
+            manufacturer_part_number?: string | null;
+        };
+        /** PurchaseLineList */
+        PurchaseLineList: {
+            /** Data */
+            data: components["schemas"]["PurchaseLineOut"][];
+            page: components["schemas"]["Page"];
+        };
+        /** PurchaseLineOut */
+        PurchaseLineOut: {
+            /** Currency Code */
+            currency_code: string;
+            /** Doc Type */
+            doc_type: string;
+            /**
+             * Document Date
+             * Format: date
+             */
+            document_date: string;
+            /**
+             * Document Id
+             * Format: uuid
+             */
+            document_id: string;
+            /** Document Number */
+            document_number: string;
+            /** Extended Amount */
+            extended_amount: string;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Line Number */
+            line_number: number;
+            lineage: components["schemas"]["Lineage"];
+            /**
+             * Manufacturer Id
+             * Format: uuid
+             */
+            manufacturer_id: string;
+            /** Product Id */
+            product_id: string | null;
+            /** Quantity */
+            quantity: string;
+            /** Sku Raw */
+            sku_raw: string;
+            /** Source Changed */
+            source_changed: boolean;
+            /** Unit Cost */
+            unit_cost: string;
+            /** Uom */
+            uom: string;
+        };
+        /** ReasonCodeMappingIn */
+        ReasonCodeMappingIn: {
+            /** External Code */
+            external_code: string;
+            /** External Text */
+            external_text?: string | null;
+            /** Reason Code */
+            reason_code: string;
+        };
+        /** ReasonCodeMappingList */
+        ReasonCodeMappingList: {
+            /** Data */
+            data: components["schemas"]["ReasonCodeMappingOut"][];
+        };
+        /** ReasonCodeMappingOut */
+        ReasonCodeMappingOut: {
+            /** External Code */
+            external_code: string;
+            /** External Text */
+            external_text: string | null;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Reason Code */
+            reason_code: string;
+        };
+        /** ReasonCodeMappingsIn */
+        ReasonCodeMappingsIn: {
+            /** Mappings */
+            mappings: components["schemas"]["ReasonCodeMappingIn"][];
+        };
         /** ReauthIn */
         ReauthIn: {
             /** Mfa Code */
@@ -929,6 +2240,148 @@ export interface components {
             new_password: string;
             /** Token */
             token: string;
+        };
+        /** ResolveIn */
+        ResolveIn: {
+            /**
+             * Action
+             * @enum {string}
+             */
+            action: "map" | "ignore";
+            /** Target Id */
+            target_id?: string | null;
+        };
+        /** SalesLineDetail */
+        SalesLineDetail: {
+            /** Currency Code */
+            currency_code: string;
+            /**
+             * Customer Id
+             * Format: uuid
+             */
+            customer_id: string;
+            /** Description */
+            description: string | null;
+            /** Doc Type */
+            doc_type: string;
+            /**
+             * Document Id
+             * Format: uuid
+             */
+            document_id: string;
+            /** Document Number */
+            document_number: string;
+            /** Extended Amount */
+            extended_amount: string;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /**
+             * Invoice Date
+             * Format: date
+             */
+            invoice_date: string;
+            /** Line Number */
+            line_number: number;
+            lineage: components["schemas"]["Lineage"];
+            /** Manufacturer Id */
+            manufacturer_id: string | null;
+            /** Original Line Id */
+            original_line_id: string | null;
+            /** Previous Version Id */
+            previous_version_id: string | null;
+            /** Product Id */
+            product_id: string | null;
+            /** Project Reference */
+            project_reference: string | null;
+            /** Quantity */
+            quantity: string;
+            /** Replacement Cost */
+            replacement_cost: string | null;
+            /** Ship Date */
+            ship_date: string | null;
+            /** Sku Raw */
+            sku_raw: string;
+            /** Source Changed */
+            source_changed: boolean;
+            /** Spa Reference */
+            spa_reference: string | null;
+            /** Unit Cost */
+            unit_cost: string | null;
+            /** Unit Price */
+            unit_price: string;
+            /** Uom */
+            uom: string;
+        };
+        /** SalesLineList */
+        SalesLineList: {
+            /** Data */
+            data: components["schemas"]["SalesLineOut"][];
+            page: components["schemas"]["Page"];
+        };
+        /** SalesLineOut */
+        SalesLineOut: {
+            /** Currency Code */
+            currency_code: string;
+            /**
+             * Customer Id
+             * Format: uuid
+             */
+            customer_id: string;
+            /** Description */
+            description: string | null;
+            /** Doc Type */
+            doc_type: string;
+            /**
+             * Document Id
+             * Format: uuid
+             */
+            document_id: string;
+            /** Document Number */
+            document_number: string;
+            /** Extended Amount */
+            extended_amount: string;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /**
+             * Invoice Date
+             * Format: date
+             */
+            invoice_date: string;
+            /** Line Number */
+            line_number: number;
+            lineage: components["schemas"]["Lineage"];
+            /** Manufacturer Id */
+            manufacturer_id: string | null;
+            /** Original Line Id */
+            original_line_id: string | null;
+            /** Product Id */
+            product_id: string | null;
+            /** Project Reference */
+            project_reference: string | null;
+            /** Quantity */
+            quantity: string;
+            /** Replacement Cost */
+            replacement_cost: string | null;
+            /** Ship Date */
+            ship_date: string | null;
+            /** Sku Raw */
+            sku_raw: string;
+            /** Source Changed */
+            source_changed: boolean;
+            /** Spa Reference */
+            spa_reference: string | null;
+            /** Unit Cost */
+            unit_cost: string | null;
+            /** Unit Price */
+            unit_price: string;
+            /** Uom */
+            uom: string;
         };
         /** SettingsOut */
         SettingsOut: {
@@ -968,6 +2421,111 @@ export interface components {
              */
             tenant_id: string;
         };
+        /** TemplateIn */
+        TemplateIn: {
+            /** Headers */
+            headers: string[];
+            /**
+             * Import Type
+             * @enum {string}
+             */
+            import_type: "sales" | "purchases" | "customers" | "products" | "uom" | "agreement_items" | "remittance";
+            /** Mapping */
+            mapping: {
+                [key: string]: string | null;
+            };
+            /** Name */
+            name: string;
+            /**
+             * @default {
+             *       "date_order": "MDY",
+             *       "decimal_separator": ".",
+             *       "defaults": {}
+             *     }
+             */
+            options: components["schemas"]["MappingOptions"];
+        };
+        /** TemplateList */
+        TemplateList: {
+            /** Data */
+            data: components["schemas"]["TemplateOut"][];
+            page: components["schemas"]["Page"];
+        };
+        /** TemplateOut */
+        TemplateOut: {
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /**
+             * Created By
+             * Format: uuid
+             */
+            created_by: string;
+            /** Header Signature */
+            header_signature: string;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Import Type */
+            import_type: string;
+            /** Mapping */
+            mapping: {
+                [key: string]: string | null;
+            };
+            /** Name */
+            name: string;
+            /** Options */
+            options: {
+                [key: string]: unknown;
+            };
+            /**
+             * Updated At
+             * Format: date-time
+             */
+            updated_at: string;
+            /** Updated By */
+            updated_by: string | null;
+            /** Version */
+            version: number;
+        };
+        /** TemplateRef */
+        TemplateRef: {
+            /** Name */
+            name: string;
+        };
+        /** TemplateSummary */
+        TemplateSummary: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Name */
+            name: string;
+            /** Version */
+            version: number | null;
+        };
+        /** TemplateUpdate */
+        TemplateUpdate: {
+            /** Headers */
+            headers: string[];
+            /** Mapping */
+            mapping: {
+                [key: string]: string | null;
+            };
+            /**
+             * @default {
+             *       "date_order": "MDY",
+             *       "decimal_separator": ".",
+             *       "defaults": {}
+             *     }
+             */
+            options: components["schemas"]["MappingOptions"];
+        };
         /** TenantOut */
         TenantOut: {
             /**
@@ -982,6 +2540,96 @@ export interface components {
         TokenIn: {
             /** Token */
             token: string;
+        };
+        /** UnmappedList */
+        UnmappedList: {
+            /** Data */
+            data: components["schemas"]["UnmappedOut"][];
+            page: components["schemas"]["Page"];
+        };
+        /** UnmappedOut */
+        UnmappedOut: {
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /** Entity Type */
+            entity_type: string;
+            /** Example Name */
+            example_name: string | null;
+            /** External Value */
+            external_value: string;
+            /** First Import Batch Id */
+            first_import_batch_id: string | null;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /**
+             * Last Seen At
+             * Format: date-time
+             */
+            last_seen_at: string;
+            /** Resolved At */
+            resolved_at: string | null;
+            /** Resolved By */
+            resolved_by: string | null;
+            /** Resolved Entity Id */
+            resolved_entity_id: string | null;
+            /** Seen Count */
+            seen_count: number;
+            /** Status */
+            status: string;
+        };
+        /** UomConversionIn */
+        UomConversionIn: {
+            /** Factor */
+            factor: number | string;
+            /** From Uom */
+            from_uom: string;
+            /** Product Id */
+            product_id?: string | null;
+            /** To Uom */
+            to_uom: string;
+        };
+        /** UomConversionList */
+        UomConversionList: {
+            /** Data */
+            data: components["schemas"]["UomConversionOut"][];
+            page: components["schemas"]["Page"];
+        };
+        /** UomConversionOut */
+        UomConversionOut: {
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /** Factor */
+            factor: string;
+            /** From Uom */
+            from_uom: string;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Product Id */
+            product_id: string | null;
+            /** To Uom */
+            to_uom: string;
+            /**
+             * Updated At
+             * Format: date-time
+             */
+            updated_at: string;
+        };
+        /** UomConversionUpdate */
+        UomConversionUpdate: {
+            /** Factor */
+            factor: number | string;
         };
         /** UserOut */
         UserOut: {
@@ -1591,6 +3239,239 @@ export interface operations {
             };
         };
     };
+    branch_list: {
+        parameters: {
+            query?: {
+                limit?: number;
+                cursor?: string | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BranchList"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    branch_create: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["BranchIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BranchOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    customer_list: {
+        parameters: {
+            query?: {
+                q?: string | null;
+                active?: boolean | null;
+                limit?: number;
+                cursor?: string | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CustomerList"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    customer_create: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CustomerIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CustomerOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    customer_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                customer_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CustomerDetail"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    customer_update: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                customer_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CustomerPatch"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CustomerOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    customer_alias_add: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                customer_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CustomerAliasIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CustomerAliasOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     file_list: {
         parameters: {
             query?: {
@@ -1762,6 +3643,315 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content?: never;
+            };
+        };
+    };
+    import_list: {
+        parameters: {
+            query?: {
+                status?: ("uploaded" | "scanning" | "parsing" | "awaiting_confirmation" | "loading" | "completed" | "completed_with_errors" | "failed" | "rejected") | null;
+                import_type?: ("sales" | "purchases" | "customers" | "products" | "uom") | null;
+                limit?: number;
+                cursor?: string | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ImportList"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    import_create: {
+        parameters: {
+            query?: never;
+            header?: {
+                "idempotency-key"?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ImportIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ImportAccepted"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    import_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                import_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ImportOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    import_changes: {
+        parameters: {
+            query?: {
+                limit?: number;
+                cursor?: string | null;
+            };
+            header?: never;
+            path: {
+                import_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ChangeList"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    import_confirm: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                import_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ConfirmIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ImportAccepted"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    import_errors: {
+        parameters: {
+            query?: {
+                format?: "json" | "csv";
+                limit?: number;
+                cursor?: string | null;
+            };
+            header?: never;
+            path: {
+                import_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                    "text/csv": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    import_set_mapping: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                import_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["MappingIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ImportAccepted"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    import_preview: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                import_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PreviewOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    import_suggest_mapping: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                import_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description AI not enabled */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
             };
         };
     };
@@ -1974,6 +4164,730 @@ export interface operations {
             };
         };
     };
+    manufacturer_list: {
+        parameters: {
+            query?: {
+                active?: boolean | null;
+                limit?: number;
+                cursor?: string | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ManufacturerList"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    manufacturer_create: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ManufacturerIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ManufacturerOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    manufacturer_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                manufacturer_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ManufacturerOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    manufacturer_update: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                manufacturer_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ManufacturerPatch"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ManufacturerOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    reason_code_mapping_list: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                manufacturer_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ReasonCodeMappingList"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    reason_code_mapping_replace: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                manufacturer_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ReasonCodeMappingsIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ReasonCodeMappingList"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    manufacturer_settings_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                manufacturer_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ManufacturerSettingsOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    manufacturer_settings_put: {
+        parameters: {
+            query?: never;
+            header?: {
+                "if-match"?: string | null;
+            };
+            path: {
+                manufacturer_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ManufacturerSettingsIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ManufacturerSettingsOut"];
+                };
+            };
+            /** @description Revision mismatch */
+            412: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    mapping_template_list: {
+        parameters: {
+            query?: {
+                import_type?: ("sales" | "purchases" | "customers" | "products" | "uom" | "agreement_items" | "remittance") | null;
+                limit?: number;
+                cursor?: string | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TemplateList"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    mapping_template_create: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["TemplateIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TemplateOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    mapping_template_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                template_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TemplateOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    mapping_template_update: {
+        parameters: {
+            query?: never;
+            header?: {
+                "if-match"?: string | null;
+            };
+            path: {
+                template_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["TemplateUpdate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TemplateOut"];
+                };
+            };
+            /** @description Version mismatch */
+            412: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    mapping_template_delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                template_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    product_list: {
+        parameters: {
+            query?: {
+                q?: string | null;
+                manufacturer_id?: string | null;
+                active?: boolean | null;
+                limit?: number;
+                cursor?: string | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProductList"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    product_create: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ProductIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProductOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    product_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                product_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProductDetail"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    product_update: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                product_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ProductPatch"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProductOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    product_alias_add: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                product_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ProductAliasIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProductAliasOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    purchase_line_list: {
+        parameters: {
+            query?: {
+                manufacturer_id?: string | null;
+                product_id?: string | null;
+                import_batch_id?: string | null;
+                document_number?: string | null;
+                doc_type?: ("receipt" | "vendor_credit") | null;
+                date_from?: string | null;
+                date_to?: string | null;
+                current?: boolean | null;
+                limit?: number;
+                cursor?: string | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PurchaseLineList"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    sales_line_list: {
+        parameters: {
+            query?: {
+                manufacturer_id?: string | null;
+                customer_id?: string | null;
+                product_id?: string | null;
+                import_batch_id?: string | null;
+                document_number?: string | null;
+                doc_type?: ("invoice" | "credit_note") | null;
+                date_from?: string | null;
+                date_to?: string | null;
+                current?: boolean | null;
+                limit?: number;
+                cursor?: string | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SalesLineList"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    sales_line_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                line_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SalesLineDetail"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     settings_get: {
         parameters: {
             query?: never;
@@ -2020,6 +4934,205 @@ export interface operations {
             };
             /** @description Revision mismatch */
             412: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    unmapped_entity_list: {
+        parameters: {
+            query?: {
+                status?: ("open" | "resolved" | "ignored") | null;
+                entity_type?: ("customer" | "product") | null;
+                limit?: number;
+                cursor?: string | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["UnmappedList"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    unmapped_entity_resolve: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                entry_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ResolveIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["UnmappedOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    uom_conversion_list: {
+        parameters: {
+            query?: {
+                product_id?: string | null;
+                limit?: number;
+                cursor?: string | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["UomConversionList"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    uom_conversion_create: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["UomConversionIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["UomConversionOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    uom_conversion_update: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                conversion_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["UomConversionUpdate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["UomConversionOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    uom_conversion_delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                conversion_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
                 headers: {
                     [name: string]: unknown;
                 };

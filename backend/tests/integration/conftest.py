@@ -127,10 +127,27 @@ def import_file(ws: Workspace, rel: str, import_type: str, **kw: Any) -> dict[st
     return run_import(ws, clean_file(ws, rel.rsplit("/", 1)[-1], data(rel), mime), import_type, **kw)
 
 
+def walk(ws: Workspace, path: str, params: dict[str, Any]) -> list[str]:
+    """Follow keyset pagination to the end; returns the ids in page order."""
+    seen: list[str] = []
+    cursor = None
+    while True:
+        page = ws.api.get(path, params={**params, **({"cursor": cursor} if cursor else {})}).json()
+        seen += [x["id"] for x in page["data"]]
+        if not page["page"]["has_more"]:
+            return seen
+        cursor = page["page"]["next_cursor"]
+
+
 def new_workspace(app: FastAPI, api: Api, *, master: bool = True) -> Workspace:
     full_admin(api, unique_email("s3"), workspace="Midway Electrical Supply (SYNTHETIC)")
     me = api.get("/auth/me").json()
-    ws = Workspace(api, app, me["tenant"]["id"], me["user"]["id"], {})
+    return seed_master(Workspace(api, app, me["tenant"]["id"], me["user"]["id"], {}), master=master)
+
+
+def seed_master(ws: Workspace, *, master: bool = True) -> Workspace:
+    """Manufacturers from the ground truth, plus (master=True) a branch and the master-data files."""
+    api = ws.api
     for m in truth("master_manufacturers.json"):
         r = api.post("/manufacturers", json={"name": m["name"], "code": m["code"]})
         assert r.status_code == 201, r.text

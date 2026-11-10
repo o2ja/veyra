@@ -81,19 +81,15 @@ def test_scenarios_layout_a_all_valid_and_credit_notes_negative() -> None:
     results, extra, _ = run("sales/sales_scenarios_layoutA.csv")
     assert len(results) == 23 and all(r.status == "valid" for r in results), [codes(r) for r in results]
     assert extra == {}  # CN-5001/5002 originals INV-10020/1, INV-10021/1 are in the file
-    cn = {
-        r.normalized["document_number"]: r
-        for r in results
-        if r.normalized and r.normalized["doc_type"] == "credit_note"
-    }
+    by_doc = {r.normalized["document_number"]: (r, r.normalized) for r in results if r.normalized}
+    cn = {k: v for k, v in by_doc.items() if v[1]["doc_type"] == "credit_note"}
     assert set(cn) == {"CN-5001", "CN-5002"}
-    assert cn["CN-5001"].normalized["quantity"] == "-5.000000"  # file says 5 (BUSINESS_LOGIC.md §7)
-    assert cn["CN-5001"].normalized["extended_amount"] == "-290.0000"
-    assert cn["CN-5002"].normalized["quantity"] == "-4.000000" and cn["CN-5002"].phase == 2
-    sku = next(r for r in results if r.normalized and r.normalized["document_number"] == "INV-10040")
-    assert sku.normalized["sku"] == "00418" and sku.normalized["product_id"] == "prod-00418"
-    blank_cost = next(r for r in results if r.normalized and r.normalized["document_number"] == "INV-10036")
-    assert blank_cost.normalized["unit_cost"] is None  # SC-16 blank cost stays blank (engine: missing_cost)
+    assert cn["CN-5001"][1]["quantity"] == "-5.000000"  # file says 5 (BUSINESS_LOGIC.md §7)
+    assert cn["CN-5001"][1]["extended_amount"] == "-290.0000"
+    assert cn["CN-5002"][1]["quantity"] == "-4.000000" and cn["CN-5002"][0].phase == 2
+    sku = by_doc["INV-10040"][1]
+    assert sku["sku"] == "00418" and sku["product_id"] == "prod-00418"
+    assert by_doc["INV-10036"][1]["unit_cost"] is None  # SC-16 blank cost stays blank (engine: missing_cost)
 
 
 def test_layout_b_us_formats() -> None:
@@ -101,7 +97,8 @@ def test_layout_b_us_formats() -> None:
     results, _, _ = run("sales/sales_layoutB_us_formats.xlsx")
     assert len(results) == gt["rows_total"] == 3
     assert all(r.status == "valid" for r in results), [codes(r) for r in results]
-    n = [r.normalized for r in results]
+    n = [r.normalized for r in results if r.normalized]
+    assert len(n) == 3
     assert (
         n[0]["quantity"] == "1000.000000" and n[0]["extended_amount"] == "88000.0000"
     )  # thousands separators
@@ -148,7 +145,7 @@ def test_master_files_validate() -> None:
 
 
 def _validator(import_type: str = "sales", lk: Lookups | None = None) -> RowValidator:
-    mapping = {f.name: f.name for f in FIELDS[import_type]}
+    mapping: dict[str, str | None] = {f.name: f.name for f in FIELDS[import_type]}
     return RowValidator(import_type, mapping, {}, lk or lookups())
 
 

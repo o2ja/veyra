@@ -1,13 +1,11 @@
 """Master-data API (S3.1): CRUD, validation, optimistic concurrency, audit, unmapped queue; source-table
 integrity triggers as the app role; source-line browsing (S3.4)."""
 
-from typing import Any
-
 import pytest
 from sqlalchemy import Engine, text
 from sqlalchemy.exc import DBAPIError
 
-from tests.integration.conftest import Workspace, import_file, put
+from tests.integration.conftest import Workspace, import_file, put, walk
 from tests.isolation.test_db_rls import as_app
 
 
@@ -139,17 +137,7 @@ def test_products_uom_branches_and_pagination(ws: Workspace) -> None:
     assert ws.api.delete(f"/uom-conversions/{uid}").status_code == 204
     assert ws.api.get(f"/uom-conversions?product_id={pid}").json()["data"] == []
     # keyset pagination over the 10 imported products + 1
-    seen: list[str] = []
-    cursor = None
-    while True:
-        params: dict[str, Any] = {"limit": 4}
-        if cursor:
-            params["cursor"] = cursor
-        page = ws.api.get("/products", params=params).json()
-        seen += [x["id"] for x in page["data"]]
-        if not page["page"]["has_more"]:
-            break
-        cursor = page["page"]["next_cursor"]
+    seen = walk(ws, "/products", {"limit": 4})
     assert len(seen) == len(set(seen)) == 11
     assert ws.api.get("/products", params={"cursor": "!!"}).status_code == 422
     assert [b["code"] for b in ws.api.get("/branches").json()["data"]] == ["BR01"]
@@ -220,3 +208,27 @@ def test_sales_line_filters(ws: Workspace) -> None:
     by_customer = ws.api.get("/sales-lines", params={"customer_id": alder, "limit": 200}).json()["data"]
     assert len(by_customer) == 21  # 9 ALDER layout-A lines + 12 HVAC lines
     assert ws.api.get("/sales-lines", params={"date_from": "nope"}).status_code == 422
+    paged = walk(ws, "/sales-lines", {"manufacturer_id": nwnd, "limit": 5})
+    assert len(paged) == len(set(paged)) == 12 and set(paged) == {x["id"] for x in hv}
+    assert ws.api.get("/sales-lines", params={"cursor": "!!"}).status_code == 422
+
+
+def test_purchase_line_filters_and_pagination(ws: Workspace) -> None:
+    import_file(ws, "purchases/purchases_VOLT_2026.csv", "purchases")
+    volt, nwnd = ws.manufacturers["VOLT"], ws.manufacturers["NWND"]
+    receipts = ws.api.get("/purchase-lines", params={"doc_type": "receipt"}).json()["data"]
+    assert len(receipts) == 9 and all(x["lineage"]["source_row_number"] >= 2 for x in receipts)
+    q3 = ws.api.get("/purchase-lines", params={"date_from": "2026-07-01", "date_to": "2026-09-30"}).json()
+    assert sorted(x["document_number"] for x in q3["data"]) == [
+        "RCV-9007",
+        "RCV-9008",
+        "RCV-9009",
+        "VCR-9010",
+    ]
+    one = ws.api.get("/purchase-lines", params={"document_number": "RCV-9003"}).json()["data"]
+    assert [x["quantity"] for x in one] == ["1300.0000"]
+    assert len(ws.api.get("/purchase-lines", params={"manufacturer_id": volt}).json()["data"]) == 10
+    assert ws.api.get("/purchase-lines", params={"manufacturer_id": nwnd}).json()["data"] == []
+    paged = walk(ws, "/purchase-lines", {"limit": 3})
+    assert len(paged) == len(set(paged)) == 10
+    assert ws.api.get("/purchase-lines", params={"customer_id": volt}).status_code == 422
