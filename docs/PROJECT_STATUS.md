@@ -27,10 +27,10 @@ S1 signed off by the owner 2026-11-10. Evidence and open points: `docs/reports/S
 ### S3–S6 batch (in progress, started 2026-11-10; S2 approved)
 
 Multi-agent waves (worktree branches, orchestrator merges). Resume point:
-- Wave A: `s6-pure` (#3) and `s5-engine` (#2, financial review 2nd pass PASS) **merged**. `s3-backend` PR #4: CI green,
-  security + DB reviews FAIL (6 serious) → fixes + 1M perf run in progress on the branch; then 2nd review pass on fixes.
-- Wave B started on top of `s3-backend`: `s4-backend` (B1), `s3-frontend` (B2). Main has OCR, defusedxml, pg shm 1g.
-- Next: merge #4 → B1/B2 → Wave C (C1/C2/C3 briefs) → Wave D (S5/S6 frontend, browser QA).
+- Wave A merged: `s6-pure` (#3), `s5-engine` (#2), `s3-backend` (#4, 2026-11-11: security + DB reviews 2nd pass PASS;
+  1M-row perf 1077 s total / 929 rows/s, peak RSS 1.18 GB, no Postgres crash). S3 frontend (#5) merged.
+  Main after S3: full suite 1168 passed; isolation + schema lint + negative control OK (121 RLS-dependent).
+- Wave B: `s4-backend` (B1) in progress. Then Wave C (C1/C2/C3 briefs) → Wave D (S5/S6 frontend, browser QA).
 - `period_end` defined by orchestrator: last day of the calendar month of the line's claim date (flag to owner).
 - Open engine rules (raise instead of guessing): `cap_scope=per_agreement`, `tier_metric=quantity`,
   `claim_window_basis=period_end`.
