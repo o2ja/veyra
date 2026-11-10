@@ -33,6 +33,12 @@ class Action(StrEnum):
     INVITATION_REVOKED = "invitation.revoked"
     INVITATION_ACCEPTED = "invitation.accepted"
     AUTHZ_DENIED = "authz.denied"
+    FILE_UPLOADED = "file.uploaded"
+    FILE_SCANNED_CLEAN = "file.scanned_clean"
+    FILE_INFECTED = "file.infected"
+    FILE_SCAN_ERROR = "file.scan_error"
+    FILE_DOWNLOAD_URL_ISSUED = "file.download_url_issued"
+    JOB_RETRIED = "job.retried"
 
 
 AUDITED_FIELDS: dict[str, frozenset[str]] = {
@@ -51,4 +57,6 @@ AUDITED_FIELDS: dict[str, frozenset[str]] = {
     "invitation": frozenset({"email", "role", "expires_at"}),
     "session": frozenset(),
     "permission": frozenset({"permission", "method", "route"}),
+    "file": frozenset({"kind", "original_name", "size_bytes", "sha256", "scan_status"}),
+    "job": frozenset({"kind", "status", "attempts"}),
 }

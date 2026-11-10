@@ -12,7 +12,6 @@ from fastapi import FastAPI
 from pydantic import ValidationError
 from sqlalchemy import Engine, text
 
-from rebate.core import mail
 from rebate.core.db import transaction
 from rebate.modules import audit
 from rebate.modules.audit import Action, Actor
@@ -25,6 +24,7 @@ from tests.support import (
     STRONG_PASSWORD,
     Api,
     api_client,
+    drain,
     latest_token,
     make_app,
     make_settings,
@@ -180,7 +180,7 @@ def test_secrets_never_reach_the_logs(
         api.post(
             "/invitations/accept", json={"token": invite_token, "full_name": "L", "password": STRONG_PASSWORD}
         )
-    mail.flush()  # background work (forgot-password) logs from the pool
+    drain()  # email and reset jobs log from the worker side
     out = capsys.readouterr().out
     lines = [json.loads(line) for line in out.splitlines() if line.startswith("{")]
     assert any(e.get("event") == "request" for e in lines)
@@ -204,7 +204,7 @@ def test_smtp_failure_is_logged_without_address(
             "/auth/register",
             json={"email": email, "full_name": "S", "workspace_name": "S", "password": STRONG_PASSWORD},
         )
-        mail.flush()
+        drain()
     assert r.status_code == 202  # the request does not depend on SMTP (and never claims delivery)
     lines = [json.loads(x) for x in capsys.readouterr().out.splitlines() if x.startswith("{")]
     failures = [e for e in lines if e.get("event") == "email.send_failed"]
@@ -213,8 +213,8 @@ def test_smtp_failure_is_logged_without_address(
 
 
 @pytest.mark.parametrize("env", ["staging", "production"])
-def test_temporary_mailer_refuses_hosted_environments(env: str) -> None:
-    with pytest.raises(ValidationError, match="temporary local/CI-only sender"):
+def test_hosted_environments_require_smtp_starttls(env: str) -> None:
+    with pytest.raises(ValidationError, match="SMTP_STARTTLS"):
         make_settings(
             "postgresql+psycopg://x@y/z",
             app_env=env,

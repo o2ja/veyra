@@ -11,21 +11,20 @@ from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
-from rebate.api import health
+from rebate.api import health, jobs_router
 from rebate.api.deps import RequestContextDep
 from rebate.api.paths import API_PREFIX, route_template
-from rebate.core import mail
 from rebate.core.config import Settings, get_settings
 from rebate.core.db import assert_safe_role, make_engine
 from rebate.core.errors import DomainError, error_body
 from rebate.core.ids import new_id
 from rebate.core.logging import configure_logging
-from rebate.modules import audit, identity, tenancy
+from rebate.modules import audit, files, identity, tenancy
 
 log = structlog.get_logger("rebate.api")
 
 # Every API router, in one place: the route-access meta-test walks exactly these.
-MODULE_ROUTERS = (identity.router, tenancy.router, audit.router)
+MODULE_ROUTERS = (identity.router, tenancy.router, audit.router, files.router, jobs_router.router)
 PUBLIC_ROUTERS = (health.router,)
 
 _HTTP_CODES = {404: "not_found", 405: "method_not_allowed", 413: "payload_too_large"}
@@ -35,6 +34,28 @@ def _request_id(request: Request) -> str | None:
     return getattr(request.state, "request_id", None)
 
 
+UPLOAD_PATH = f"{API_PREFIX}/files"
+UPLOAD_OVERHEAD = 1024 * 1024  # multipart framing + the kind field
+
+
+def _too_large(request: Request) -> JSONResponse | None:
+    """Reject oversized uploads before the body is read (SECURITY.md §4: reject early)."""
+    if request.method != "POST" or request.url.path != UPLOAD_PATH:
+        return None
+    settings: Settings = request.app.state.settings
+    limit = (
+        max(settings.upload_max_mb_spreadsheet, settings.upload_max_mb_pdf) * 1024 * 1024 + UPLOAD_OVERHEAD
+    )
+    length = request.headers.get("content-length")
+    if length is None or not length.isdigit():
+        return JSONResponse(
+            error_body("length_required", "Send the upload with a Content-Length.", None), 411
+        )
+    if int(length) > limit:
+        return JSONResponse(error_body("payload_too_large", "The file is too large.", None), 413)
+    return None
+
+
 async def _request_context(request: Request, call_next: Callable[[Request], Awaitable[Response]]) -> Response:
     request_id = str(new_id())  # never trust a client-supplied id
     request.state.request_id = request_id
@@ -42,7 +63,8 @@ async def _request_context(request: Request, call_next: Callable[[Request], Awai
     structlog.contextvars.bind_contextvars(request_id=request_id)
     started = time.perf_counter()
     try:
-        response = await call_next(request)
+        early = _too_large(request)
+        response = early if early is not None else await call_next(request)
     except Exception:
         log.exception("unhandled_error")
         response = JSONResponse(
@@ -109,7 +131,6 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     async def lifespan(_: FastAPI) -> AsyncIterator[None]:
         assert_safe_role(engine)  # raises UnsafeDatabaseRole: the process does not start
         yield
-        mail.flush()  # let queued mail / background work finish before the engine goes away
         engine.dispose()
 
     expose_docs = settings.app_env != "production"  # unauthenticated docs only outside production

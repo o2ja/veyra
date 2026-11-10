@@ -6,8 +6,7 @@ read it through ``ctx()``; they never open their own transaction and never see a
 client (SECURITY.md §2).
 """
 
-from collections.abc import Callable
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from datetime import datetime
 from typing import Any
 from uuid import UUID
@@ -44,16 +43,6 @@ class RequestContext:
     user_agent: str | None
     principal: Principal | None = None
     session_expired: bool = False  # a cookie was presented but the session is expired/revoked
-    _after_commit: list[Callable[[], None]] = field(default_factory=list)
-
-    def after_commit(self, fn: Callable[[], None]) -> None:
-        """Run ``fn`` only once the request transaction has committed (e.g. hand an email to SMTP)."""
-        self._after_commit.append(fn)
-
-    def run_after_commit(self) -> None:
-        callbacks, self._after_commit = self._after_commit, []
-        for fn in callbacks:
-            fn()
 
     def audit_meta(self) -> dict[str, Any]:
         return {"request_id": self.request_id, "ip": self.ip, "user_agent": self.user_agent}

@@ -71,7 +71,7 @@ class Invitation(Base):
     id: Mapped[UUID] = mapped_column(primary_key=True)
     email: Mapped[str] = mapped_column(CIText())
     role: Mapped[str] = mapped_column(Text)
-    token_hash: Mapped[str] = mapped_column(Text, unique=True)
+    token_hash: Mapped[str | None] = mapped_column(Text, unique=True)  # minted by the email job
     invited_by: Mapped[UUID] = mapped_column(ForeignKey("users.id", name="fk_invitations_invited_by"))
     expires_at: Mapped[datetime] = mapped_column(TS)
     accepted_at: Mapped[datetime | None] = mapped_column(TS)

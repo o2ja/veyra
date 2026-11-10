@@ -75,11 +75,28 @@ class Settings(BaseSettings):
     password_reset_token_minutes: int = 30
     invitation_days: int = 7
 
-    # Email: temporary in-process sender until S2 (PROJECT_STATUS.md K-9)
-    email_backend: Literal["smtp_inprocess"] = "smtp_inprocess"
+    # Email (sent by jobs; S2)
     smtp_host: str = "mailpit"
     smtp_port: int = 1025
+    smtp_starttls: bool = False
+    smtp_user: str | None = None
+    smtp_password: SecretStr | None = None
     mail_from: str = "Veyra Recover <no-reply@veyra.local>"
+
+    # Object storage (S3 API via boto3; SeaweedFS locally and in CI, ADR-017)
+    s3_endpoint_url: str | None = None
+    s3_public_endpoint_url: str | None = None  # host the browser uses for presigned URLs
+    s3_region: str = "us-east-1"
+    s3_bucket: str = "rebate-files"
+    s3_access_key_id: SecretStr | None = None
+    s3_secret_access_key: SecretStr | None = None
+    presigned_url_seconds: int = Field(default=300, ge=10, le=300)  # SECURITY.md §4: at most 5 minutes
+
+    # Uploads and malware scanning (SECURITY.md §4)
+    upload_max_mb_spreadsheet: int = Field(default=50, ge=1, le=50)
+    upload_max_mb_pdf: int = Field(default=25, ge=1, le=50)
+    clamd_host: str = "clamav"
+    clamd_port: int = 3310
 
     @field_validator("trusted_proxy_ips", mode="before")
     @classmethod
@@ -104,11 +121,8 @@ class Settings(BaseSettings):
     @model_validator(mode="after")
     def _environment_rules(self) -> Self:
         hosted = self.app_env in ("staging", "production")
-        if hosted and self.email_backend == "smtp_inprocess":
-            raise ValueError(
-                "EMAIL_BACKEND=smtp_inprocess is a temporary local/CI-only sender (K-9); "
-                "the job-based sender replaces it in S2"
-            )
+        if hosted and not self.smtp_starttls:
+            raise ValueError("SMTP_STARTTLS must be on in staging/production (no plaintext SMTP)")
         if hosted and not self.trusted_proxy_ips:
             raise ValueError("TRUSTED_PROXY_IPS must list the reverse proxy in staging/production")
         url = urlsplit(self.public_base_url)

@@ -1,5 +1,6 @@
 """tenancy module: workspaces, settings, memberships, invitations, permission registry. Public API."""
 
+from rebate.modules.tenancy import jobs as _jobs  # noqa: F401  (registers job handlers)
 from rebate.modules.tenancy.policies import PERMISSIONS, ROLES, check_four_eyes, permissions_for
 from rebate.modules.tenancy.router import router
 from rebate.modules.tenancy.service import (

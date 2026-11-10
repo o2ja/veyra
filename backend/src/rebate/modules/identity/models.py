@@ -65,7 +65,7 @@ class UserToken(Base):
     id: Mapped[UUID] = mapped_column(primary_key=True)
     user_id: Mapped[UUID] = mapped_column(ForeignKey("users.id", name="fk_user_tokens_users"))
     purpose: Mapped[str] = mapped_column(Text)
-    token_hash: Mapped[str] = mapped_column(Text, unique=True)
+    token_hash: Mapped[str | None] = mapped_column(Text, unique=True)  # minted by the email job
     new_email: Mapped[str | None] = mapped_column(CIText())
     expires_at: Mapped[datetime] = mapped_column(TS)
     used_at: Mapped[datetime | None] = mapped_column(TS)
@@ -102,7 +102,17 @@ class PendingRegistration(Base):
     password_hash: Mapped[str] = mapped_column(Text)
     full_name: Mapped[str] = mapped_column(Text)
     workspace_name: Mapped[str] = mapped_column(Text)
-    token_hash: Mapped[str] = mapped_column(Text, unique=True)
+    token_hash: Mapped[str | None] = mapped_column(Text, unique=True)  # minted by the email job
     expires_at: Mapped[datetime] = mapped_column(TS)
     used_at: Mapped[datetime | None] = mapped_column(TS)
+    created_at: Mapped[datetime] = mapped_column(TS, server_default="now()")
+
+
+class PasswordResetRequest(Base):
+    """Forgot-password request awaiting its job; the job payload carries only this id."""
+
+    __tablename__ = "password_reset_requests"
+
+    id: Mapped[UUID] = mapped_column(primary_key=True)
+    email: Mapped[str] = mapped_column(CIText())
     created_at: Mapped[datetime] = mapped_column(TS, server_default="now()")

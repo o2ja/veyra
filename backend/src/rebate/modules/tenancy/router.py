@@ -9,7 +9,6 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from rebate.core.access import require, require_recent_reauth, tenant_of
 from rebate.core.errors import PreconditionFailed
-from rebate.core.mail import Mail, send_after_commit
 from rebate.core.request import Principal, ctx
 from rebate.core.validation import STRICT, Email
 from rebate.modules.tenancy import service
@@ -106,19 +105,6 @@ class InvitationList(BaseModel):
     data: list[InvitationOut]
 
 
-def _invite_mail(to: str, workspace: str, link: str, days: int) -> Mail:
-    return Mail(
-        template="invitation",
-        to=to,
-        subject=f"You're invited to {workspace} on Veyra Recover",
-        body=(
-            f'You have been invited to join the workspace "{workspace}" on Veyra Recover.\n\n'
-            f"Accept the invitation: {link}\n\n"
-            f"The link works once and expires in {days} days. If you did not expect this, ignore this email."
-        ),
-    )
-
-
 @router.post("/invitations", status_code=201, operation_id="invitation_create")
 def create_invitation(
     request: Request,
@@ -129,7 +115,7 @@ def create_invitation(
     if body.role == "admin":  # granting admin is a step-up action (SECURITY.md §1)
         require_recent_reauth(principal, c.settings.step_up_window_minutes)
     tenant_id = tenant_of(principal)
-    inv, token = service.create_invitation(
+    inv = service.create_invitation(
         c.db,
         tenant_id=tenant_id,
         actor_id=principal.user_id,
@@ -137,12 +123,6 @@ def create_invitation(
         role=body.role,
         days=c.settings.invitation_days,
         meta=c.audit_meta(),
-    )
-    link = f"{c.settings.public_origin}/accept-invite#token={token}"  # fragment: never sent to a server
-    send_after_commit(
-        c,
-        c.settings,
-        _invite_mail(body.email, service.tenant_name(c.db, tenant_id), link, c.settings.invitation_days),
     )
     return InvitationOut.model_validate(inv)
 

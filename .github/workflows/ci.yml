@@ -28,12 +28,17 @@ jobs:
         ports: ["5432:5432"]
         options: >-
           --health-cmd "pg_isready -U postgres" --health-interval 2s --health-timeout 3s --health-retries 30
-      mailpit:  # integration tests check email delivery through Mailpit's API (S1, K-9)
+      mailpit:  # integration tests check email delivery through Mailpit's API
         image: axllent/mailpit:v1.33.1@sha256:aef2aacc11f075ec0fb6874275ee4a421e688e11a96ebb296134d1735c7761ce
         ports: ["1025:1025", "8025:8025"]
     env:
       TEST_MAILPIT_URL: http://localhost:8025
       TEST_SMTP_HOST: localhost
+      S3_ENDPOINT_URL: http://localhost:8333
+      S3_ACCESS_KEY_ID: ci-s3-access
+      S3_SECRET_ACCESS_KEY: ci-s3-secret-not-sensitive
+      CLAMD_HOST: localhost
+      CLAMD_PORT: "3310"
       PGHOST: localhost
       PGUSER: postgres
       PGPASSWORD: ci-postgres
@@ -52,6 +57,20 @@ jobs:
           version: ${{ env.UV_VERSION }}
           python-version: ${{ env.PYTHON_VERSION }}
       - run: uv sync --frozen
+      - name: start SeaweedFS and ClamAV (real services for the S2 tests, ADR-017)
+        working-directory: .
+        run: |
+          docker run -d --name seaweedfs -p 8333:8333 \
+            -e S3_ACCESS_KEY_ID -e S3_SECRET_ACCESS_KEY -e WEED_S3_SSE_KEY="$(openssl rand -hex 32)" \
+            -v "$PWD/infra/seaweedfs:/opt/seaweedfs:ro" --entrypoint sh \
+            chrislusf/seaweedfs:4.50@sha256:c2658820e763294a9e9de7b36c81e59b879e3459148351aee4e31a126ca64860 /opt/seaweedfs/start.sh
+          docker run -d --name clamav -p 3310:3310 -e CLAMAV_NO_FRESHCLAMD=true \
+            -v "$PWD/infra/clamav/clamd.conf:/etc/clamav/clamd.conf:ro" \
+            clamav/clamav:1.4.6-debian13-slim@sha256:aedee9daad6b069b26adad61af7ec50a41efe33fd8eff7f985c1f31e3a6ae9de
+          for i in $(seq 120); do nc -z localhost 8333 && break; sleep 1; done
+          for i in $(seq 180); do docker exec clamav clamdcheck.sh >/dev/null 2>&1 && break; sleep 2; done
+          docker exec clamav clamdcheck.sh
+          sleep 5  # SeaweedFS filer and S3 gateway settle after the port opens
       - name: init-db (roles, database, extensions)
         run: bash ../infra/scripts/init-db.sh && bash ../infra/scripts/init-db.sh
       - name: migrate empty -> head as rebate_owner

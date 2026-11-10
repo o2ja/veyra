@@ -16,11 +16,11 @@ from zoneinfo import available_timezones
 from sqlalchemy import select, text, update
 from sqlalchemy.orm import Session
 
-from rebate.core import clock
+from rebate.core import clock, jobs
 from rebate.core.db import set_tenant
 from rebate.core.errors import Conflict, InvitationExpired, NotFound, PreconditionFailed, ValidationFailed
 from rebate.core.ids import new_id
-from rebate.core.security import hash_token, new_token
+from rebate.core.security import hash_token
 from rebate.modules import audit
 from rebate.modules.audit import Action, Actor
 from rebate.modules.tenancy.models import Invitation, Membership, Tenant, TenantSetting
@@ -264,8 +264,8 @@ def change_membership(
 
 def create_invitation(
     db: Session, *, tenant_id: UUID, actor_id: UUID, email: str, role: str, days: int, meta: dict[str, Any]
-) -> tuple[Invitation, str]:
-    """Returns the invitation and the raw token (only ever placed in the email link)."""
+) -> Invitation:
+    """Creates the invitation and enqueues its email; the job mints the token (S2)."""
     now = clock.now()
     db.execute(  # one open invitation per address: older open ones are revoked
         update(Invitation)
@@ -277,13 +277,12 @@ def create_invitation(
         )
         .values(revoked_at=now)
     )
-    token = new_token()
     inv = Invitation(
         tenant_id=tenant_id,
         id=new_id(),
         email=email,
         role=role,
-        token_hash=hash_token(token),
+        token_hash=None,
         invited_by=actor_id,
         expires_at=now + timedelta(days=days),
     )
@@ -299,7 +298,14 @@ def create_invitation(
         after={"email": email, "role": role, "expires_at": inv.expires_at},
         meta=meta,
     )
-    return inv, token
+    jobs.enqueue(
+        db,
+        "tenancy_invitation_email",
+        tenant_id=tenant_id,
+        payload={"invitation_id": str(inv.id)},
+        created_by=actor_id,
+    )
+    return inv
 
 
 def list_invitations(db: Session, tenant_id: UUID) -> list[Invitation]:

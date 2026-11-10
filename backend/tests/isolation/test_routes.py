@@ -13,6 +13,7 @@ import pytest
 from fastapi.routing import APIRoute
 
 from rebate.api.app import MODULE_ROUTERS
+from rebate.modules.files import storage
 from tests.conftest import DbUrls
 from tests.security.flows import full_admin
 from tests.support import Api, api_client, fake_clock, latest_token, make_app, unique_email
@@ -25,11 +26,14 @@ class Side:
     user_id: str
     invitation_id: str
     invitee: str
+    file_id: str
+    job_id: str
 
 
 @pytest.fixture(scope="module")
 def sides(migrated_db: DbUrls) -> Iterator[tuple[Side, Side]]:
     app = make_app(migrated_db.app)
+    storage.ensure_bucket(app.state.settings)
     with fake_clock(), api_client(app) as a, api_client(app) as b:
         out = []
         for api, name in ((a, "Iso Route A (SYNTHETIC)"), (b, "Iso Route B (SYNTHETIC)")):
@@ -38,12 +42,30 @@ def sides(migrated_db: DbUrls) -> Iterator[tuple[Side, Side]]:
             invitee = unique_email("isoinvitee")
             inv = api.post("/invitations", json={"email": invitee, "role": "viewer"}).json()
             latest_token(invitee)
-            out.append(Side(api, me["tenant"]["id"], me["user"]["id"], inv["id"], invitee))
+            csrf = api.csrf()
+            up = api.client.post(
+                "/api/v1/files",
+                files={"file": (f"{name}.csv", f"a,b\n{name},1\n".encode(), "text/csv")},
+                data={"kind": "import"},
+                headers={"Origin": "https://testserver", "X-CSRF-Token": csrf},
+            )
+            assert up.status_code == 201, up.text
+            job = api.get("/jobs", params={"status": "queued"}).json()["data"][0]
+            out.append(
+                Side(
+                    api, me["tenant"]["id"], me["user"]["id"], inv["id"], invitee, up.json()["id"], job["id"]
+                )
+            )
         yield out[0], out[1]
 
 
 # path parameter -> attribute of the *other* tenant used as the attack value
-PARAM_SOURCES = {"user_id": "user_id", "invitation_id": "invitation_id"}
+PARAM_SOURCES = {
+    "user_id": "user_id",
+    "invitation_id": "invitation_id",
+    "file_id": "file_id",
+    "job_id": "job_id",
+}
 
 ID_ROUTES = [
     (route, method)
@@ -89,6 +111,9 @@ def test_r1_foreign_ids_look_exactly_like_missing_ids(
 
 def test_r2_r4_lists_never_contain_the_other_tenant(sides: tuple[Side, Side]) -> None:
     a, b = sides
+    assert b.file_id not in {f["id"] for f in a.api.get("/files").json()["data"]}
+    for status in ("queued", "running", "succeeded", "failed"):
+        assert b.job_id not in {j["id"] for j in a.api.get("/jobs", params={"status": status}).json()["data"]}
     users = a.api.get("/users").json()["data"]
     assert b.user_id not in {u["user_id"] for u in users}
     invitations = a.api.get("/invitations").json()["data"]

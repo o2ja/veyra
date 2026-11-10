@@ -1,8 +1,21 @@
 # Local development stack (DEPLOYMENT.md §2.2). Secrets come from ../../.env (never committed).
-# Default services: postgres, mailpit, api, frontend.
-# Profile `s2` (not started by default until S2): clamav. Object storage (SeaweedFS, ADR-017) is added in S2.
-# The worker service is added in S2 together with the job queue.
+# Services: postgres, mailpit, api, worker, frontend; profile `s2` (enabled by the Makefile from S2 on):
+# seaweedfs (S3, ADR-017) and clamav (malware scanning).
 name: veyra-recover
+
+x-app-env: &app-env
+  APP_ENV: local
+  SECRET_KEY: ${SECRET_KEY:?set in .env}
+  ENCRYPTION_KEYS: ${ENCRYPTION_KEYS:?set in .env (make env, or see .env.example)}
+  DATABASE_URL: postgresql+psycopg://rebate_app:${REBATE_APP_PASSWORD}@postgres:5432/rebate
+  LOG_LEVEL: ${LOG_LEVEL:-INFO}
+  S3_ENDPOINT_URL: http://seaweedfs:8333
+  S3_PUBLIC_ENDPOINT_URL: http://localhost:8333  # presigned URLs are opened by the browser
+  S3_BUCKET: rebate-files
+  S3_ACCESS_KEY_ID: ${S3_ACCESS_KEY_ID:?set in .env}
+  S3_SECRET_ACCESS_KEY: ${S3_SECRET_ACCESS_KEY:?set in .env}
+  CLAMD_HOST: clamav
+  CLAMD_PORT: "3310"
 
 services:
   postgres:
@@ -30,11 +43,39 @@ services:
       - "127.0.0.1:1025:1025"
       - "127.0.0.1:8025:8025"
 
+  seaweedfs:
+    profiles: ["s2"]
+    image: chrislusf/seaweedfs:4.50@sha256:c2658820e763294a9e9de7b36c81e59b879e3459148351aee4e31a126ca64860
+    entrypoint: ["sh", "/opt/seaweedfs/start.sh"]
+    environment:
+      S3_ACCESS_KEY_ID: ${S3_ACCESS_KEY_ID:?set in .env}
+      S3_SECRET_ACCESS_KEY: ${S3_SECRET_ACCESS_KEY:?set in .env}
+      WEED_S3_SSE_KEY: ${SEAWEEDFS_SSE_KEY:?set in .env}  # enables SSE-S3 (AES256)
+    ports:
+      - "127.0.0.1:8333:8333"
+    volumes:
+      - seaweeddata:/data
+      - ../seaweedfs:/opt/seaweedfs:ro
+    healthcheck:
+      test: ["CMD-SHELL", "nc -z $$(hostname -i) 8333"]
+      interval: 3s
+      timeout: 3s
+      retries: 40
+
   clamav:
     profiles: ["s2"]
     image: clamav/clamav:1.4.6-debian13-slim@sha256:aedee9daad6b069b26adad61af7ec50a41efe33fd8eff7f985c1f31e3a6ae9de
+    environment:
+      CLAMAV_NO_FRESHCLAMD: ${CLAMAV_NO_FRESHCLAMD:-false}  # signatures ship in the image; daily updates on
+    volumes:
+      - ../clamav/clamd.conf:/etc/clamav/clamd.conf:ro
     ports:
       - "127.0.0.1:3310:3310"
+    healthcheck:
+      test: ["CMD-SHELL", "clamdcheck.sh"]
+      interval: 5s
+      timeout: 5s
+      retries: 60
 
   api:
     build:
@@ -42,11 +83,7 @@ services:
       target: dev
     command: uvicorn rebate.api.asgi:app --host 0.0.0.0 --port 8000 --reload --reload-dir src
     environment:
-      APP_ENV: local
-      SECRET_KEY: ${SECRET_KEY:?set in .env}
-      ENCRYPTION_KEYS: ${ENCRYPTION_KEYS:?set in .env (make env, or see .env.example)}
-      DATABASE_URL: postgresql+psycopg://rebate_app:${REBATE_APP_PASSWORD}@postgres:5432/rebate
-      LOG_LEVEL: ${LOG_LEVEL:-INFO}
+      <<: *app-env
       SESSION_IDLE_MINUTES: ${SESSION_IDLE_MINUTES:-30}  # shortened only for manual expiry checks
       WATCHFILES_FORCE_POLLING: "true"
     ports:
@@ -62,6 +99,25 @@ services:
       interval: 5s
       timeout: 3s
       retries: 30
+
+  worker:
+    profiles: ["s2"]
+    build:
+      context: ../../backend
+      target: dev
+    command: python -m rebate.workers
+    environment:
+      <<: *app-env
+      SMTP_HOST: mailpit
+    volumes:
+      - ../../backend:/app
+    depends_on:
+      postgres:
+        condition: service_healthy
+      seaweedfs:
+        condition: service_healthy
+      clamav:
+        condition: service_healthy
 
   frontend:
     build:
@@ -81,4 +137,5 @@ services:
 
 volumes:
   pgdata:
+  seaweeddata:
   frontend_node_modules:

@@ -28,6 +28,7 @@ TENANT_TABLES: dict[str, str] = {
     "invitations": "tenant_id",
     "audit_log": "tenant_id",
     "idempotency_keys": "tenant_id",
+    "file_objects": "tenant_id",
 }
 
 
@@ -41,6 +42,7 @@ class TenantData:
     admin_user_id: UUID
     membership_ids: list[UUID] = field(default_factory=list)
     invitation_ids: list[UUID] = field(default_factory=list)
+    file_ids: list[UUID] = field(default_factory=list)
 
 
 @dataclass
@@ -88,6 +90,15 @@ def _tenant(conn: Connection, name: str, admin_email: str) -> TenantData:
         },
     )
     data.invitation_ids.append(inv)
+    fid = new_id()
+    conn.execute(
+        text(
+            "INSERT INTO file_objects (tenant_id, id, kind, original_name, storage_key, size_bytes, sha256, "
+            "detected_mime, uploaded_by) VALUES (:t, :id, 'import', 'iso.csv', :k, 10, :h, 'text/csv', :u)"
+        ),
+        {"t": tid, "id": fid, "k": f"quarantine/{tid}/{fid}", "h": fid.hex * 2, "u": admin},
+    )
+    data.file_ids.append(fid)
     conn.execute(
         text(
             "INSERT INTO audit_log (tenant_id, occurred_at, actor_type, actor_user_id, action, "

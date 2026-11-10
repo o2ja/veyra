@@ -5,8 +5,8 @@ commit happens **before** the response is sent: a failed commit can never look l
 
 1. open the transaction; 2. resolve the session cookie → Principal, set ``app.tenant_id`` (SET LOCAL);
 3. enforce Origin + CSRF on mutating requests; 4. general rate limits; 5. yield to the route;
-6. commit (or roll back; ``DomainError.commit`` failures commit their bookkeeping); 7. after-commit
-callbacks (temporary email sender); 8. permission denials are audited in a separate, rate-limited
+6. commit (or roll back; ``DomainError.commit`` failures commit their bookkeeping);
+7. permission denials are audited in a separate, rate-limited
 transaction after the rollback.
 """
 
@@ -122,7 +122,6 @@ def request_context(request: Request) -> Iterator[RequestContext]:
     except DomainError as exc:
         if exc.commit:
             tx.commit()
-            c.run_after_commit()
         else:
             tx.rollback()
             if isinstance(exc, PermissionDenied):
@@ -133,7 +132,6 @@ def request_context(request: Request) -> Iterator[RequestContext]:
         raise
     else:
         tx.commit()
-        c.run_after_commit()
     finally:
         session.close()
 

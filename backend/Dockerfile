@@ -11,6 +11,8 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
     UV_PROJECT_ENVIRONMENT=/opt/venv \
     PATH=/opt/venv/bin:$PATH
 WORKDIR /app
+# libmagic: magic-byte detection for uploads (python-magic, SECURITY.md §4)
+RUN apt-get update && apt-get install -y --no-install-recommends libmagic1 && rm -rf /var/lib/apt/lists/*
 
 FROM base AS deps
 COPY --from=uv /uv /usr/local/bin/uv

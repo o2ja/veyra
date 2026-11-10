@@ -13,12 +13,12 @@ from typing import Any
 from uuid import UUID
 
 import structlog
-from sqlalchemy import Engine, select, update
+from sqlalchemy import select, update
 from sqlalchemy.orm import Session
 
-from rebate.core import clock
+from rebate.core import clock, jobs
 from rebate.core.config import Settings
-from rebate.core.db import tenant_scope, transaction
+from rebate.core.db import tenant_scope
 from rebate.core.errors import (
     AccountLocked,
     InvalidCredentials,
@@ -30,14 +30,19 @@ from rebate.core.errors import (
     ValidationFailed,
 )
 from rebate.core.ids import new_id
-from rebate.core.mail import background_after_commit, send_after_commit
 from rebate.core.request import Principal, RequestContext
-from rebate.core.security import Passwords, SecretBox, hash_token, keyed_hash, new_token
+from rebate.core.security import Passwords, SecretBox, hash_token, keyed_hash
 from rebate.core.validation import email_key
 from rebate.modules import audit, tenancy
 from rebate.modules.audit import Action, Actor
-from rebate.modules.identity import emails, lockout, mfa, passwords, ratelimit, sessions
-from rebate.modules.identity.models import AuthSession, PendingRegistration, User, UserToken
+from rebate.modules.identity import lockout, mfa, passwords, ratelimit, sessions
+from rebate.modules.identity.models import (
+    AuthSession,
+    PasswordResetRequest,
+    PendingRegistration,
+    User,
+    UserToken,
+)
 
 log = structlog.get_logger("rebate.identity")
 
@@ -100,26 +105,22 @@ def audit_user_event(
 
 
 def register(c: RequestContext, *, email: str, full_name: str, workspace_name: str, password: str) -> None:
+    """Same work for new and existing addresses: one Argon2 hash, one row, one job. The job decides
+    between the verify link and the "already registered" notice (S2: no lookup on the request path)."""
     ratelimit.hit(c.db, f"register:ip:{c.ip}", limit=5, window_seconds=3600)
     passwords.check(c.settings, password, email)
-    token = new_token()
-    c.db.add(
-        PendingRegistration(
-            id=new_id(),
-            email=email,
-            password_hash=password_hasher(c.settings).hash(password),
-            full_name=full_name,
-            workspace_name=workspace_name,
-            token_hash=hash_token(token),
-            expires_at=clock.now() + timedelta(hours=c.settings.email_verify_token_hours),
-        )
+    pending = PendingRegistration(
+        id=new_id(),
+        email=email,
+        password_hash=password_hasher(c.settings).hash(password),
+        full_name=full_name,
+        workspace_name=workspace_name,
+        token_hash=None,  # minted by the job (S2 token decision)
+        expires_at=clock.now() + timedelta(hours=c.settings.email_verify_token_hours),
     )
+    c.db.add(pending)
     c.db.flush()
-    if _user_by_email(c.db, email) is not None:
-        mail = emails.already_registered(c.settings, email)
-    else:
-        mail = emails.verify_email(c.settings, email, token)
-    send_after_commit(c, c.settings, mail)
+    jobs.enqueue(c.db, "identity_registration_email", tenant_id=None, payload={"pending_id": str(pending.id)})
 
 
 def verify_email(c: RequestContext, token: str, password: str) -> None:
@@ -401,49 +402,14 @@ def _set_password(c: RequestContext, user: User, new_password: str) -> None:
 
 
 def forgot_password(c: RequestContext, email: str) -> None:
-    """The response path is identical for known and unknown addresses: two rate-limit writes, then
-    the lookup and token work run after the response (timing test: S1 review finding 11)."""
+    """Identical request-path work for every address: two rate-limit hits, one row, one job. The job
+    looks the address up (S1 timing finding; S2 moved it from the temporary pool to the queue)."""
     ratelimit.hit(c.db, f"forgot:ip:{c.ip}", limit=5, window_seconds=3600)
     ratelimit.hit(c.db, f"forgot:acct:{_hkey(c, 'forgot', email_key(email))}", limit=3, window_seconds=3600)
-    engine = c.db.get_bind()
-    if not isinstance(engine, Engine):  # the request session is always bound to the app engine
-        raise TypeError("request session must be bound to an Engine")
-    settings, meta = c.settings, (c.request_id, c.ip, c.user_agent)
-    background_after_commit(c, lambda: _issue_reset(engine, settings, email, meta))
-
-
-def _issue_reset(
-    engine: Engine, settings: Settings, email: str, meta: tuple[str, str | None, str | None]
-) -> None:
-    with transaction(engine) as db:
-        bg = RequestContext(db=db, settings=settings, request_id=meta[0], ip=meta[1], user_agent=meta[2])
-        user = _user_by_email(db, email)
-        if user is None or user.status != "active":
-            return
-        now = clock.now()
-        db.execute(
-            update(UserToken)
-            .where(
-                UserToken.user_id == user.id,
-                UserToken.purpose == "password_reset",
-                UserToken.used_at.is_(None),
-            )
-            .values(used_at=now)
-        )
-        token = new_token()
-        db.add(
-            UserToken(
-                id=new_id(),
-                user_id=user.id,
-                purpose="password_reset",
-                token_hash=hash_token(token),
-                expires_at=now + timedelta(minutes=settings.password_reset_token_minutes),
-            )
-        )
-        db.flush()
-        audit_user_event(bg, user.id, Action.AUTH_PASSWORD_RESET_REQUESTED, actor=Actor("system"))
-        send_after_commit(bg, settings, emails.password_reset(settings, user.email, token))
-    bg.run_after_commit()
+    request = PasswordResetRequest(id=new_id(), email=email)
+    c.db.add(request)
+    c.db.flush()
+    jobs.enqueue(c.db, "identity_password_reset", tenant_id=None, payload={"request_id": str(request.id)})
 
 
 def _consume_token(c: RequestContext, token: str, purpose: str) -> UserToken:
@@ -490,27 +456,19 @@ def request_email_change(
         .where(UserToken.user_id == user.id, UserToken.purpose == "email_change", UserToken.used_at.is_(None))
         .values(used_at=now)
     )
-    token = new_token()
-    c.db.add(
-        UserToken(
-            id=new_id(),
-            user_id=user.id,
-            purpose="email_change",
-            token_hash=hash_token(token),
-            new_email=new_email,
-            expires_at=now + timedelta(hours=c.settings.email_verify_token_hours),
-        )
+    row = UserToken(
+        id=new_id(),
+        user_id=user.id,
+        purpose="email_change",
+        token_hash=None,  # minted by the job
+        new_email=new_email,
+        expires_at=now + timedelta(hours=c.settings.email_verify_token_hours),
     )
+    c.db.add(row)
     c.db.flush()
-    taken = _user_by_email(c.db, new_email) is not None
-    send_after_commit(
-        c,
-        c.settings,
-        emails.email_change_in_use(c.settings, new_email)
-        if taken
-        else emails.email_change_confirm(c.settings, new_email, token),
+    jobs.enqueue(
+        c.db, "identity_email_change", tenant_id=None, payload={"token_id": str(row.id)}, created_by=user.id
     )
-    send_after_commit(c, c.settings, emails.email_change_notice(c.settings, user.email))
     audit_user_event(c, user.id, Action.AUTH_EMAIL_CHANGE_REQUESTED)
 
 
@@ -622,3 +580,15 @@ def actor_labels(db: Session, user_ids: set[UUID]) -> dict[UUID, tuple[str, str]
         return {}
     rows = db.execute(select(User.id, User.full_name, User.email).where(User.id.in_(user_ids)))
     return {r.id: (r.full_name, r.email) for r in rows}
+
+
+def admin_emails(db: Session, tenant_id: UUID) -> list[str]:
+    """Addresses of the workspace's active admins (security notifications)."""
+    admins = [
+        m.user_id
+        for m in tenancy.list_memberships(db, tenant_id)
+        if m.role == "admin" and m.status == "active"
+    ]
+    if not admins:
+        return []
+    return list(db.scalars(select(User.email).where(User.id.in_(admins), User.status == "active")))

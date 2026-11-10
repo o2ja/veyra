@@ -17,6 +17,11 @@ _FLOAT_TYPES = text(
     """
 )
 
+# Global by design although they carry tenant_id (DATABASE_SCHEMA.md §2, ADR-005): every read path
+# filters tenant_id explicitly and the route isolation tests cover them. Adding a name here needs a
+# documented reason.
+GLOBAL_TABLES = ("jobs",)
+
 _TENANT_TABLES = """
     WITH tenant_tables AS (
         SELECT c.oid, c.relname, c.relrowsecurity, c.relforcerowsecurity, a.attnum AS tid
@@ -24,6 +29,7 @@ _TENANT_TABLES = """
         JOIN pg_namespace n ON n.oid = c.relnamespace
         JOIN pg_attribute a ON a.attrelid = c.oid AND a.attname = 'tenant_id' AND NOT a.attisdropped
         WHERE n.nspname = :schema AND c.relkind IN ('r', 'p')
+          AND NOT (n.nspname = 'public' AND c.relname = ANY(:global_tables))
     )
 """
 
@@ -33,6 +39,7 @@ _RLS_TABLES = """
         SELECT c.relname, c.relrowsecurity, c.relforcerowsecurity
         FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace
         WHERE n.nspname = :schema AND c.relkind IN ('r', 'p')
+          AND NOT (n.nspname = 'public' AND c.relname = ANY(:global_tables))
           AND (c.relname = 'tenants' OR EXISTS (
               SELECT 1 FROM pg_attribute a
               WHERE a.attrelid = c.oid AND a.attname = 'tenant_id' AND NOT a.attisdropped))
@@ -84,5 +91,7 @@ _COMPOSITE_FK = text(
 def lint_schema(conn: Connection, schema: str = "public") -> list[str]:
     violations: list[str] = []
     for query in (_FLOAT_TYPES, _RLS, _COMPOSITE_UNIQUE, _COMPOSITE_FK):
-        violations += conn.execute(query, {"schema": schema}).scalars().all()
+        violations += (
+            conn.execute(query, {"schema": schema, "global_tables": list(GLOBAL_TABLES)}).scalars().all()
+        )
     return sorted(violations)
