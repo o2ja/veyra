@@ -174,7 +174,6 @@ def version_audit(v: AgreementVersion) -> dict[str, Any]:
         "status": v.status,
         "valid_from": v.valid_from,
         "valid_to": v.valid_to,
-        "content_hash": v.content_hash,
         "draft_id": v.draft_id,
         "derived_from_version_id": v.derived_from_version_id,
         "supersedes_version_id": v.supersedes_version_id,

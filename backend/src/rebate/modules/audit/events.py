@@ -166,7 +166,6 @@ AUDITED_FIELDS: dict[str, frozenset[str]] = {
             "status",
             "valid_from",
             "valid_to",
-            "content_hash",
             "draft_id",
             "derived_from_version_id",
             "supersedes_version_id",

@@ -4,6 +4,263 @@
  */
 
 export interface paths {
+    "/api/v1/agreement-drafts": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List Drafts */
+        get: operations["agreement_draft_list"];
+        put?: never;
+        /** Create Draft */
+        post: operations["agreement_draft_create"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/agreement-drafts/{draft_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Draft */
+        get: operations["agreement_draft_get"];
+        /** Update Draft */
+        put: operations["agreement_draft_update"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/agreement-drafts/{draft_id}/approve": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Approve Draft */
+        post: operations["agreement_draft_approve"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/agreement-drafts/{draft_id}/items:import": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Import Items */
+        post: operations["agreement_draft_items_import"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/agreement-drafts/{draft_id}/reject": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Reject Draft */
+        post: operations["agreement_draft_reject"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/agreement-drafts/{draft_id}/return": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Return Draft */
+        post: operations["agreement_draft_return"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/agreement-drafts/{draft_id}/submit": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Submit Draft */
+        post: operations["agreement_draft_submit"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/agreement-drafts/{draft_id}/validate": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Validate Draft */
+        post: operations["agreement_draft_validate"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/agreement-versions/{version_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Version */
+        get: operations["agreement_version_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/agreement-versions/{version_id}/diff/{other_version_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Diff Versions */
+        get: operations["agreement_version_diff"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/agreement-versions/{version_id}/items": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List Items */
+        get: operations["agreement_version_items"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/agreements": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List Agreements */
+        get: operations["agreement_list"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/agreements/{agreement_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Agreement */
+        get: operations["agreement_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/agreements/{agreement_id}/cancel": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Cancel Agreement */
+        post: operations["agreement_cancel"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/agreements/{agreement_id}/versions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List Versions */
+        get: operations["agreement_version_list"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/audit-log": {
         parameters: {
             query?: never;
@@ -1090,6 +1347,44 @@ export interface components {
              */
             status: "accepted";
         };
+        /** AgreementList */
+        AgreementList: {
+            /** Data */
+            data: components["schemas"]["AgreementOut"][];
+            page: components["schemas"]["Page"];
+        };
+        /** AgreementOut */
+        AgreementOut: {
+            /** Agreement Type */
+            agreement_type: string;
+            /** Cancelled At */
+            cancelled_at: string | null;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /**
+             * Created By
+             * Format: uuid
+             */
+            created_by: string;
+            current_version: components["schemas"]["VersionSummary"] | null;
+            /** External Number */
+            external_number: string;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /**
+             * Manufacturer Id
+             * Format: uuid
+             */
+            manufacturer_id: string;
+            /** Name */
+            name: string;
+        };
         /** AuditEntry */
         AuditEntry: {
             /** Action */
@@ -1171,6 +1466,25 @@ export interface components {
             id: string;
             /** Name */
             name: string;
+        };
+        /** CancelIn */
+        CancelIn: {
+            /**
+             * Effective Date
+             * Format: date
+             */
+            effective_date: string;
+            /** Reason */
+            reason: string;
+        };
+        /** Change */
+        Change: {
+            /** After */
+            after: unknown;
+            /** Before */
+            before: unknown;
+            /** Path */
+            path: string;
         };
         /** ChangeList */
         ChangeList: {
@@ -1304,38 +1618,8 @@ export interface components {
         /** CustomerList */
         CustomerList: {
             /** Data */
-            data: components["schemas"]["CustomerOut"][];
+            data: components["schemas"]["rebate__modules__masterdata__schemas__CustomerOut"][];
             page: components["schemas"]["Page"];
-        };
-        /** CustomerOut */
-        CustomerOut: {
-            /** Active */
-            active: boolean;
-            /** Code */
-            code: string | null;
-            /**
-             * Created At
-             * Format: date-time
-             */
-            created_at: string;
-            /** Customer Type */
-            customer_type: string;
-            /** External Id */
-            external_id: string | null;
-            /**
-             * Id
-             * Format: uuid
-             */
-            id: string;
-            /** Name */
-            name: string;
-            /** Parent Customer Id */
-            parent_customer_id: string | null;
-            /**
-             * Updated At
-             * Format: date-time
-             */
-            updated_at: string;
         };
         /** CustomerPatch */
         CustomerPatch: {
@@ -1352,12 +1636,171 @@ export interface components {
             /** Parent Customer Id */
             parent_customer_id?: string | null;
         };
+        /** DiffOut */
+        DiffOut: {
+            /** Changes */
+            changes: components["schemas"]["Change"][];
+            /**
+             * From Version Id
+             * Format: uuid
+             */
+            from_version_id: string;
+            /**
+             * To Version Id
+             * Format: uuid
+             */
+            to_version_id: string;
+        };
         /** DownloadUrl */
         DownloadUrl: {
             /** Expires In Seconds */
             expires_in_seconds: number;
             /** Url */
             url: string;
+        };
+        /** DraftCreate */
+        DraftCreate: {
+            /** Agreement Id */
+            agreement_id?: string | null;
+            /** Amends Version Id */
+            amends_version_id?: string | null;
+            /** Payload */
+            payload?: {
+                [key: string]: unknown;
+            } | null;
+            /**
+             * Source
+             * @enum {string}
+             */
+            source: "manual" | "spreadsheet_template" | "ai_extraction";
+            /** Source File Id */
+            source_file_id?: string | null;
+        };
+        /** DraftList */
+        DraftList: {
+            /** Data */
+            data: components["schemas"]["DraftSummary"][];
+            page: components["schemas"]["Page"];
+        };
+        /** DraftOut */
+        DraftOut: {
+            /** Agreement Id */
+            agreement_id: string | null;
+            /** Amends Version Id */
+            amends_version_id: string | null;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /**
+             * Created By
+             * Format: uuid
+             */
+            created_by: string;
+            /** Extraction Id */
+            extraction_id: string | null;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Payload */
+            payload: {
+                [key: string]: unknown;
+            };
+            /** Payload Schema Version */
+            payload_schema_version: number;
+            /** Rejection Reason */
+            rejection_reason: string | null;
+            /** Resulting Version Id */
+            resulting_version_id: string | null;
+            /** Review Comment */
+            review_comment: string | null;
+            /** Reviewed At */
+            reviewed_at: string | null;
+            /** Reviewed By */
+            reviewed_by: string | null;
+            /** Revision */
+            revision: number;
+            /** Source */
+            source: string;
+            /** Source File Id */
+            source_file_id: string | null;
+            /** Status */
+            status: string;
+            /** Submitted At */
+            submitted_at: string | null;
+            /** Submitted By */
+            submitted_by: string | null;
+            /**
+             * Updated At
+             * Format: date-time
+             */
+            updated_at: string;
+            validation: components["schemas"]["Validation"] | null;
+        };
+        /** DraftSummary */
+        DraftSummary: {
+            /** Agreement Id */
+            agreement_id: string | null;
+            /** Amends Version Id */
+            amends_version_id: string | null;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /**
+             * Created By
+             * Format: uuid
+             */
+            created_by: string;
+            /** Extraction Id */
+            extraction_id: string | null;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Payload Schema Version */
+            payload_schema_version: number;
+            /** Rejection Reason */
+            rejection_reason: string | null;
+            /** Resulting Version Id */
+            resulting_version_id: string | null;
+            /** Review Comment */
+            review_comment: string | null;
+            /** Reviewed At */
+            reviewed_at: string | null;
+            /** Reviewed By */
+            reviewed_by: string | null;
+            /** Revision */
+            revision: number;
+            /** Source */
+            source: string;
+            /** Source File Id */
+            source_file_id: string | null;
+            /** Status */
+            status: string;
+            /** Submitted At */
+            submitted_at: string | null;
+            /** Submitted By */
+            submitted_by: string | null;
+            /**
+             * Updated At
+             * Format: date-time
+             */
+            updated_at: string;
+        };
+        /** DraftUpdate */
+        DraftUpdate: {
+            /** Change Summary */
+            change_summary?: string | null;
+            /** Payload */
+            payload: {
+                [key: string]: unknown;
+            };
         };
         /** EmailChangeIn */
         EmailChangeIn: {
@@ -1602,6 +2045,17 @@ export interface components {
             /** Role */
             role: string;
         };
+        /** Issue */
+        Issue: {
+            /** Code */
+            code: string;
+            /** Field */
+            field: string;
+            /** Id */
+            id?: string | null;
+            /** Message */
+            message: string;
+        };
         /** IssueOut */
         IssueOut: {
             /** Code */
@@ -1612,6 +2066,83 @@ export interface components {
             message: string;
             /** Severity */
             severity: string;
+        };
+        /** ItemList */
+        ItemList: {
+            /** Data */
+            data: components["schemas"]["ItemOut"][];
+            page: components["schemas"]["Page"];
+        };
+        /** ItemOut */
+        ItemOut: {
+            /** Claim Uom */
+            claim_uom: string | null;
+            /** Customer Id */
+            customer_id: string | null;
+            /** Deviated Cost */
+            deviated_cost: string | null;
+            /** Flat Amount */
+            flat_amount: string | null;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Line Number */
+            line_number: number;
+            /** Max Quantity */
+            max_quantity: string | null;
+            /**
+             * Product Id
+             * Format: uuid
+             */
+            product_id: string;
+            /** Rate */
+            rate: string | null;
+            /** Reference Cost */
+            reference_cost: string | null;
+            /** Sell Price */
+            sell_price: string | null;
+            /** Sku */
+            sku: string;
+        };
+        /** ItemsImportIn */
+        ItemsImportIn: {
+            /**
+             * Dry Run
+             * @default false
+             */
+            dry_run: boolean;
+            /**
+             * File Id
+             * Format: uuid
+             */
+            file_id: string;
+            /** Header Row */
+            header_row?: number | null;
+            /** Mapping */
+            mapping?: {
+                [key: string]: string;
+            } | null;
+            /**
+             * Rate Format
+             * @enum {string}
+             */
+            rate_format: "fraction" | "percent";
+            /** Sheet */
+            sheet?: string | null;
+        };
+        /** ItemsImportOut */
+        ItemsImportOut: {
+            draft: components["schemas"]["DraftOut"] | null;
+            /** Dry Run */
+            dry_run: boolean;
+            /** Items */
+            items: {
+                [key: string]: unknown;
+            }[];
+            /** Rows */
+            rows: number;
         };
         /** JobList */
         JobList: {
@@ -2223,6 +2754,13 @@ export interface components {
             /** Recovery Codes */
             recovery_codes: string[];
         };
+        /** References */
+        References: {
+            /** Unresolved Customers */
+            unresolved_customers: string[];
+            /** Unresolved Skus */
+            unresolved_skus: string[];
+        };
         /** RegisterIn */
         RegisterIn: {
             /** Email */
@@ -2233,6 +2771,11 @@ export interface components {
             password: string;
             /** Workspace Name */
             workspace_name: string;
+        };
+        /** RejectIn */
+        RejectIn: {
+            /** Reason */
+            reason: string;
         };
         /** ResetIn */
         ResetIn: {
@@ -2250,6 +2793,11 @@ export interface components {
             action: "map" | "ignore";
             /** Target Id */
             target_id?: string | null;
+        };
+        /** ReturnIn */
+        ReturnIn: {
+            /** Comment */
+            comment: string;
         };
         /** SalesLineDetail */
         SalesLineDetail: {
@@ -2413,6 +2961,14 @@ export interface components {
             /** Retention Years */
             retention_years?: number | null;
         };
+        /** SubmitIn */
+        SubmitIn: {
+            /**
+             * Acknowledged Warnings
+             * @default []
+             */
+            acknowledged_warnings: string[];
+        };
         /** SwitchIn */
         SwitchIn: {
             /**
@@ -2536,6 +3092,15 @@ export interface components {
             /** Name */
             name: string;
         };
+        /** TierOut */
+        TierOut: {
+            /** Lower Bound */
+            lower_bound: string;
+            /** Rate */
+            rate: string | null;
+            /** Tier Number */
+            tier_number: number;
+        };
         /** TokenIn */
         TokenIn: {
             /** Token */
@@ -2643,6 +3208,25 @@ export interface components {
             /** Mfa Enabled */
             mfa_enabled: boolean;
         };
+        /** Validation */
+        Validation: {
+            /** Error Count */
+            error_count: number;
+            /** Errors */
+            errors: components["schemas"]["Issue"][];
+            references: components["schemas"]["References"];
+            /** Revision */
+            revision: number;
+            /** Valid */
+            valid: boolean;
+            /**
+             * Validated At
+             * Format: date-time
+             */
+            validated_at: string;
+            /** Warnings */
+            warnings: components["schemas"]["Issue"][];
+        };
         /** ValidationError */
         ValidationError: {
             /** Context */
@@ -2663,6 +3247,155 @@ export interface components {
             /** Token */
             token: string;
         };
+        /** VersionList */
+        VersionList: {
+            /** Data */
+            data: components["schemas"]["VersionSummary"][];
+            page: components["schemas"]["Page"];
+        };
+        /** VersionOut */
+        VersionOut: {
+            /**
+             * Activated At
+             * Format: date-time
+             */
+            activated_at: string;
+            /**
+             * Agreement Id
+             * Format: uuid
+             */
+            agreement_id: string;
+            /** Agreement Type */
+            agreement_type: string;
+            /**
+             * Approved By
+             * Format: uuid
+             */
+            approved_by: string;
+            /** Content Hash */
+            content_hash: string;
+            /**
+             * Created By
+             * Format: uuid
+             */
+            created_by: string;
+            /** Customers */
+            customers: components["schemas"]["rebate__modules__agreements__schemas__CustomerOut"][];
+            /** Derived From Version Id */
+            derived_from_version_id: string | null;
+            /** Draft Id */
+            draft_id: string | null;
+            /** External Number */
+            external_number: string;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Item Count */
+            item_count: number;
+            /**
+             * Manufacturer Id
+             * Format: uuid
+             */
+            manufacturer_id: string;
+            /** Name */
+            name: string;
+            /** Priority */
+            priority: number;
+            /** Rules */
+            rules: {
+                [key: string]: unknown;
+            };
+            /** Rules Schema Version */
+            rules_schema_version: number;
+            /** Source */
+            source: string;
+            /** Source File Id */
+            source_file_id: string | null;
+            /** Status */
+            status: string;
+            /** Superseded At */
+            superseded_at: string | null;
+            /** Superseded By Version Id */
+            superseded_by_version_id: string | null;
+            /** Supersedes Version Id */
+            supersedes_version_id: string | null;
+            /** Tiers */
+            tiers: components["schemas"]["TierOut"][];
+            /**
+             * Valid From
+             * Format: date
+             */
+            valid_from: string;
+            /**
+             * Valid To
+             * Format: date
+             */
+            valid_to: string;
+            /** Version Number */
+            version_number: number;
+        };
+        /** VersionSummary */
+        VersionSummary: {
+            /**
+             * Activated At
+             * Format: date-time
+             */
+            activated_at: string;
+            /**
+             * Agreement Id
+             * Format: uuid
+             */
+            agreement_id: string;
+            /**
+             * Approved By
+             * Format: uuid
+             */
+            approved_by: string;
+            /** Content Hash */
+            content_hash: string;
+            /**
+             * Created By
+             * Format: uuid
+             */
+            created_by: string;
+            /** Derived From Version Id */
+            derived_from_version_id: string | null;
+            /** Draft Id */
+            draft_id: string | null;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Priority */
+            priority: number;
+            /** Source */
+            source: string;
+            /** Source File Id */
+            source_file_id: string | null;
+            /** Status */
+            status: string;
+            /** Superseded At */
+            superseded_at: string | null;
+            /** Superseded By Version Id */
+            superseded_by_version_id: string | null;
+            /** Supersedes Version Id */
+            supersedes_version_id: string | null;
+            /**
+             * Valid From
+             * Format: date
+             */
+            valid_from: string;
+            /**
+             * Valid To
+             * Format: date
+             */
+            valid_to: string;
+            /** Version Number */
+            version_number: number;
+        };
         /** WorkspaceList */
         WorkspaceList: {
             /** Data */
@@ -2680,6 +3413,48 @@ export interface components {
              */
             tenant_id: string;
         };
+        /** CustomerOut */
+        rebate__modules__agreements__schemas__CustomerOut: {
+            /** Customer Code */
+            customer_code: string | null;
+            /**
+             * Customer Id
+             * Format: uuid
+             */
+            customer_id: string;
+            /** Scope */
+            scope: string;
+        };
+        /** CustomerOut */
+        rebate__modules__masterdata__schemas__CustomerOut: {
+            /** Active */
+            active: boolean;
+            /** Code */
+            code: string | null;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /** Customer Type */
+            customer_type: string;
+            /** External Id */
+            external_id: string | null;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Name */
+            name: string;
+            /** Parent Customer Id */
+            parent_customer_id: string | null;
+            /**
+             * Updated At
+             * Format: date-time
+             */
+            updated_at: string;
+        };
     };
     responses: never;
     parameters: never;
@@ -2689,6 +3464,599 @@ export interface components {
 }
 export type $defs = Record<string, never>;
 export interface operations {
+    agreement_draft_list: {
+        parameters: {
+            query?: {
+                status?: ("draft" | "pending_approval" | "approved" | "rejected" | "needs_manual_entry" | "cancelled")[] | null;
+                agreement_id?: string | null;
+                limit?: number;
+                cursor?: string | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DraftList"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    agreement_draft_create: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["DraftCreate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DraftOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    agreement_draft_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                draft_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DraftOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    agreement_draft_update: {
+        parameters: {
+            query?: never;
+            header?: {
+                "if-match"?: string | null;
+            };
+            path: {
+                draft_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["DraftUpdate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DraftOut"];
+                };
+            };
+            /** @description Revision mismatch */
+            412: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    agreement_draft_approve: {
+        parameters: {
+            query?: never;
+            header?: {
+                "idempotency-key"?: string | null;
+            };
+            path: {
+                draft_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DraftOut"];
+                };
+            };
+            /** @description Invalid state or idempotency conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    agreement_draft_items_import: {
+        parameters: {
+            query?: never;
+            header?: {
+                "if-match"?: string | null;
+            };
+            path: {
+                draft_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ItemsImportIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ItemsImportOut"];
+                };
+            };
+            /** @description Revision mismatch */
+            412: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    agreement_draft_reject: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                draft_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RejectIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DraftOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    agreement_draft_return: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                draft_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ReturnIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DraftOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    agreement_draft_submit: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                draft_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SubmitIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DraftOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    agreement_draft_validate: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                draft_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DraftOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    agreement_version_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                version_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["VersionOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    agreement_version_diff: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                version_id: string;
+                other_version_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DiffOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    agreement_version_items: {
+        parameters: {
+            query?: {
+                limit?: number;
+                cursor?: string | null;
+            };
+            header?: never;
+            path: {
+                version_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ItemList"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    agreement_list: {
+        parameters: {
+            query?: {
+                manufacturer_id?: string | null;
+                agreement_type?: ("spa" | "rebate") | null;
+                limit?: number;
+                cursor?: string | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AgreementList"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    agreement_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                agreement_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AgreementOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    agreement_cancel: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                agreement_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CancelIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AgreementOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    agreement_version_list: {
+        parameters: {
+            query?: {
+                limit?: number;
+                cursor?: string | null;
+            };
+            header?: never;
+            path: {
+                agreement_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["VersionList"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     audit_log_list: {
         parameters: {
             query?: {
@@ -3357,7 +4725,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["CustomerOut"];
+                    "application/json": components["schemas"]["rebate__modules__masterdata__schemas__CustomerOut"];
                 };
             };
             /** @description Validation Error */
@@ -3423,7 +4791,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["CustomerOut"];
+                    "application/json": components["schemas"]["rebate__modules__masterdata__schemas__CustomerOut"];
                 };
             };
             /** @description Validation Error */

@@ -63,6 +63,97 @@
         "title": "Accepted",
         "type": "object"
       },
+      "AgreementList": {
+        "properties": {
+          "data": {
+            "items": {
+              "$ref": "#/components/schemas/AgreementOut"
+            },
+            "title": "Data",
+            "type": "array"
+          },
+          "page": {
+            "$ref": "#/components/schemas/Page"
+          }
+        },
+        "required": [
+          "data",
+          "page"
+        ],
+        "title": "AgreementList",
+        "type": "object"
+      },
+      "AgreementOut": {
+        "properties": {
+          "agreement_type": {
+            "title": "Agreement Type",
+            "type": "string"
+          },
+          "cancelled_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Cancelled At"
+          },
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "created_by": {
+            "format": "uuid",
+            "title": "Created By",
+            "type": "string"
+          },
+          "current_version": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/VersionSummary"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "external_number": {
+            "title": "External Number",
+            "type": "string"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "manufacturer_id": {
+            "format": "uuid",
+            "title": "Manufacturer Id",
+            "type": "string"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "manufacturer_id",
+          "agreement_type",
+          "external_number",
+          "name",
+          "cancelled_at",
+          "created_by",
+          "created_at",
+          "current_version"
+        ],
+        "title": "AgreementOut",
+        "type": "object"
+      },
       "AuditEntry": {
         "properties": {
           "action": {
@@ -314,6 +405,49 @@
           "created_at"
         ],
         "title": "BranchOut",
+        "type": "object"
+      },
+      "CancelIn": {
+        "additionalProperties": false,
+        "properties": {
+          "effective_date": {
+            "format": "date",
+            "title": "Effective Date",
+            "type": "string"
+          },
+          "reason": {
+            "maxLength": 2000,
+            "minLength": 1,
+            "title": "Reason",
+            "type": "string"
+          }
+        },
+        "required": [
+          "effective_date",
+          "reason"
+        ],
+        "title": "CancelIn",
+        "type": "object"
+      },
+      "Change": {
+        "properties": {
+          "after": {
+            "title": "After"
+          },
+          "before": {
+            "title": "Before"
+          },
+          "path": {
+            "title": "Path",
+            "type": "string"
+          }
+        },
+        "required": [
+          "path",
+          "before",
+          "after"
+        ],
+        "title": "Change",
         "type": "object"
       },
       "ChangeList": {
@@ -649,7 +783,7 @@
         "properties": {
           "data": {
             "items": {
-              "$ref": "#/components/schemas/CustomerOut"
+              "$ref": "#/components/schemas/rebate__modules__masterdata__schemas__CustomerOut"
             },
             "title": "Data",
             "type": "array"
@@ -663,84 +797,6 @@
           "page"
         ],
         "title": "CustomerList",
-        "type": "object"
-      },
-      "CustomerOut": {
-        "properties": {
-          "active": {
-            "title": "Active",
-            "type": "boolean"
-          },
-          "code": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Code"
-          },
-          "created_at": {
-            "format": "date-time",
-            "title": "Created At",
-            "type": "string"
-          },
-          "customer_type": {
-            "title": "Customer Type",
-            "type": "string"
-          },
-          "external_id": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "External Id"
-          },
-          "id": {
-            "format": "uuid",
-            "title": "Id",
-            "type": "string"
-          },
-          "name": {
-            "title": "Name",
-            "type": "string"
-          },
-          "parent_customer_id": {
-            "anyOf": [
-              {
-                "format": "uuid",
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Parent Customer Id"
-          },
-          "updated_at": {
-            "format": "date-time",
-            "title": "Updated At",
-            "type": "string"
-          }
-        },
-        "required": [
-          "id",
-          "name",
-          "code",
-          "external_id",
-          "customer_type",
-          "parent_customer_id",
-          "active",
-          "created_at",
-          "updated_at"
-        ],
-        "title": "CustomerOut",
         "type": "object"
       },
       "CustomerPatch": {
@@ -829,6 +885,34 @@
         "title": "CustomerPatch",
         "type": "object"
       },
+      "DiffOut": {
+        "properties": {
+          "changes": {
+            "items": {
+              "$ref": "#/components/schemas/Change"
+            },
+            "title": "Changes",
+            "type": "array"
+          },
+          "from_version_id": {
+            "format": "uuid",
+            "title": "From Version Id",
+            "type": "string"
+          },
+          "to_version_id": {
+            "format": "uuid",
+            "title": "To Version Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "from_version_id",
+          "to_version_id",
+          "changes"
+        ],
+        "title": "DiffOut",
+        "type": "object"
+      },
       "DownloadUrl": {
         "properties": {
           "expires_in_seconds": {
@@ -845,6 +929,524 @@
           "expires_in_seconds"
         ],
         "title": "DownloadUrl",
+        "type": "object"
+      },
+      "DraftCreate": {
+        "additionalProperties": false,
+        "properties": {
+          "agreement_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Agreement Id"
+          },
+          "amends_version_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Amends Version Id"
+          },
+          "payload": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Payload"
+          },
+          "source": {
+            "enum": [
+              "manual",
+              "spreadsheet_template",
+              "ai_extraction"
+            ],
+            "title": "Source",
+            "type": "string"
+          },
+          "source_file_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source File Id"
+          }
+        },
+        "required": [
+          "source"
+        ],
+        "title": "DraftCreate",
+        "type": "object"
+      },
+      "DraftList": {
+        "properties": {
+          "data": {
+            "items": {
+              "$ref": "#/components/schemas/DraftSummary"
+            },
+            "title": "Data",
+            "type": "array"
+          },
+          "page": {
+            "$ref": "#/components/schemas/Page"
+          }
+        },
+        "required": [
+          "data",
+          "page"
+        ],
+        "title": "DraftList",
+        "type": "object"
+      },
+      "DraftOut": {
+        "properties": {
+          "agreement_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Agreement Id"
+          },
+          "amends_version_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Amends Version Id"
+          },
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "created_by": {
+            "format": "uuid",
+            "title": "Created By",
+            "type": "string"
+          },
+          "extraction_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Extraction Id"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "payload": {
+            "additionalProperties": true,
+            "title": "Payload",
+            "type": "object"
+          },
+          "payload_schema_version": {
+            "title": "Payload Schema Version",
+            "type": "integer"
+          },
+          "rejection_reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Rejection Reason"
+          },
+          "resulting_version_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Resulting Version Id"
+          },
+          "review_comment": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Review Comment"
+          },
+          "reviewed_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reviewed At"
+          },
+          "reviewed_by": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reviewed By"
+          },
+          "revision": {
+            "title": "Revision",
+            "type": "integer"
+          },
+          "source": {
+            "title": "Source",
+            "type": "string"
+          },
+          "source_file_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source File Id"
+          },
+          "status": {
+            "title": "Status",
+            "type": "string"
+          },
+          "submitted_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Submitted At"
+          },
+          "submitted_by": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Submitted By"
+          },
+          "updated_at": {
+            "format": "date-time",
+            "title": "Updated At",
+            "type": "string"
+          },
+          "validation": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Validation"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "id",
+          "agreement_id",
+          "amends_version_id",
+          "source",
+          "status",
+          "revision",
+          "payload_schema_version",
+          "source_file_id",
+          "extraction_id",
+          "created_by",
+          "submitted_by",
+          "submitted_at",
+          "reviewed_by",
+          "reviewed_at",
+          "rejection_reason",
+          "review_comment",
+          "resulting_version_id",
+          "created_at",
+          "updated_at",
+          "payload",
+          "validation"
+        ],
+        "title": "DraftOut",
+        "type": "object"
+      },
+      "DraftSummary": {
+        "properties": {
+          "agreement_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Agreement Id"
+          },
+          "amends_version_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Amends Version Id"
+          },
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "created_by": {
+            "format": "uuid",
+            "title": "Created By",
+            "type": "string"
+          },
+          "extraction_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Extraction Id"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "payload_schema_version": {
+            "title": "Payload Schema Version",
+            "type": "integer"
+          },
+          "rejection_reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Rejection Reason"
+          },
+          "resulting_version_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Resulting Version Id"
+          },
+          "review_comment": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Review Comment"
+          },
+          "reviewed_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reviewed At"
+          },
+          "reviewed_by": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reviewed By"
+          },
+          "revision": {
+            "title": "Revision",
+            "type": "integer"
+          },
+          "source": {
+            "title": "Source",
+            "type": "string"
+          },
+          "source_file_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source File Id"
+          },
+          "status": {
+            "title": "Status",
+            "type": "string"
+          },
+          "submitted_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Submitted At"
+          },
+          "submitted_by": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Submitted By"
+          },
+          "updated_at": {
+            "format": "date-time",
+            "title": "Updated At",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "agreement_id",
+          "amends_version_id",
+          "source",
+          "status",
+          "revision",
+          "payload_schema_version",
+          "source_file_id",
+          "extraction_id",
+          "created_by",
+          "submitted_by",
+          "submitted_at",
+          "reviewed_by",
+          "reviewed_at",
+          "rejection_reason",
+          "review_comment",
+          "resulting_version_id",
+          "created_at",
+          "updated_at"
+        ],
+        "title": "DraftSummary",
+        "type": "object"
+      },
+      "DraftUpdate": {
+        "additionalProperties": false,
+        "properties": {
+          "change_summary": {
+            "anyOf": [
+              {
+                "maxLength": 500,
+                "pattern": "^[^\\x00-\\x1f\\x7f]+$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Change Summary"
+          },
+          "payload": {
+            "additionalProperties": true,
+            "title": "Payload",
+            "type": "object"
+          }
+        },
+        "required": [
+          "payload"
+        ],
+        "title": "DraftUpdate",
         "type": "object"
       },
       "EmailChangeIn": {
@@ -1537,6 +2139,40 @@
         "title": "InvitationOut",
         "type": "object"
       },
+      "Issue": {
+        "properties": {
+          "code": {
+            "title": "Code",
+            "type": "string"
+          },
+          "field": {
+            "title": "Field",
+            "type": "string"
+          },
+          "id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Id"
+          },
+          "message": {
+            "title": "Message",
+            "type": "string"
+          }
+        },
+        "required": [
+          "field",
+          "code",
+          "message"
+        ],
+        "title": "Issue",
+        "type": "object"
+      },
       "IssueOut": {
         "properties": {
           "code": {
@@ -1570,6 +2206,274 @@
           "severity"
         ],
         "title": "IssueOut",
+        "type": "object"
+      },
+      "ItemList": {
+        "properties": {
+          "data": {
+            "items": {
+              "$ref": "#/components/schemas/ItemOut"
+            },
+            "title": "Data",
+            "type": "array"
+          },
+          "page": {
+            "$ref": "#/components/schemas/Page"
+          }
+        },
+        "required": [
+          "data",
+          "page"
+        ],
+        "title": "ItemList",
+        "type": "object"
+      },
+      "ItemOut": {
+        "properties": {
+          "claim_uom": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Claim Uom"
+          },
+          "customer_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Customer Id"
+          },
+          "deviated_cost": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Deviated Cost"
+          },
+          "flat_amount": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Flat Amount"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "line_number": {
+            "title": "Line Number",
+            "type": "integer"
+          },
+          "max_quantity": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Max Quantity"
+          },
+          "product_id": {
+            "format": "uuid",
+            "title": "Product Id",
+            "type": "string"
+          },
+          "rate": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Rate"
+          },
+          "reference_cost": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reference Cost"
+          },
+          "sell_price": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Sell Price"
+          },
+          "sku": {
+            "title": "Sku",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "line_number",
+          "product_id",
+          "sku",
+          "customer_id",
+          "reference_cost",
+          "deviated_cost",
+          "sell_price",
+          "flat_amount",
+          "rate",
+          "claim_uom",
+          "max_quantity"
+        ],
+        "title": "ItemOut",
+        "type": "object"
+      },
+      "ItemsImportIn": {
+        "additionalProperties": false,
+        "properties": {
+          "dry_run": {
+            "default": false,
+            "title": "Dry Run",
+            "type": "boolean"
+          },
+          "file_id": {
+            "format": "uuid",
+            "title": "File Id",
+            "type": "string"
+          },
+          "header_row": {
+            "anyOf": [
+              {
+                "maximum": 1000.0,
+                "minimum": 1.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Header Row"
+          },
+          "mapping": {
+            "anyOf": [
+              {
+                "additionalProperties": {
+                  "maxLength": 200,
+                  "minLength": 1,
+                  "type": "string"
+                },
+                "propertyNames": {
+                  "enum": [
+                    "sku",
+                    "reference_cost",
+                    "deviated_cost",
+                    "sell_price",
+                    "rate",
+                    "flat_amount",
+                    "max_quantity",
+                    "claim_uom"
+                  ]
+                },
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Mapping"
+          },
+          "rate_format": {
+            "enum": [
+              "fraction",
+              "percent"
+            ],
+            "title": "Rate Format",
+            "type": "string"
+          },
+          "sheet": {
+            "anyOf": [
+              {
+                "maxLength": 100,
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Sheet"
+          }
+        },
+        "required": [
+          "file_id",
+          "rate_format"
+        ],
+        "title": "ItemsImportIn",
+        "type": "object"
+      },
+      "ItemsImportOut": {
+        "properties": {
+          "draft": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/DraftOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "dry_run": {
+            "title": "Dry Run",
+            "type": "boolean"
+          },
+          "items": {
+            "items": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "rows": {
+            "title": "Rows",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "dry_run",
+          "rows",
+          "items",
+          "draft"
+        ],
+        "title": "ItemsImportOut",
         "type": "object"
       },
       "JobList": {
@@ -3324,6 +4228,30 @@
         "title": "RecoveryCodesOut",
         "type": "object"
       },
+      "References": {
+        "properties": {
+          "unresolved_customers": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Unresolved Customers",
+            "type": "array"
+          },
+          "unresolved_skus": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Unresolved Skus",
+            "type": "array"
+          }
+        },
+        "required": [
+          "unresolved_customers",
+          "unresolved_skus"
+        ],
+        "title": "References",
+        "type": "object"
+      },
       "RegisterIn": {
         "additionalProperties": false,
         "properties": {
@@ -3357,6 +4285,22 @@
           "password"
         ],
         "title": "RegisterIn",
+        "type": "object"
+      },
+      "RejectIn": {
+        "additionalProperties": false,
+        "properties": {
+          "reason": {
+            "maxLength": 2000,
+            "minLength": 1,
+            "title": "Reason",
+            "type": "string"
+          }
+        },
+        "required": [
+          "reason"
+        ],
+        "title": "RejectIn",
         "type": "object"
       },
       "ResetIn": {
@@ -3411,6 +4355,22 @@
           "action"
         ],
         "title": "ResolveIn",
+        "type": "object"
+      },
+      "ReturnIn": {
+        "additionalProperties": false,
+        "properties": {
+          "comment": {
+            "maxLength": 2000,
+            "minLength": 1,
+            "title": "Comment",
+            "type": "string"
+          }
+        },
+        "required": [
+          "comment"
+        ],
+        "title": "ReturnIn",
         "type": "object"
       },
       "SalesLineDetail": {
@@ -3951,6 +4911,23 @@
         "title": "SettingsPatch",
         "type": "object"
       },
+      "SubmitIn": {
+        "additionalProperties": false,
+        "properties": {
+          "acknowledged_warnings": {
+            "default": [],
+            "items": {
+              "maxLength": 300,
+              "type": "string"
+            },
+            "maxItems": 5000,
+            "title": "Acknowledged Warnings",
+            "type": "array"
+          }
+        },
+        "title": "SubmitIn",
+        "type": "object"
+      },
       "SwitchIn": {
         "additionalProperties": false,
         "properties": {
@@ -4270,6 +5247,36 @@
         "title": "TenantOut",
         "type": "object"
       },
+      "TierOut": {
+        "properties": {
+          "lower_bound": {
+            "title": "Lower Bound",
+            "type": "string"
+          },
+          "rate": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Rate"
+          },
+          "tier_number": {
+            "title": "Tier Number",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "tier_number",
+          "lower_bound",
+          "rate"
+        ],
+        "title": "TierOut",
+        "type": "object"
+      },
       "TokenIn": {
         "additionalProperties": false,
         "properties": {
@@ -4583,6 +5590,55 @@
         "title": "UserOut",
         "type": "object"
       },
+      "Validation": {
+        "properties": {
+          "error_count": {
+            "title": "Error Count",
+            "type": "integer"
+          },
+          "errors": {
+            "items": {
+              "$ref": "#/components/schemas/Issue"
+            },
+            "title": "Errors",
+            "type": "array"
+          },
+          "references": {
+            "$ref": "#/components/schemas/References"
+          },
+          "revision": {
+            "title": "Revision",
+            "type": "integer"
+          },
+          "valid": {
+            "title": "Valid",
+            "type": "boolean"
+          },
+          "validated_at": {
+            "format": "date-time",
+            "title": "Validated At",
+            "type": "string"
+          },
+          "warnings": {
+            "items": {
+              "$ref": "#/components/schemas/Issue"
+            },
+            "title": "Warnings",
+            "type": "array"
+          }
+        },
+        "required": [
+          "valid",
+          "revision",
+          "validated_at",
+          "error_count",
+          "errors",
+          "warnings",
+          "references"
+        ],
+        "title": "Validation",
+        "type": "object"
+      },
       "ValidationError": {
         "properties": {
           "ctx": {
@@ -4647,6 +5703,385 @@
         "title": "VerifyIn",
         "type": "object"
       },
+      "VersionList": {
+        "properties": {
+          "data": {
+            "items": {
+              "$ref": "#/components/schemas/VersionSummary"
+            },
+            "title": "Data",
+            "type": "array"
+          },
+          "page": {
+            "$ref": "#/components/schemas/Page"
+          }
+        },
+        "required": [
+          "data",
+          "page"
+        ],
+        "title": "VersionList",
+        "type": "object"
+      },
+      "VersionOut": {
+        "properties": {
+          "activated_at": {
+            "format": "date-time",
+            "title": "Activated At",
+            "type": "string"
+          },
+          "agreement_id": {
+            "format": "uuid",
+            "title": "Agreement Id",
+            "type": "string"
+          },
+          "agreement_type": {
+            "title": "Agreement Type",
+            "type": "string"
+          },
+          "approved_by": {
+            "format": "uuid",
+            "title": "Approved By",
+            "type": "string"
+          },
+          "content_hash": {
+            "title": "Content Hash",
+            "type": "string"
+          },
+          "created_by": {
+            "format": "uuid",
+            "title": "Created By",
+            "type": "string"
+          },
+          "customers": {
+            "items": {
+              "$ref": "#/components/schemas/rebate__modules__agreements__schemas__CustomerOut"
+            },
+            "title": "Customers",
+            "type": "array"
+          },
+          "derived_from_version_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Derived From Version Id"
+          },
+          "draft_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Draft Id"
+          },
+          "external_number": {
+            "title": "External Number",
+            "type": "string"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "item_count": {
+            "title": "Item Count",
+            "type": "integer"
+          },
+          "manufacturer_id": {
+            "format": "uuid",
+            "title": "Manufacturer Id",
+            "type": "string"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "priority": {
+            "title": "Priority",
+            "type": "integer"
+          },
+          "rules": {
+            "additionalProperties": true,
+            "title": "Rules",
+            "type": "object"
+          },
+          "rules_schema_version": {
+            "title": "Rules Schema Version",
+            "type": "integer"
+          },
+          "source": {
+            "title": "Source",
+            "type": "string"
+          },
+          "source_file_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source File Id"
+          },
+          "status": {
+            "title": "Status",
+            "type": "string"
+          },
+          "superseded_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Superseded At"
+          },
+          "superseded_by_version_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Superseded By Version Id"
+          },
+          "supersedes_version_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Supersedes Version Id"
+          },
+          "tiers": {
+            "items": {
+              "$ref": "#/components/schemas/TierOut"
+            },
+            "title": "Tiers",
+            "type": "array"
+          },
+          "valid_from": {
+            "format": "date",
+            "title": "Valid From",
+            "type": "string"
+          },
+          "valid_to": {
+            "format": "date",
+            "title": "Valid To",
+            "type": "string"
+          },
+          "version_number": {
+            "title": "Version Number",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "id",
+          "agreement_id",
+          "version_number",
+          "status",
+          "valid_from",
+          "valid_to",
+          "priority",
+          "source",
+          "draft_id",
+          "source_file_id",
+          "derived_from_version_id",
+          "supersedes_version_id",
+          "superseded_by_version_id",
+          "content_hash",
+          "created_by",
+          "approved_by",
+          "activated_at",
+          "superseded_at",
+          "agreement_type",
+          "manufacturer_id",
+          "external_number",
+          "name",
+          "rules",
+          "rules_schema_version",
+          "customers",
+          "tiers",
+          "item_count"
+        ],
+        "title": "VersionOut",
+        "type": "object"
+      },
+      "VersionSummary": {
+        "properties": {
+          "activated_at": {
+            "format": "date-time",
+            "title": "Activated At",
+            "type": "string"
+          },
+          "agreement_id": {
+            "format": "uuid",
+            "title": "Agreement Id",
+            "type": "string"
+          },
+          "approved_by": {
+            "format": "uuid",
+            "title": "Approved By",
+            "type": "string"
+          },
+          "content_hash": {
+            "title": "Content Hash",
+            "type": "string"
+          },
+          "created_by": {
+            "format": "uuid",
+            "title": "Created By",
+            "type": "string"
+          },
+          "derived_from_version_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Derived From Version Id"
+          },
+          "draft_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Draft Id"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "priority": {
+            "title": "Priority",
+            "type": "integer"
+          },
+          "source": {
+            "title": "Source",
+            "type": "string"
+          },
+          "source_file_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source File Id"
+          },
+          "status": {
+            "title": "Status",
+            "type": "string"
+          },
+          "superseded_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Superseded At"
+          },
+          "superseded_by_version_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Superseded By Version Id"
+          },
+          "supersedes_version_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Supersedes Version Id"
+          },
+          "valid_from": {
+            "format": "date",
+            "title": "Valid From",
+            "type": "string"
+          },
+          "valid_to": {
+            "format": "date",
+            "title": "Valid To",
+            "type": "string"
+          },
+          "version_number": {
+            "title": "Version Number",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "id",
+          "agreement_id",
+          "version_number",
+          "status",
+          "valid_from",
+          "valid_to",
+          "priority",
+          "source",
+          "draft_id",
+          "source_file_id",
+          "derived_from_version_id",
+          "supersedes_version_id",
+          "superseded_by_version_id",
+          "content_hash",
+          "created_by",
+          "approved_by",
+          "activated_at",
+          "superseded_at"
+        ],
+        "title": "VersionSummary",
+        "type": "object"
+      },
       "WorkspaceList": {
         "properties": {
           "data": {
@@ -4686,6 +6121,115 @@
         ],
         "title": "WorkspaceOut",
         "type": "object"
+      },
+      "rebate__modules__agreements__schemas__CustomerOut": {
+        "properties": {
+          "customer_code": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Customer Code"
+          },
+          "customer_id": {
+            "format": "uuid",
+            "title": "Customer Id",
+            "type": "string"
+          },
+          "scope": {
+            "title": "Scope",
+            "type": "string"
+          }
+        },
+        "required": [
+          "customer_id",
+          "customer_code",
+          "scope"
+        ],
+        "title": "CustomerOut",
+        "type": "object"
+      },
+      "rebate__modules__masterdata__schemas__CustomerOut": {
+        "properties": {
+          "active": {
+            "title": "Active",
+            "type": "boolean"
+          },
+          "code": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Code"
+          },
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "customer_type": {
+            "title": "Customer Type",
+            "type": "string"
+          },
+          "external_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "External Id"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "parent_customer_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Parent Customer Id"
+          },
+          "updated_at": {
+            "format": "date-time",
+            "title": "Updated At",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "code",
+          "external_id",
+          "customer_type",
+          "parent_customer_id",
+          "active",
+          "created_at",
+          "updated_at"
+        ],
+        "title": "CustomerOut",
+        "type": "object"
       }
     }
   },
@@ -4695,6 +6239,1031 @@
   },
   "openapi": "3.1.0",
   "paths": {
+    "/api/v1/agreement-drafts": {
+      "get": {
+        "operationId": "agreement_draft_list",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "status",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "items": {
+                    "enum": [
+                      "draft",
+                      "pending_approval",
+                      "approved",
+                      "rejected",
+                      "needs_manual_entry",
+                      "cancelled"
+                    ],
+                    "type": "string"
+                  },
+                  "type": "array"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Status"
+            }
+          },
+          {
+            "in": "query",
+            "name": "agreement_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "format": "uuid",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Agreement Id"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 50,
+              "maximum": 200,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "cursor",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Cursor"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DraftList"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List Drafts",
+        "tags": [
+          "agreements"
+        ]
+      },
+      "post": {
+        "operationId": "agreement_draft_create",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DraftCreate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DraftOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Create Draft",
+        "tags": [
+          "agreements"
+        ]
+      }
+    },
+    "/api/v1/agreement-drafts/{draft_id}": {
+      "get": {
+        "operationId": "agreement_draft_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "draft_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Draft Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DraftOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Draft",
+        "tags": [
+          "agreements"
+        ]
+      },
+      "put": {
+        "operationId": "agreement_draft_update",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "draft_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Draft Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "if-match",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "If-Match"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DraftUpdate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DraftOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "412": {
+            "description": "Revision mismatch"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Update Draft",
+        "tags": [
+          "agreements"
+        ]
+      }
+    },
+    "/api/v1/agreement-drafts/{draft_id}/approve": {
+      "post": {
+        "operationId": "agreement_draft_approve",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "draft_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Draft Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "idempotency-key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Idempotency-Key"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DraftOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "409": {
+            "description": "Invalid state or idempotency conflict"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Approve Draft",
+        "tags": [
+          "agreements"
+        ]
+      }
+    },
+    "/api/v1/agreement-drafts/{draft_id}/items:import": {
+      "post": {
+        "operationId": "agreement_draft_items_import",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "draft_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Draft Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "if-match",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "If-Match"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ItemsImportIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ItemsImportOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "412": {
+            "description": "Revision mismatch"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Import Items",
+        "tags": [
+          "agreements"
+        ]
+      }
+    },
+    "/api/v1/agreement-drafts/{draft_id}/reject": {
+      "post": {
+        "operationId": "agreement_draft_reject",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "draft_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Draft Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RejectIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DraftOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Reject Draft",
+        "tags": [
+          "agreements"
+        ]
+      }
+    },
+    "/api/v1/agreement-drafts/{draft_id}/return": {
+      "post": {
+        "operationId": "agreement_draft_return",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "draft_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Draft Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ReturnIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DraftOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Return Draft",
+        "tags": [
+          "agreements"
+        ]
+      }
+    },
+    "/api/v1/agreement-drafts/{draft_id}/submit": {
+      "post": {
+        "operationId": "agreement_draft_submit",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "draft_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Draft Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SubmitIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DraftOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Submit Draft",
+        "tags": [
+          "agreements"
+        ]
+      }
+    },
+    "/api/v1/agreement-drafts/{draft_id}/validate": {
+      "post": {
+        "operationId": "agreement_draft_validate",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "draft_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Draft Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DraftOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Validate Draft",
+        "tags": [
+          "agreements"
+        ]
+      }
+    },
+    "/api/v1/agreement-versions/{version_id}": {
+      "get": {
+        "operationId": "agreement_version_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "version_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Version Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/VersionOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Version",
+        "tags": [
+          "agreements"
+        ]
+      }
+    },
+    "/api/v1/agreement-versions/{version_id}/diff/{other_version_id}": {
+      "get": {
+        "operationId": "agreement_version_diff",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "version_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Version Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "other_version_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Other Version Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DiffOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Diff Versions",
+        "tags": [
+          "agreements"
+        ]
+      }
+    },
+    "/api/v1/agreement-versions/{version_id}/items": {
+      "get": {
+        "operationId": "agreement_version_items",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "version_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Version Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 50,
+              "maximum": 200,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "cursor",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Cursor"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ItemList"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List Items",
+        "tags": [
+          "agreements"
+        ]
+      }
+    },
+    "/api/v1/agreements": {
+      "get": {
+        "operationId": "agreement_list",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "manufacturer_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "format": "uuid",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Manufacturer Id"
+            }
+          },
+          {
+            "in": "query",
+            "name": "agreement_type",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "enum": [
+                    "spa",
+                    "rebate"
+                  ],
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Agreement Type"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 50,
+              "maximum": 200,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "cursor",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Cursor"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AgreementList"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List Agreements",
+        "tags": [
+          "agreements"
+        ]
+      }
+    },
+    "/api/v1/agreements/{agreement_id}": {
+      "get": {
+        "operationId": "agreement_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "agreement_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Agreement Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AgreementOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Agreement",
+        "tags": [
+          "agreements"
+        ]
+      }
+    },
+    "/api/v1/agreements/{agreement_id}/cancel": {
+      "post": {
+        "operationId": "agreement_cancel",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "agreement_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Agreement Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CancelIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AgreementOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Cancel Agreement",
+        "tags": [
+          "agreements"
+        ]
+      }
+    },
+    "/api/v1/agreements/{agreement_id}/versions": {
+      "get": {
+        "operationId": "agreement_version_list",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "agreement_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Agreement Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 50,
+              "maximum": 200,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "cursor",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Cursor"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/VersionList"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List Versions",
+        "tags": [
+          "agreements"
+        ]
+      }
+    },
     "/api/v1/audit-log": {
       "get": {
         "operationId": "audit_log_list",
@@ -5674,7 +8243,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/CustomerOut"
+                  "$ref": "#/components/schemas/rebate__modules__masterdata__schemas__CustomerOut"
                 }
               }
             },
@@ -5768,7 +8337,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/CustomerOut"
+                  "$ref": "#/components/schemas/rebate__modules__masterdata__schemas__CustomerOut"
                 }
               }
             },
