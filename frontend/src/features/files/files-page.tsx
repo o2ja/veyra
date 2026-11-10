@@ -26,7 +26,7 @@ export const STATUS_TEXT: Record<string, string> = {
 };
 
 /** XHR upload: fetch has no upload progress. Same-origin, CSRF header like every mutating call. */
-async function uploadWithProgress(
+export async function uploadWithProgress(
   file: File,
   kind: Kind,
   onProgress: (pct: number) => void,

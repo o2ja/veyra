@@ -1,4 +1,5 @@
-import type { RouteObject } from "react-router-dom";
+import type { ReactNode } from "react";
+import { Navigate, type RouteObject } from "react-router-dom";
 
 import { AuditPage } from "../features/admin/audit-page";
 import { JobsPage } from "../features/admin/jobs-page";
@@ -19,9 +20,29 @@ import { SecurityPage } from "../features/auth/security-page";
 import { FileDetailPage } from "../features/files/file-detail-page";
 import { FilesPage } from "../features/files/files-page";
 import { HomePage } from "../features/home/home-page";
+import { ImportDetailPage } from "../features/imports/import-detail-page";
+import { ImportsPage } from "../features/imports/imports-page";
+import { LinesPage, SalesLinePage } from "../features/imports/lines-pages";
+import { NewImportPage } from "../features/imports/new-import-page";
+import { BranchesPage } from "../features/masterdata/branches-page";
+import { CustomerDetailPage, CustomersPage } from "../features/masterdata/customers-pages";
+import { ManufacturerDetailPage, ManufacturersPage } from "../features/masterdata/manufacturers-pages";
+import { ProductDetailPage, ProductsPage } from "../features/masterdata/products-pages";
+import { UnmappedPage } from "../features/masterdata/unmapped-page";
+import { UomPage } from "../features/masterdata/uom-page";
 import { AppLayout } from "./app-layout";
 import { RequirePermission, RequireSession } from "./guards";
 import { RouteError } from "./route-error";
+
+/** A signed-in page that needs one permission (the server enforces it on every call regardless). */
+const guarded = (path: string, permission: string, page: ReactNode): RouteObject => ({
+  path,
+  element: (
+    <RequireSession>
+      <RequirePermission permission={permission}>{page}</RequirePermission>
+    </RequireSession>
+  ),
+});
 
 export const routes: RouteObject[] = [
   {
@@ -132,6 +153,23 @@ export const routes: RouteObject[] = [
           </RequireSession>
         ),
       },
+      // S3: imports, source lines, master data
+      guarded("imports", "data.read", <ImportsPage />),
+      guarded("imports/new", "import.run", <NewImportPage />),
+      guarded("imports/:importId", "data.read", <ImportDetailPage />),
+      guarded("lines/sales", "data.read", <LinesPage key="sales" kind="sales" />),
+      guarded("lines/sales/:lineId", "data.read", <SalesLinePage />),
+      guarded("lines/purchases", "data.read", <LinesPage key="purchases" kind="purchases" />),
+      { path: "master-data", element: <Navigate to="/master-data/manufacturers" replace /> },
+      guarded("master-data/manufacturers", "data.read", <ManufacturersPage />),
+      guarded("master-data/manufacturers/:manufacturerId", "data.read", <ManufacturerDetailPage />),
+      guarded("master-data/customers", "data.read", <CustomersPage />),
+      guarded("master-data/customers/:customerId", "data.read", <CustomerDetailPage />),
+      guarded("master-data/products", "data.read", <ProductsPage />),
+      guarded("master-data/products/:productId", "data.read", <ProductDetailPage />),
+      guarded("master-data/uom", "data.read", <UomPage />),
+      guarded("master-data/branches", "data.read", <BranchesPage />),
+      guarded("master-data/unmapped", "masterdata.write", <UnmappedPage />),
     ],
   },
 ];

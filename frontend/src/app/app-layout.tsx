@@ -9,6 +9,9 @@ import { useSession } from "../lib/session";
 const NAV = [
   { to: "/", label: "Home", permission: null },
   { to: "/files", label: "Files", permission: "data.read" },
+  { to: "/imports", label: "Imports", permission: "data.read" },
+  { to: "/lines/sales", label: "Lines", permission: "data.read" },
+  { to: "/master-data", label: "Master data", permission: "data.read" },
   { to: "/admin/users", label: "Users", permission: "user.manage" },
   { to: "/admin/invitations", label: "Invitations", permission: "invitation.manage" },
   { to: "/admin/settings", label: "Settings", permission: "settings.read" },
@@ -111,7 +114,7 @@ export function AppLayout() {
         <div className="mx-auto flex h-14 max-w-6xl items-center gap-6 px-4">
           <span className="font-semibold tracking-tight">Veyra Recover</span>
           {signedIn && (
-            <nav aria-label="Main" className="flex gap-4 text-sm">
+            <nav aria-label="Main" className="flex flex-wrap gap-x-4 gap-y-1 text-sm">
               {NAV.filter((n) => n.permission === null || can(n.permission)).map((n) => (
                 <NavLink
                   key={n.to}
