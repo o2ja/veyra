@@ -317,6 +317,7 @@ class VersionSummary(BaseModel):
     priority: int
     source: str
     draft_id: UUID | None
+    source_file_id: UUID | None
     derived_from_version_id: UUID | None
     supersedes_version_id: UUID | None
     superseded_by_version_id: UUID | None

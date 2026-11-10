@@ -334,8 +334,10 @@ def _version_triggers() -> None:
         CREATE FUNCTION fn_agreement_version_update() RETURNS trigger
         LANGUAGE plpgsql SET search_path = pg_catalog AS $$
         BEGIN
-            IF (to_jsonb(NEW) - 'status' - 'superseded_at' - 'superseded_by_version_id')
-               IS DISTINCT FROM (to_jsonb(OLD) - 'status' - 'superseded_at' - 'superseded_by_version_id') THEN
+            -- valid_range is generated (NULL in NEW during BEFORE triggers); it follows valid_from/valid_to
+            IF (to_jsonb(NEW) - 'status' - 'superseded_at' - 'superseded_by_version_id' - 'valid_range')
+               IS DISTINCT FROM
+               (to_jsonb(OLD) - 'status' - 'superseded_at' - 'superseded_by_version_id' - 'valid_range') THEN
                 RAISE EXCEPTION 'agreement_versions: approved terms are immutable; only status, superseded_at '
                     'and superseded_by_version_id may change' USING ERRCODE = 'restrict_violation';
             END IF;
