@@ -17,6 +17,7 @@ import httpx
 import pyotp
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
+from httpx2 import Response  # Starlette's TestClient uses httpx2 when installed (pulled in by anthropic)
 from pydantic import SecretStr
 
 from rebate.api.app import create_app
@@ -76,20 +77,20 @@ class Api:
     def _headers(self, extra: dict[str, str] | None) -> dict[str, str]:
         return {"Origin": ORIGIN, "X-CSRF-Token": self.csrf(), **(extra or {})}
 
-    def get(self, path: str, **kw: Any) -> httpx.Response:
-        response: httpx.Response = self.client.get(f"/api/v1{path}", **kw)
+    def get(self, path: str, **kw: Any) -> Response:
+        response: Response = self.client.get(f"/api/v1{path}", **kw)
         return response
 
-    def post(self, path: str, json: Any = None, headers: dict[str, str] | None = None) -> httpx.Response:
-        r: httpx.Response = self.client.post(f"/api/v1{path}", json=json, headers=self._headers(headers))
+    def post(self, path: str, json: Any = None, headers: dict[str, str] | None = None) -> Response:
+        r: Response = self.client.post(f"/api/v1{path}", json=json, headers=self._headers(headers))
         return r
 
-    def patch(self, path: str, json: Any = None, headers: dict[str, str] | None = None) -> httpx.Response:
-        r: httpx.Response = self.client.patch(f"/api/v1{path}", json=json, headers=self._headers(headers))
+    def patch(self, path: str, json: Any = None, headers: dict[str, str] | None = None) -> Response:
+        r: Response = self.client.patch(f"/api/v1{path}", json=json, headers=self._headers(headers))
         return r
 
-    def delete(self, path: str, headers: dict[str, str] | None = None) -> httpx.Response:
-        r: httpx.Response = self.client.delete(f"/api/v1{path}", headers=self._headers(headers))
+    def delete(self, path: str, headers: dict[str, str] | None = None) -> Response:
+        r: Response = self.client.delete(f"/api/v1{path}", headers=self._headers(headers))
         return r
 
 
