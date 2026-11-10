@@ -8,7 +8,7 @@ from itertools import pairwise
 from rebate_engine.models import AccrualResult, EngineRuleError, RebateVersion, Tier, VolumeLine
 from rebate_engine.money import MONEY_CONTEXT
 from rebate_engine.rounding import round_line
-from rebate_engine.trace import Trace, trace_hash
+from rebate_engine.trace import Trace, Value, trace_hash
 
 ZERO = Decimal(0)
 CLAWBACK = "rebate_clawback"
@@ -51,10 +51,9 @@ def is_spa_by_ref(line: VolumeLine) -> bool:
     return bool(line.spa_reference and line.spa_reference.strip())
 
 
-def _is_spa_line(line: VolumeLine) -> tuple[bool, bool]:
-    """(is_spa, signals_disagree) per §5.4."""
-    by_ref = is_spa_by_ref(line)
-    return by_ref or line.spa_eligible, by_ref != line.spa_eligible
+def _spa_signals(line: VolumeLine) -> tuple[bool, bool]:
+    """§5.4 signals (by spa_reference, eligible under an SPA); either one makes it an SPA line."""
+    return is_spa_by_ref(line), line.spa_eligible
 
 
 def calculate_accrual(
@@ -96,19 +95,13 @@ def calculate_accrual(
             key=lambda ln: (ln.line_date, ln.line_id),
         )
         v_q = v_p = ZERO
-        spa_ids: list[str] = []
-        disagree: list[str] = []
+        spa_signals: list[Value] = []
         for ln in in_scope:
-            is_spa, differs = (False, False) if rules.volume_basis == "purchases" else _is_spa_line(ln)
-            if differs:
-                disagree.append(ln.line_id)
-                if not is_spa_by_ref(ln) and rules.spa_lines != "include":
-                    # §5.4 says "spa_reference OR eligible" and also "spa_reference wins": contradictory here.
-                    raise EngineRuleError(
-                        f"line {ln.line_id}: SPA-eligible without spa_reference; §5.4 is contradictory"
-                    )
+            # spa_lines policy only applies to the sales basis (§3.2)
+            by_ref, eligible = (False, False) if rules.volume_basis == "purchases" else _spa_signals(ln)
+            is_spa = by_ref or eligible
             if is_spa:
-                spa_ids.append(ln.line_id)
+                spa_signals.append({"line_id": ln.line_id, "spa_reference": by_ref, "spa_eligible": eligible})
             if not (is_spa and rules.spa_lines == "exclude"):
                 v_q += ln.amount
             if not (is_spa and rules.spa_lines in ("qualify_only", "exclude")):
@@ -119,8 +112,7 @@ def calculate_accrual(
             window=[rules.period_start, window_end],
             lines=len(in_scope),
             spa_lines=rules.spa_lines,
-            spa_line_ids=tuple(spa_ids),
-            signal_disagreements=tuple(disagree),
+            spa_line_signals=spa_signals,
             qualifying=v_q,
             payout=v_p,
         )

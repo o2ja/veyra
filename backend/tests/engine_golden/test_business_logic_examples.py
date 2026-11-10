@@ -276,11 +276,11 @@ def test_gl_r1_retroactive_catch_up() -> None:
         D("14850.00"),
         D("14850.00"),
     )
-    # "Purchases reach exactly 1,000,000 -> earned 25,000.00 -> delta = 25,000.00 - 15,000.00 = 10,000.00"
+    # "Purchases reach exactly 1,000,000 -> earned 25,000.00 -> delta = 25,000.00 - 14,850.00 = 10,150.00"
     at_1m = calculate_accrual(
-        v, [vline("a", "990000"), vline("b", "10000")], date(2026, 8, 31), D("15000.00")
+        v, [vline("a", "990000"), vline("b", "10000")], date(2026, 8, 31), at_990k.earned_cumulative
     )
-    assert (at_1m.tier_number, at_1m.earned_cumulative, at_1m.delta) == (2, D("25000.00"), D("10000.00"))
+    assert (at_1m.tier_number, at_1m.earned_cumulative, at_1m.delta) == (2, D("25000.00"), D("10150.00"))
     # 990,000 -> 1,010,000 with 14,850.00 accrued: 25,250.00 - 14,850.00 = 10,400.00
     at_101 = calculate_accrual(
         v, [vline("a", "990000"), vline("b", "20000")], date(2026, 8, 31), D("14850.00")

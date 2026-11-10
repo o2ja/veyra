@@ -16,7 +16,7 @@ from rebate_engine.rebate import calculate_accrual, incremental_raw, tier_for
 from rebate_engine.rules import RulesError, parse_rebate_rules, parse_spa_rules
 from rebate_engine.trace import canonical_json, trace_hash
 from tests.engine_golden import testdata_inputs as td
-from tests.engine_golden.builders import THREE_TIERS, D, rebate, vline
+from tests.engine_golden.builders import THREE_TIERS, D, rebate, step, vline
 
 
 @pytest.mark.parametrize("name", [*td.SPA_PAYLOADS, "REB-VOLT-2026", "REB-NWND-2026"])
@@ -111,13 +111,22 @@ def test_rebate_window_scope_and_refusals() -> None:
 
 def test_spa_line_signals() -> None:
     sales = rebate(volume_basis="sales", spa_lines="qualify_only")
-    # eligible under an SPA with no spa_reference: §5.4 is self-contradictory -> refuse
-    with pytest.raises(EngineRuleError, match="contradictory"):
-        calculate_accrual(sales, [vline("a", "10", spa_eligible=True)], date(2026, 7, 1), D(0))
-    # reference present but not eligible: both readings say SPA line; disagreement traced
-    r = calculate_accrual(sales, [vline("a", "10", spa_reference="X")], date(2026, 7, 1), D(0))
-    assert (r.qualifying_volume, r.payout_volume) == (D(10), D(0))
-    assert r.trace["steps"][0]["signal_disagreements"] == ["a"]  # type: ignore[index,call-overload]
+    # §5.4 (owner decision 2026-11-10): either signal suffices; the trace records both signals
+    lines = [
+        vline("elig_no_ref", "10", spa_eligible=True),  # eligible without reference -> SPA line
+        vline("ref_not_elig", "20", spa_reference="X"),  # reference but not eligible -> SPA line
+        vline("both", "40", spa_reference="X", spa_eligible=True),
+        vline("plain", "100"),
+    ]
+    r = calculate_accrual(sales, lines, date(2026, 7, 1), D(0))
+    assert (r.qualifying_volume, r.payout_volume) == (D(170), D(100))
+    assert step(r, "volume")["spa_line_signals"] == [
+        {"line_id": "both", "spa_reference": True, "spa_eligible": True},
+        {"line_id": "elig_no_ref", "spa_reference": False, "spa_eligible": True},
+        {"line_id": "ref_not_elig", "spa_reference": True, "spa_eligible": False},
+    ]
+    excl = calculate_accrual(rebate(volume_basis="sales", spa_lines="exclude"), lines, date(2026, 7, 1), D(0))
+    assert (excl.qualifying_volume, excl.payout_volume) == (D(100), D(100))
     # include: SPA lines qualify and earn whatever the signals say
     inc = rebate(volume_basis="sales", spa_lines="include")
     assert (

@@ -1,6 +1,9 @@
 # a2-engine notes (S5.1–S5.2, `rebate_engine`)
 
-## A. Contradictions in BUSINESS_LOGIC.md (owner decision; potential financial discrepancy)
+## A. Contradictions in BUSINESS_LOGIC.md — RESOLVED by owner 2026-11-10 (main d76aff6)
+
+Both recommendations approved: R1 delta corrected to 10,150.00 (golden test updated); §5.4 = either signal
+suffices (engine implements OR; the volume trace step records both signals per SPA line). Original analysis:
 
 1. **§5.3 Example R1 / §14 GL-R1 "delta 10,000.00".** The example accrues 14,850.00 at 990,000, then says
    "purchases reach exactly 1,000,000 → delta = 25,000.00 − 15,000.00 = 10,000.00". Under the ledger rule of
