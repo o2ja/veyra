@@ -73,6 +73,46 @@ For the orchestrator: built scope, doc deltas to merge, deviations, test map, pe
 - SECURITY.md §4: added a "CSV text encoding" row (edited directly, brief allows). ARCHITECTURE.md has no
   UTF-8-only sentence; nothing changed there.
 
+### PR #4 review fixes (DB-1..DB-6, SEC-9..SEC-15): deltas for DATABASE_SCHEMA / API_SPECIFICATION / SECURITY
+
+- **DB-1 natural key** of the four source tables includes `doc_type`: unique indexes `WHERE is_current` are
+  `(tenant_id, source_system, doc_type, document_number)` on documents and `(..., line_number)` on lines (migration
+  `20261111_1000_import_pipeline` edited in place: unreleased branch). An invoice 1001/1 and a credit note 1001/1
+  are two current lines. Loader `ON CONFLICT` target and validator duplicate key use the same columns.
+- **DB-2** trigger `fn_source_currency_check` (BEFORE INSERT/UPDATE on the four source tables): `currency_code`
+  must equal `tenant_settings.currency_code`. The validator reports the same rule per row (`currency_mismatch`).
+- **DB-3** deferred constraint trigger `fn_source_successor_check`: a retired line (`is_current = false`) must have
+  `superseded_by_id` pointing at a different, existing, current row of the same natural key with `version + 1`.
+- **DB-4** `rebate_app` has column-level `UPDATE (is_current, superseded_by_id)` only on the source tables (no
+  UPDATE of business columns; no DELETE). Isolation D3/D9 adjusted for S3 tables.
+- **DB-5** retirement is one `UPDATE ... FROM (VALUES ...)` per chunk with a rowcount check (concurrent load -> fail).
+- **DB-6** §2 exemptions: `manufacturer_settings` (PK = `manufacturer_id`, 1:1 extension) and
+  `import_staged_rows` (PK = `(import_batch_id, row_number)`, bounded PK range scans) have no own `id`.
+  `unmapped_entities.resolved_entity_id` has no FK because it points at a customer OR a product (`entity_type`
+  says which); the resolve service checks the target exists in the tenant.
+- **SEC-9** limits: `MAX_ROWS` 1,000,000 data rows per file (batch fails, row error `too_many_rows`); at most 3
+  imports per workspace in `scanning/parsing/loading` (checked under a per-tenant advisory lock on create and
+  confirm): `409 too_many_running_imports`. Add to API_SPECIFICATION error codes for `POST /imports` and
+  `POST /imports/{id}/confirm`.
+- **SEC-10** master-data imports write one audit event per created/changed customer, product and UoM conversion
+  (`customer.created/updated`, `product.created/updated`, `uom_conversion.created/updated`) in the chunk's
+  transaction, actor = the confirming user, `request_id = import:<batch id>`.
+- **SEC-11** customer parent cycles: before the first chunk of a customers import, the whole file's parent
+  assignments are applied on top of the workspace hierarchy and checked for cycles
+  (`masterdata.check_parent_cycles`); a cycle fails the batch with row error `customer_parent_cycle` and nothing
+  of the import is loaded. The per-row check inside the chunk (savepoint) stays as a second guard.
+- **SEC-12** PAN guard codes: `card_number_in_header` (batch failed at parse; headers are not stored),
+  `card_number` (422 detail on `options.defaults.<field>` of `PUT /imports/{id}/mapping` and templates),
+  `possible_card_number` (row error). Numeric XLSX cells holding a 15-19 digit integer are replaced by
+  `[card number removed]` without a Luhn check (Excel keeps 15 significant digits, so Luhn may no longer pass).
+- **SEC-13** `GET /imports/{id}/errors?format=csv`: streamed (`text/csv`), at most 100,000 rows in file order,
+  response header `X-Export-Truncated: true|false`, audit event `import.errors_exported` (metadata `rows`,
+  `truncated`). Formula-injection protection unchanged. Rows are read inside the request transaction; only the
+  CSV formatting is streamed.
+- **SEC-14** staged-row and template reads filter `tenant_id` explicitly (besides RLS); mapping keys are
+  `snake_case`, 1-64 chars (422 from the schema), at most 50 entries.
+- **SEC-15** idempotency keys stay tenant-scoped (`(tenant_id, key)`) as API_SPECIFICATION says; no change.
+
 ### Claims hook (DATABASE_SCHEMA §5 / BUSINESS_LOGIC §7 note)
 `modules/ingestion/claims_hook.claimed_line_ids(db, tenant_id, line_ids) -> frozenset[UUID]` is real code that
 returns the empty set because no `claim_lines` table exists before S7 (documented in the module). The loader

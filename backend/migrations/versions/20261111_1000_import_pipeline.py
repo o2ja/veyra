@@ -299,6 +299,12 @@ def _successor_and_currency_functions() -> None:
         DECLARE
             expected char(3);
         BEGIN
+            -- A row for another tenant than the session's is refused by RLS WITH CHECK (runs after BEFORE
+            -- triggers); that tenant's settings are invisible here, so leave the refusal to RLS.
+            IF NEW.tenant_id IS DISTINCT FROM nullif(current_setting('app.tenant_id', true), '')::uuid
+               AND current_setting('app.tenant_id', true) <> '' THEN
+                RETURN NEW;
+            END IF;
             SELECT currency_code INTO expected FROM public.tenant_settings WHERE tenant_id = NEW.tenant_id;
             IF expected IS NULL OR NEW.currency_code IS DISTINCT FROM expected THEN
                 RAISE EXCEPTION '%: currency % is not the workspace currency %', TG_TABLE_NAME, NEW.currency_code,

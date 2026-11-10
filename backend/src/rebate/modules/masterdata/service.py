@@ -16,7 +16,7 @@ from uuid import UUID
 from sqlalchemy import Select, func, or_, select
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.exc import IntegrityError
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, aliased
 
 from rebate.core import clock
 from rebate.core.errors import Conflict, InvalidState, NotFound, PreconditionFailed, ValidationFailed
@@ -731,6 +731,32 @@ class ParentCycle(InvalidState):
         super().__init__(
             f"Customer {customer_code} cannot have parent {parent_code}: the hierarchy would contain a cycle."
         )
+
+
+def check_parent_cycles(db: Session, tenant_id: UUID, parents: dict[str, str | None]) -> None:
+    """Whole-import check before any chunk loads: the hierarchy after applying ``parents`` (code -> parent
+    code, from every row of the file) on top of the workspace's customers stays acyclic, so a cycle refuses
+    the import before an earlier chunk could commit. Raises ``ParentCycle``."""
+    parent = aliased(Customer)
+    rows = db.execute(
+        select(Customer.code, parent.code)
+        .outerjoin(
+            parent, (parent.tenant_id == Customer.tenant_id) & (parent.id == Customer.parent_customer_id)
+        )
+        .where(Customer.tenant_id == tenant_id)
+    )
+    graph: dict[str, str | None] = {str(code): parent_code for code, parent_code in rows}
+    graph.update(parents)
+    done: set[str] = set()
+    for start in parents:
+        path: list[str] = []
+        node: str | None = start
+        while node is not None and node not in done:
+            if node in path:
+                raise ParentCycle(node, graph.get(node) or "")
+            path.append(node)
+            node = graph.get(node)
+        done.update(path)
 
 
 def _imported(

@@ -202,3 +202,23 @@ def test_openpyxl_parses_xml_through_defusedxml() -> None:
     from openpyxl.xml import DEFUSEDXML  # type: ignore[import-untyped]
 
     assert DEFUSEDXML is True
+
+
+def test_card_like_integers_in_numeric_cells() -> None:
+    from rebate.modules.ingestion.normalizers import CARD_REMOVED, card_like_integer
+
+    # 4111111111111111 (16 digits) as Excel stores it: a float that kept 15 significant digits
+    assert card_like_integer(4111111111111110.0) and card_like_integer(411111111111111)  # 15 digits
+    assert card_like_integer(1234567890123456789)  # 19 digits, no Luhn check
+    assert not card_like_integer(41111111111111)  # 14 digits
+    assert not card_like_integer(12345678901234567890)  # 20 digits
+    assert not card_like_integer(4111111111111111.5) and not card_like_integer(True)
+    assert not card_like_integer("4111111111111111")  # text cells go through the Luhn guard instead
+
+    def build(ws: object) -> None:
+        ws.append(["customer_code", "external_id"])  # type: ignore[attr-defined]
+        ws.append(["C1", 4111111111111111])  # type: ignore[attr-defined]
+
+    with readers.xlsx_source(_xlsx(build)) as src:
+        rows = list(readers.records(src).rows)
+    assert rows == [(2, {"customer_code": "C1", "external_id": CARD_REMOVED})]

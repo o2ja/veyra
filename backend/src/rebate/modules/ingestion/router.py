@@ -2,12 +2,13 @@
 
 import csv
 import io
+from collections.abc import Iterator
 from datetime import date
 from typing import Annotated, Any, Literal
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, Header, Query, Request, Response
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, StreamingResponse
 
 from rebate.core.access import require, tenant_of
 from rebate.core.errors import Conflict, PreconditionFailed
@@ -214,6 +215,20 @@ def _cell(value: object) -> str:
     return "'" + text if text.startswith(FORMULA_START) else text
 
 
+def _csv_lines(rows: list[tuple[Any, ...]]) -> Iterator[str]:
+    """Rows are read inside the request transaction; only the formatting is streamed."""
+    buf = io.StringIO()
+    out = csv.writer(buf)
+    out.writerow(["row_number", "column", "severity", "code", "message"])
+    for i, row in enumerate(rows, 1):
+        out.writerow([_cell(v) for v in row])
+        if i % 1000 == 0:
+            yield buf.getvalue()
+            buf.seek(0)
+            buf.truncate()
+    yield buf.getvalue()
+
+
 @router.get(
     "/imports/{import_id}/errors",
     operation_id="import_errors",
@@ -228,18 +243,19 @@ def errors(
     limit: Limit = 100,
     cursor: str | None = None,
 ) -> Any:
-    db, tenant_id = ctx(request).db, tenant_of(principal)
+    c = ctx(request)
+    db, tenant_id = c.db, tenant_of(principal)
     if format == "csv":
-        rows = service.list_errors(db, tenant_id, import_id, limit=None, cursor=None)
-        buf = io.StringIO()
-        out = csv.writer(buf)
-        out.writerow(["row_number", "column", "severity", "code", "message"])
-        for e in rows:
-            out.writerow([_cell(v) for v in (e.row_number, e.column_name, e.severity, e.code, e.message)])
-        return Response(
-            buf.getvalue(),
+        rows, truncated = service.export_errors(
+            db, tenant_id, import_id, user_id=principal.user_id, meta=c.audit_meta()
+        )
+        return StreamingResponse(
+            _csv_lines(rows),
             media_type="text/csv; charset=utf-8",
-            headers={"Content-Disposition": f'attachment; filename="import-{import_id}-errors.csv"'},
+            headers={
+                "Content-Disposition": f'attachment; filename="import-{import_id}-errors.csv"',
+                "X-Export-Truncated": "true" if truncated else "false",
+            },
         )
     found = service.list_errors(db, tenant_id, import_id, limit=limit, cursor=cursor)
     data, p = page(found, limit)

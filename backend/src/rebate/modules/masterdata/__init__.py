@@ -5,9 +5,10 @@ from rebate.modules.masterdata.pagination import Page, decode_cursor, encode_cur
 from rebate.modules.masterdata.router import router
 from rebate.modules.masterdata.service import (
     LoadCounts,
-    ParentCycle,
     MasterIndex,
+    ParentCycle,
     Who,
+    check_parent_cycles,
     load_customers,
     load_products,
     load_uom_conversions,
@@ -18,10 +19,11 @@ from rebate.modules.masterdata.service import (
 
 __all__ = [
     "LoadCounts",
-    "ParentCycle",
     "MasterIndex",
     "Page",
+    "ParentCycle",
     "Who",
+    "check_parent_cycles",
     "decode_cursor",
     "encode_cursor",
     "keyset",

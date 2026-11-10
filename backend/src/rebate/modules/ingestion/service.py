@@ -76,18 +76,24 @@ def _staged_window(
     """Next staged rows after ``after`` in ``row_number`` windows of ``size`` on the primary key, so a read
     is a bounded PK range scan whatever the planner statistics say (the app role cannot ANALYZE)."""
     base = (ImportStagedRow.tenant_id == batch.tenant_id, ImportStagedRow.import_batch_id == batch.id)
-    last = db.scalar(select(func.max(ImportStagedRow.row_number)).where(*base)) or 0
-    while after < last:
+    while True:
+        first = db.scalar(
+            select(func.min(ImportStagedRow.row_number)).where(*base, ImportStagedRow.row_number > after)
+        )
+        if first is None:
+            return []
+        after = first - 1
         stmt = (
-            select(*columns) if columns is not None else select(ImportStagedRow)
-        ).where(
-            *base, ImportStagedRow.row_number > after, ImportStagedRow.row_number <= after + size, *where
-        ).order_by(ImportStagedRow.row_number)
+            (select(*columns) if columns is not None else select(ImportStagedRow))
+            .where(
+                *base, ImportStagedRow.row_number > after, ImportStagedRow.row_number <= after + size, *where
+            )
+            .order_by(ImportStagedRow.row_number)
+        )
         rows = list(db.execute(stmt) if columns is not None else db.scalars(stmt))
         if rows:
             return rows
         after += size
-    return []
 
 
 class ImportHasErrors(Conflict):
@@ -586,6 +592,12 @@ def load_chunk(db: Session, ctx: JobContext) -> None:
     cp = dict(batch.checkpoint)
     if batch.status != "loading" or int(ctx.payload["chunk"]) != cp.get("chunk"):
         return  # finished, or a stale duplicate of an already committed chunk
+    if batch.import_type == "customers" and cp["chunk"] == 0:
+        try:
+            masterdata.check_parent_cycles(db, batch.tenant_id, _customer_parents(db, batch))
+        except masterdata.ParentCycle as exc:
+            _fail(db, batch, "failed", exc.message, exc.code)
+            return
     phase, after = int(cp["phase"]), int(cp["after_row"])
     rows = _valid_rows(db, batch, phase, after)
     while not rows and phase == 1:
@@ -614,6 +626,19 @@ def load_chunk(db: Session, ctx: JobContext) -> None:
         db, "import_load", tenant_id=batch.tenant_id, payload={"batch_id": str(batch.id), "chunk": str(next_chunk)},
         created_by=batch.confirmed_by, dedupe_key=f"import_load:{batch.id}:{next_chunk}",
     )  # fmt: skip
+
+
+def _customer_parents(db: Session, batch: ImportBatch) -> dict[str, str | None]:
+    code, parent = (ImportStagedRow.normalized[k].astext for k in ("customer_code", "parent_customer_code"))
+    found: dict[str, str | None] = {}
+    after = 0
+    while rows := _staged_window(
+        db, batch, after, LOAD_CHUNK, ImportStagedRow.status == "valid",
+        columns=(ImportStagedRow.row_number, code, parent),
+    ):  # fmt: skip
+        found.update((c, p or None) for _, c, p in rows)
+        after = rows[-1][0]
+    return found
 
 
 def _valid_rows(db: Session, batch: ImportBatch, phase: int, after: int) -> list[ImportStagedRow]:
@@ -870,15 +895,41 @@ def preview(db: Session, batch: ImportBatch, limit: int = 20) -> dict[str, Any]:
 
 
 def list_errors(
-    db: Session, tenant_id: UUID, batch_id: UUID, *, limit: int | None, cursor: str | None
+    db: Session, tenant_id: UUID, batch_id: UUID, *, limit: int, cursor: str | None
 ) -> list[ImportRowError]:
     get_batch(db, tenant_id, batch_id)
     stmt = select(ImportRowError).where(
         ImportRowError.tenant_id == tenant_id, ImportRowError.import_batch_id == batch_id
     )
-    if limit is None:  # CSV export: every error, in file order
-        return list(db.scalars(stmt.order_by(ImportRowError.row_number.nulls_first(), ImportRowError.id)))
     return list(db.scalars(masterdata.keyset(stmt, ImportRowError.id, cursor, limit, newest_first=False)))
+
+
+EXPORT_MAX_ROWS = 100_000
+
+
+def export_errors(
+    db: Session, tenant_id: UUID, batch_id: UUID, *, user_id: UUID, meta: dict[str, Any]
+) -> tuple[list[tuple[Any, ...]], bool]:
+    """Error rows for the CSV export in file order, capped at ``EXPORT_MAX_ROWS`` (SECURITY.md §4);
+    returns ``(rows, truncated)`` and audits the export."""
+    batch = get_batch(db, tenant_id, batch_id)
+    e = ImportRowError
+    rows = [
+        tuple(r)
+        for r in db.execute(
+            select(e.row_number, e.column_name, e.severity, e.code, e.message)
+            .where(e.tenant_id == tenant_id, e.import_batch_id == batch_id)
+            .order_by(e.row_number.nulls_first(), e.id)
+            .limit(EXPORT_MAX_ROWS + 1)
+        )
+    ]
+    truncated = len(rows) > EXPORT_MAX_ROWS
+    rows = rows[:EXPORT_MAX_ROWS]
+    _record(
+        db, batch, Action.IMPORT_ERRORS_EXPORTED, Actor("user", user_id), meta,
+        metadata={"rows": len(rows), "truncated": truncated},
+    )  # fmt: skip
+    return rows, truncated
 
 
 def job_progress(batch: ImportBatch) -> int:

@@ -89,7 +89,7 @@ def _retire(db: Session, table: Table, pairs: list[tuple[UUID, UUID]]) -> None:
     if not pairs:
         return
     pairs_t = values_list(column("old", PG_UUID), column("new", PG_UUID), name="retire").data(pairs)
-    n = db.execute(
+    n = db.execute(  # type: ignore[attr-defined]
         update(table)
         .where(table.c.id == pairs_t.c.old, table.c.is_current)
         .values(is_current=False, superseded_by_id=pairs_t.c.new)
