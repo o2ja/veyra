@@ -13,7 +13,7 @@ import pytest
 import rebate_engine
 from rebate_engine.models import EngineRuleError, Json, Tier
 from rebate_engine.rebate import calculate_accrual, incremental_raw, tier_for
-from rebate_engine.rules import RulesError, parse_rebate_rules, parse_spa_rules
+from rebate_engine.rules import RulesError, UnsupportedRuleError, parse_rebate_rules, parse_spa_rules
 from rebate_engine.trace import canonical_json, trace_hash
 from tests.engine_golden import testdata_inputs as td
 from tests.engine_golden.builders import THREE_TIERS, D, rebate, step, vline
@@ -98,15 +98,36 @@ def test_rebate_window_scope_and_refusals() -> None:
     only_p1 = replace(rebate(product_scope_mode="listed"), product_ids=("P1",))
     assert calculate_accrual(only_p1, lines, date(2026, 7, 1), D(0)).qualifying_volume == D(100000)
     assert calculate_accrual(rebate(), lines, date(2025, 12, 31), D(0)).earned_cumulative == 0
-    with pytest.raises(EngineRuleError, match="quantity"):
+    with pytest.raises(UnsupportedRuleError, match="Release 2") as exc:
         calculate_accrual(rebate(tier_metric="quantity"), lines, date(2026, 7, 1), D(0))
-    with pytest.raises(EngineRuleError, match="incremental"):
-        calculate_accrual(
-            rebate(tier_mode="incremental", volume_basis="sales", spa_lines="qualify_only"),
-            [vline("a", "10", spa_reference="X")],
-            date(2026, 7, 1),
-            D(0),
-        )
+    assert exc.value.code == "not_supported_until_release_2"
+    incr_qo = rebate(tier_mode="incremental", volume_basis="sales", spa_lines="qualify_only")
+    for volume in ([vline("a", "10", spa_reference="X")], [vline("a", "10")], []):  # vp!=vq, vp==vq
+        with pytest.raises(RulesError, match="incompatible"):
+            calculate_accrual(incr_qo, volume, date(2026, 7, 1), D(0))
+
+
+def test_release_2_values_rejected_by_parsers() -> None:
+    spa = _spa_rules()
+    spa["quantity"]["cap_scope"] = "per_agreement"
+    with pytest.raises(UnsupportedRuleError, match="not supported until Release 2") as exc:
+        parse_spa_rules(spa)
+    assert (exc.value.code, exc.value.field) == ("not_supported_until_release_2", "quantity.cap_scope")
+    reb = copy.deepcopy(td.payload("REB-VOLT-2026")["rules"])
+    reb["tier_metric"] = "quantity"
+    with pytest.raises(UnsupportedRuleError, match="not supported until Release 2") as exc:
+        parse_rebate_rules(reb)
+    assert (exc.value.code, exc.value.field) == ("not_supported_until_release_2", "tier_metric")
+
+
+@pytest.mark.parametrize("volume_basis", ["sales", "purchases"])
+def test_parser_rejects_incremental_with_qualify_only(volume_basis: str) -> None:
+    reb = copy.deepcopy(td.payload("REB-VOLT-2026")["rules"])
+    reb.update(tier_mode="incremental", spa_lines="qualify_only", volume_basis=volume_basis)
+    with pytest.raises(RulesError, match="incompatible"):
+        parse_rebate_rules(reb)
+    reb["spa_lines"] = "exclude"
+    assert parse_rebate_rules(reb).tier_mode == "incremental"
 
 
 def test_spa_line_signals() -> None:

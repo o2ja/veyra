@@ -3,7 +3,9 @@
 ## A. Contradictions in BUSINESS_LOGIC.md — RESOLVED by owner 2026-11-10 (main d76aff6)
 
 Both recommendations approved: R1 delta corrected to 10,150.00 (golden test updated); §5.4 = either signal
-suffices (engine implements OR; the volume trace step records both signals per SPA line). Original analysis:
+suffices (engine implements OR; the volume trace step records both signals per SPA line).
+R1 breakdown (financial review, PR #2): 9,900.00 catch-up on the 990,000 (× (2.5% − 1.5%)) + 250.00 on the new
+10,000 = 10,150.00; BUSINESS_LOGIC §5.3 corrected. **The original analysis below is superseded** (kept for history):
 
 1. **§5.3 Example R1 / §14 GL-R1 "delta 10,000.00".** The example accrues 14,850.00 at 990,000, then says
    "purchases reach exactly 1,000,000 → delta = 25,000.00 − 15,000.00 = 10,000.00". Under the ledger rule of
@@ -20,12 +22,19 @@ suffices (engine implements OR; the volume trace step records both signals per S
    `EngineRuleError` in exactly that case when `spa_lines ≠ include`; no ground-truth case hits it.
    Recommendation: "OR" (count it as an SPA line, conservative against double dipping).
 
-## B. Undefined rules — engine refuses (raises `EngineRuleError`) instead of guessing
+## B. Formerly undefined rules — RESOLVED (financial review, PR #2)
 
-3. `quantity.cap_scope = per_agreement`: the pool size is not defined (each item has its own `max_quantity`).
-4. `tier_metric = quantity`: §5.2 defines `earned = V_p × rate` only for amounts; payout base for a unit metric
-   is undefined.
-5. `manufacturer_settings.claim_window_basis = period_end` (DATABASE_SCHEMA enum) has no definition in §4.0/§12.
+3. `quantity.cap_scope = per_agreement` and 4. `tier_metric = quantity`: Release 2. `parse_spa_rules` /
+   `parse_rebate_rules` raise `UnsupportedRuleError` (a `RulesError`, `code = "not_supported_until_release_2"`,
+   `.field`, `.value`); the engine raises the same error regardless of `max_quantity` / volumes.
+   `tier_mode = incremental` + `spa_lines = qualify_only` is rejected by `parse_rebate_rules` (`RulesError`)
+   and by `calculate_accrual` whatever the volumes. BUSINESS_LOGIC §3.1, §3.2, §3.3, §4.2 updated.
+   **For S4 `AgreementValidator`:** it must call `rebate_engine.rules.parse_spa_rules` / `parse_rebate_rules`
+   (or `spa_version_from_payload` / `rebate_version_from_payload`) on every draft so these rejections and their
+   stable code reach the user; do not re-implement the checks.
+5. `claim_window_basis = period_end` (owner-approved): deadline = last day of the month of the line's claim date
+   (the `date_basis` date, ship-date fallback to invoice date) + `claim_window_days`; trace step `claim_window`
+   records `basis` and `period_end`. BUSINESS_LOGIC §12 Example D3, §14 GL-D3.
 
 ## C. Interpretations taken (consistent with all ground truth; record in S5 report)
 
@@ -36,7 +45,7 @@ suffices (engine implements OR; the volume trace step records both signals per S
    `exclude` rows.
 8. Claim UoM precedence: item `claim_uom` > rules `claim_uom` > product base UoM.
 9. Exceptions store `claim_amount = 0` (GT SC-02 `"0.00"`), except `outside_claim_window` (amount kept).
-10. Unclaimed original whose returns ≥ its quantity → `not_applicable` / `no_claim_due` (gate K's
+10. (Now in BUSINESS_LOGIC §7.) Unclaimed original whose returns ≥ its quantity → `not_applicable` / `no_claim_due` (gate K's
     `cap_exhausted` would mislabel it).
 11. Claimed (frozen) originals are recomputed on gross quantity (needed for §9.3); they consume
     `claimed qty − returned` of the cap at their position in the processing order. Lines ending

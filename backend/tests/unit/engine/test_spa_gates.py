@@ -24,6 +24,7 @@ from rebate_engine.models import (
     Status,
     UomConversion,
 )
+from rebate_engine.rules import UnsupportedRuleError
 from rebate_engine.spa import calculate_spa
 from tests.engine_golden.builders import D, item, line, mfr, spa_rules, step, version, warnings
 
@@ -200,18 +201,50 @@ def test_claim_window_skipped_with_warning_when_settings_missing() -> None:
     assert r.status is Status.ELIGIBLE and "claim_window_settings_missing" in warnings(r)
 
 
-def test_claim_window_ship_date_basis_and_undefined_period_end() -> None:
+def test_claim_window_ship_date_basis() -> None:
     ln = line(invoice_date=date(2026, 5, 1), ship_date=date(2026, 5, 20))
     ship = (mfr(claim_window_basis="ship_date"),)
     assert one(ln, manufacturers=ship).status is Status.ELIGIBLE  # 05-20 + 60 = 07-19 >= 07-10
-    with pytest.raises(EngineRuleError, match="period_end"):
-        one(ln, manufacturers=(mfr(claim_window_basis="period_end"),))
 
 
-def test_per_agreement_cap_is_refused_not_guessed() -> None:
-    v = version(rules=spa_rules(cap_scope="per_agreement"), items=(item(max_quantity=D(10)),))
-    with pytest.raises(EngineRuleError, match="per_agreement"):
+def test_claim_window_period_end_leap_february() -> None:
+    # 2028-02-10 -> period end 2028-02-29 (leap year) -> + 60 days = 2028-04-29
+    v = version(valid_from=date(2028, 1, 1), valid_to=date(2028, 12, 31))
+    ln = line(invoice_date=date(2028, 2, 10), ship_date=date(2028, 2, 10))
+    pe = (mfr(claim_window_basis="period_end"),)
+    r = one(ln, [v], manufacturers=pe, run_date=date(2028, 4, 29))
+    assert r.status is Status.ELIGIBLE
+    cw = step(r, "claim_window")
+    assert (cw["basis"], cw["period_end"], cw["deadline"]) == ("period_end", "2028-02-29", "2028-04-29")
+    late = one(ln, [v], manufacturers=pe, run_date=date(2028, 4, 30))
+    assert late.exception_code is Code.OUTSIDE_CLAIM_WINDOW
+
+
+def test_claim_window_period_end_uses_date_validity_basis() -> None:
+    # date_basis ship_date: claim date 2026-04-02 (ship), not 2026-03-30 (invoice) -> period end 2026-04-30
+    v = version(rules=spa_rules(date_basis="ship_date"))
+    ln = line(invoice_date=date(2026, 3, 30), ship_date=date(2026, 4, 2))
+    r = one(ln, [v], manufacturers=(mfr(claim_window_basis="period_end"),), run_date=date(2026, 6, 29))
+    assert r.status is Status.ELIGIBLE  # 04-30 + 60 = 06-29
+    assert step(r, "claim_window")["period_end"] == "2026-04-30"
+    # missing ship date -> invoice date fallback (2026-03-30 -> period end 2026-03-31), warned
+    fb = one(
+        replace(ln, ship_date=None),
+        [v],
+        manufacturers=(mfr(claim_window_basis="period_end"),),
+        run_date=date(2026, 6, 29),
+    )
+    assert fb.exception_code is Code.OUTSIDE_CLAIM_WINDOW  # 03-31 + 60 = 05-30 < 06-29
+    assert step(fb, "claim_window")["period_end"] == "2026-03-31"
+    assert "ship_date_fallback" in warnings(fb)
+
+
+@pytest.mark.parametrize("max_quantity", [D(10), None])
+def test_per_agreement_cap_is_refused_regardless_of_max_quantity(max_quantity: Decimal | None) -> None:
+    v = version(rules=spa_rules(cap_scope="per_agreement"), items=(item(max_quantity=max_quantity),))
+    with pytest.raises(UnsupportedRuleError, match="Release 2") as exc:
         one(line(), [v])
+    assert exc.value.code == "not_supported_until_release_2"
 
 
 def test_rounding_modes() -> None:
@@ -298,3 +331,38 @@ def test_return_adjustment_converts_to_claim_uom() -> None:
     r = one(ret, conversions=conv)
     # 1 RL = 500 FT returned x 0.04 = -20.00
     assert (r.status, r.claim_amount, r.eligible_quantity) == (Status.ADJUSTMENT, D("-20.00"), D(-500))
+
+
+def test_return_adjustment_rounds_per_line_with_prior_claim_rule() -> None:
+    # §6/§7: prior claim rounded `down`, per_document: the adjustment is still one line, -3 x 2.505 = -7.515
+    from rebate_engine.models import PriorClaim
+
+    pc = PriorClaim(
+        agreement_id="A1",
+        agreement_version_id="V1",
+        claim_uom="EA",
+        quantity=D(10),
+        unit_amount=D("2.505"),
+        claim_amount=D("25.05"),
+        rounding=RoundingRule(mode="down", scale=2, timing="per_document"),
+    )
+    orig = ReturnOriginal(line_id="O", quantity=D(10), returned_quantity=D(3), prior_claim=pc)
+    r = one(line(quantity=D(-3), return_original=orig))
+    assert r.claim_amount == D("-7.51")
+    assert (step(r, "round")["mode"], step(r, "round")["timing"]) == ("down", "per_line")
+
+
+def test_outside_claim_window_keeps_amount_but_does_not_consume_cap() -> None:
+    # §4.2: cap 100, u = 22.00. A (05-01, deadline 06-30 < run 07-10) q60 -> outside window, 1,320.00 kept;
+    # B (06-10) q60 -> remaining still 100 -> eligible 60, 1,320.00, not partial.
+    v = version(items=(item(max_quantity=D(100)),))
+    a = line(line_id="A", document_number="INV-A", invoice_date=date(2026, 5, 1), quantity=D(60))
+    b = line(line_id="B", document_number="INV-B", quantity=D(60))
+    ra, rb = calculate_spa(SpaRunInput(run_date=RUN, lines=(b, a), versions=(v,), manufacturers=(mfr(),)))
+    assert (ra.line_id, ra.exception_code, ra.claim_amount) == ("A", Code.OUTSIDE_CLAIM_WINDOW, D("1320.00"))
+    assert (rb.status, rb.eligible_quantity, rb.claim_amount, rb.flags) == (
+        Status.ELIGIBLE,
+        D(60),
+        D("1320.00"),
+        (),
+    )

@@ -4,6 +4,7 @@
 exception code and every gate evaluated is traced. Pure: no I/O, clock or randomness.
 """
 
+from calendar import monthrange
 from collections import defaultdict
 from dataclasses import dataclass, field
 from datetime import date
@@ -25,6 +26,7 @@ from rebate_engine.models import (
 )
 from rebate_engine.money import MONEY_CONTEXT
 from rebate_engine.rounding import allocate_document, round_line
+from rebate_engine.rules import UnsupportedRuleError
 from rebate_engine.trace import Trace, trace_hash
 from rebate_engine.uom import find_factor
 
@@ -202,21 +204,31 @@ def _unit_amount(version: SpaVersion, item: SpaItem, c_ref: Decimal | None, pric
     return _required(c_ref, "reference_cost", version) - price * (1 - margin)
 
 
-def _claim_window(ev: _Eval, settings: ManufacturerSettings | None, run_date: date) -> bool:
-    """True when inside the window (or the gate is skipped)."""
+def _claim_window(
+    ev: _Eval, version: SpaVersion, settings: ManufacturerSettings | None, run_date: date
+) -> bool:
+    """True when inside the window (or the gate is skipped). §4.0 gate 9, §12."""
     if settings is None or settings.claim_window_basis is None or settings.claim_window_days is None:
         ev.trace.warn("claim_window_settings_missing")
         ev.trace.step("claim_window", skipped=True)
         return True
     basis = settings.claim_window_basis
-    if basis not in ("invoice_date", "ship_date"):
-        # `period_end` is a DB enum value with no definition in BUSINESS_LOGIC.md §4.0/§12: refuse to guess.
-        raise EngineRuleError(f"claim_window_basis {basis!r} is not defined in BUSINESS_LOGIC.md")
-    due = deadline(_line_date(ev.line, basis, ev.trace), settings.claim_window_days)
+    period_end: date | None = None
+    if basis == "period_end":
+        # last calendar day of the month of the line's claim date (the date-validity date, §4.3)
+        claim_date = _line_date(ev.line, version.rules.date_basis, ev.trace)
+        period_end = claim_date.replace(day=monthrange(claim_date.year, claim_date.month)[1])
+        start = period_end
+    elif basis in ("invoice_date", "ship_date"):
+        start = _line_date(ev.line, basis, ev.trace)
+    else:
+        raise EngineRuleError(f"unknown claim_window_basis {basis!r}")
+    due = deadline(start, settings.claim_window_days)
     inside = run_date <= due
     ev.trace.step(
         "claim_window",
         basis=basis,
+        period_end=period_end,
         days=settings.claim_window_days,
         deadline=due,
         run_date=run_date,
@@ -314,10 +326,9 @@ def _evaluate_original(
     # Quantity cap (§4.2)
     eligible = q
     cap_key = (version.agreement_id, product_id)
+    if rules.cap_scope == "per_agreement":  # Release 2 (§4.2); parse_spa_rules rejects it too
+        raise UnsupportedRuleError("quantity.cap_scope", rules.cap_scope)
     if item.max_quantity is not None and rules.cap_scope != "none":
-        if rules.cap_scope == "per_agreement":
-            # Pool size for per_agreement is not defined in BUSINESS_LOGIC.md §4.2: refuse to guess.
-            raise EngineRuleError("cap_scope per_agreement: pooled max_quantity is not defined")
         before = consumed.get(cap_key, ZERO)
         remaining = item.max_quantity - before
         eligible = min(q, max(remaining, ZERO))
@@ -374,7 +385,7 @@ def _evaluate_original(
         return
     ev.raw, ev.rounding = raw, rules.rounding
 
-    if not _claim_window(ev, settings, run.run_date):
+    if not _claim_window(ev, version, settings, run.run_date):
         ev.fail(Code.OUTSIDE_CLAIM_WINDOW)  # amount still stored (money at risk)
         return
     ev.status = Status.ELIGIBLE

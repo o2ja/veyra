@@ -8,6 +8,7 @@ from itertools import pairwise
 from rebate_engine.models import AccrualResult, EngineRuleError, RebateVersion, Tier, VolumeLine
 from rebate_engine.money import MONEY_CONTEXT
 from rebate_engine.rounding import round_line
+from rebate_engine.rules import RulesError, UnsupportedRuleError
 from rebate_engine.trace import Trace, Value, trace_hash
 
 ZERO = Decimal(0)
@@ -69,9 +70,10 @@ def calculate_accrual(
     """
     rules = version.rules
     tiers = validate_tiers(version.tiers)
-    if rules.tier_metric != "amount":
-        # §5.2 defines earned = V_p x rate for amounts only; a quantity metric has no defined payout base.
-        raise EngineRuleError("tier_metric 'quantity': payout base is not defined in BUSINESS_LOGIC.md §5.2")
+    if rules.tier_metric != "amount":  # Release 2 (§3.2); parse_rebate_rules rejects it too
+        raise UnsupportedRuleError("tier_metric", rules.tier_metric)
+    if rules.tier_mode == "incremental" and rules.spa_lines == "qualify_only":  # §3.3, whatever the volumes
+        raise RulesError("tier_mode 'incremental' is incompatible with spa_lines 'qualify_only' (§3.3)")
     window_end = min(rules.period_end, as_of)
     listed = set(version.product_ids)
     t = Trace(
@@ -120,9 +122,7 @@ def calculate_accrual(
         tier = tier_for(tiers, v_q)
         if rules.tier_mode == "retroactive":
             raw = v_p * tier.rate if tier else ZERO
-        else:
-            if v_p != v_q:
-                raise EngineRuleError("incremental tiers require payout base = qualifying volume")
+        else:  # v_p == v_q: qualify_only is refused above, include/exclude keep both bases equal
             raw = incremental_raw(tiers, v_q)
         t.step(
             "tier",

@@ -29,6 +29,16 @@ class RulesError(EngineRuleError):
     pass
 
 
+class UnsupportedRuleError(RulesError):
+    """A documented rule value that Release 1 does not evaluate (BUSINESS_LOGIC.md §3.1, §3.2)."""
+
+    code = "not_supported_until_release_2"
+
+    def __init__(self, field: str, value: str) -> None:
+        super().__init__(f"{field} = {value!r} is not supported until Release 2")
+        self.field, self.value = field, value
+
+
 def _get(obj: Mapping[str, object], key: str) -> object:
     if key not in obj:
         raise RulesError(f"missing field: {key}")
@@ -127,6 +137,9 @@ def parse_spa_rules(rules: Mapping[str, object]) -> SpaRules:
     tolerance = _dec(_get(price, "tolerance"), "price_check.tolerance")
     if tolerance < 0:
         raise RulesError("price_check.tolerance must be >= 0")
+    cap_scope = _enum(_map(rules, "quantity"), "cap_scope", ("per_item", "per_agreement", "none"))
+    if cap_scope == "per_agreement":
+        raise UnsupportedRuleError("quantity.cap_scope", cap_scope)
     return SpaRules(
         schema_version=_schema_version(rules, "schema_version"),
         date_basis=_enum(rules, "date_basis", ("invoice_date", "ship_date")),
@@ -141,7 +154,7 @@ def parse_spa_rules(rules: Mapping[str, object]) -> SpaRules:
         spa_reference_required=_bool(_map(rules, "spa_reference"), "required"),
         price_check_mode=_enum(price, "mode", ("flag", "ignore")),
         price_tolerance=tolerance,
-        cap_scope=_enum(_map(rules, "quantity"), "cap_scope", ("per_item", "per_agreement", "none")),
+        cap_scope=cap_scope,
         claim_uom=_opt_str(rules, "claim_uom"),
         rounding=parse_rounding(_map(rules, "rounding")),
         adapter=_opt_str(rules, "adapter"),
@@ -155,15 +168,22 @@ def parse_rebate_rules(rules: Mapping[str, object]) -> RebateRules:
     start, end = _date(period, "start"), _date(period, "end")
     if end < start:
         raise RulesError("measurement_period.end must be >= start")
+    tier_mode = _enum(rules, "tier_mode", ("retroactive", "incremental"))
+    tier_metric = _enum(rules, "tier_metric", ("amount", "quantity"))
+    spa_lines = _enum(rules, "spa_lines", ("include", "qualify_only", "exclude"))
+    if tier_metric == "quantity":
+        raise UnsupportedRuleError("tier_metric", tier_metric)
+    if tier_mode == "incremental" and spa_lines == "qualify_only":
+        raise RulesError("tier_mode 'incremental' is incompatible with spa_lines 'qualify_only' (§3.3)")
     return RebateRules(
         schema_version=_schema_version(rules, "schema_version"),
         volume_basis=_enum(rules, "volume_basis", ("purchases", "sales")),
         period_start=start,
         period_end=end,
-        tier_mode=_enum(rules, "tier_mode", ("retroactive", "incremental")),
-        tier_metric=_enum(rules, "tier_metric", ("amount", "quantity")),
+        tier_mode=tier_mode,
+        tier_metric=tier_metric,
         product_scope_mode=_enum(_map(rules, "product_scope"), "mode", ("all", "listed")),
-        spa_lines=_enum(rules, "spa_lines", ("include", "qualify_only", "exclude")),
+        spa_lines=spa_lines,
         returns=_enum(rules, "returns", ("reduce_volume",)),
         rounding=parse_rounding(_map(rules, "rounding")),
     )

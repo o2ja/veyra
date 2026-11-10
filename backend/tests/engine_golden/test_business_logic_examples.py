@@ -259,6 +259,22 @@ def test_gl_d1_claim_deadline() -> None:
     assert last_day.status is Status.ELIGIBLE
 
 
+def test_gl_d3_claim_deadline_period_end() -> None:
+    # §12 Example D3: invoice 2026-03-10, period end 2026-03-31, + 60 days = 2026-05-30 (inclusive)
+    ln = line(invoice_date=date(2026, 3, 10), ship_date=date(2026, 3, 10))
+    pe = (mfr(claim_window_basis="period_end", claim_window_days=60),)
+    (last_day,) = run([ln], run_date=date(2026, 5, 30), manufacturers=pe)
+    assert last_day.status is Status.ELIGIBLE
+    cw = steps(last_day)["claim_window"]
+    assert (cw["basis"], cw["period_end"], cw["deadline"]) == ("period_end", "2026-03-31", "2026-05-30")
+    (late,) = run([ln], run_date=date(2026, 5, 31), manufacturers=pe)
+    assert (late.status, late.exception_code, late.claim_amount) == (
+        Status.EXCEPTION,
+        Code.OUTSIDE_CLAIM_WINDOW,
+        D("2200.00"),
+    )
+
+
 def test_gl_d2_dispute_deadline_and_reminders() -> None:
     due = deadline(date(2026, 5, 15), 60)
     assert due == date(2026, 7, 14)
@@ -281,6 +297,8 @@ def test_gl_r1_retroactive_catch_up() -> None:
         v, [vline("a", "990000"), vline("b", "10000")], date(2026, 8, 31), at_990k.earned_cumulative
     )
     assert (at_1m.tier_number, at_1m.earned_cumulative, at_1m.delta) == (2, D("25000.00"), D("10150.00"))
+    # breakdown: 9,900.00 catch-up on the 990,000 (x (2.5% - 1.5%)) + 250.00 on the new 10,000 (x 2.5%)
+    assert at_1m.delta == D("9900.00") + D("250.00")
     # 990,000 -> 1,010,000 with 14,850.00 accrued: 25,250.00 - 14,850.00 = 10,400.00
     at_101 = calculate_accrual(
         v, [vline("a", "990000"), vline("b", "20000")], date(2026, 8, 31), D("14850.00")
