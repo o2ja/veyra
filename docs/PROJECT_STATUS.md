@@ -7,7 +7,7 @@
 | Item | State |
 |---|---|
 | Phase | **Release 1 build** |
-| Current stage | **S2 complete 2026-11-10**, awaiting owner review (`docs/reports/S2_COMPLETION_REPORT.md`) |
+| Current stage | **S3–S6 batch in progress** (S2 approved 2026-11-10); see §3 |
 | Application code | S0 skeleton + S1: identity, tenancy, audit modules; auth/MFA/sessions/CSRF; admin UI; isolation suite with negative control |
 | Synthetic test data | Generated and self-checked (`testdata/`) |
 
@@ -23,6 +23,18 @@
 ## 3. In progress
 
 S1 signed off by the owner 2026-11-10. Evidence and open points: `docs/reports/S1_COMPLETION_REPORT.md`. CI green on `main` (jobs: backend incl. isolation negative control, frontend, e2e (Playwright W1–W2 + axe), api-contract, secrets, images).
+
+### S3–S6 batch (in progress, started 2026-11-10; S2 approved)
+
+Multi-agent waves (worktree branches, orchestrator merges). Resume point:
+- Wave A: `s6-pure` merged (#3). `s5-engine` PR #2: financial review done (FAIL: R1 breakdown text, period_end
+  not implemented, Release-2 values not rejected); fixes in progress on the branch, then a second review pass on the
+  fixes only, then merge. `s3-backend`: finishing (perf test, isolation, client, docs, PR). Main a6963e2 adds OCR to the image.
+- Next: security + DB review of S3 → merge → rebuild images (OCR) → Wave B (B1 S4 backend, B2 S3 frontend) →
+  Wave C (C1/C2/C3 briefs in `docs/reports/notes/briefs/`) → Wave D (S5/S6 frontend, browser QA).
+- `period_end` defined by orchestrator: last day of the calendar month of the line's claim date (flag to owner).
+- Open engine rules (raise instead of guessing): `cap_scope=per_agreement`, `tier_metric=quantity`,
+  `claim_window_basis=period_end`.
 
 ## 4. Pending
 

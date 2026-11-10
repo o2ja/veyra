@@ -58,7 +58,7 @@
 | `product_scope.mode` | `listed` (items table); rebate agreements may also use `all` | |
 | `spa_reference.required` | bool | If true, the line's `spa_reference` must equal the agreement `external_number` (case/space-insensitive) |
 | `price_check.mode` | `flag`, `ignore` | If the agreement item has `sell_price`, compare to the line `unit_price` |
-| `quantity.cap_scope` | `per_item`, `per_agreement`, `none` | How `max_quantity` is applied |
+| `quantity.cap_scope` | `per_item`, `none`; `per_agreement` = Release 2 (rejected by the validator) | How `max_quantity` is applied |
 | `claim_uom` | text or null | Unit the item rates are expressed in; null = product base UoM of the line |
 | `rounding` | `mode` (`half_up`,`half_even`,`down`), `scale` (0–6), `timing` (`per_line`,`per_document`) | §6 |
 | `adapter` | null or registered name | Escape hatch |
@@ -84,7 +84,7 @@
 |---|---|---|
 | `volume_basis` | `purchases` (net `extended_amount` of purchase receipts less vendor credits), `sales` (net of invoice minus credit-note `extended_amount`) | Measured volume |
 | `tier_mode` | `retroactive`, `incremental` | §5 |
-| `tier_metric` | `amount`, `quantity` | Thresholds in dollars or units |
+| `tier_metric` | `amount`; `quantity` = Release 2 (rejected by the validator) | Thresholds in dollars (units in Release 2) |
 | `spa_lines` | `include` (SPA lines qualify and earn), `qualify_only` (count toward threshold, no payout), `exclude` (neither) | Stacking policy; only meaningful when `volume_basis = sales` |
 | `returns` | `reduce_volume` | Returns/credits reduce cumulative volume in the period of the return |
 | Tiers | in `agreement_version_tiers` | `lower_bound` inclusive; tier 1 starts at 0 |
@@ -115,7 +115,7 @@
 
 Customers and SKUs are referenced by business code in the payload and resolved to ids at approval (unresolved references block approval). Monetary values are strings. Item fields used depend on `rules.calculation.basis`: `price_difference` → `reference_cost`/`deviated_cost`; `guaranteed_margin`, `percent_of_sell`, `percent_of_cost` → `rate`; `flat_per_unit` → `flat_amount`. For `guaranteed_margin` the margin is the item `rate` (e.g. `0.12`).
 
-**Validator rules (shared by manual and AI drafts):** dates valid and `valid_to ≥ valid_from`; tiers strictly increasing, first = 0, rates in `[0, 1]`; `incremental` is incompatible with `spa_lines = qualify_only`; SPA agreements need at least one item with a cost basis compatible with `calculation`; required fields per basis (e.g. `percent_*` needs `rate`; `flat_per_unit` needs `flat_amount`; `price_difference` needs `deviated_cost` and a `reference_cost` unless `cost_source ≠ agreement_reference`); `deviated_cost ≥ 0`; `max_quantity > 0` when present; no duplicate items per `(product, customer)`; manufacturer exists; no overlap of active versions for the same agreement.
+**Validator rules (shared by manual and AI drafts):** dates valid and `valid_to ≥ valid_from`; tiers strictly increasing, first = 0, rates in `[0, 1]`; `incremental` is incompatible with `spa_lines = qualify_only` (rejected whatever the `volume_basis`; the engine refuses it too); `cap_scope = per_agreement` and `tier_metric = quantity` are rejected as "not supported until Release 2" (code `not_supported_until_release_2`); SPA agreements need at least one item with a cost basis compatible with `calculation`; required fields per basis (e.g. `percent_*` needs `rate`; `flat_per_unit` needs `flat_amount`; `price_difference` needs `deviated_cost` and a `reference_cost` unless `cost_source ≠ agreement_reference`); `deviated_cost ≥ 0`; `max_quantity > 0` when present; no duplicate items per `(product, customer)`; manufacturer exists; no overlap of active versions for the same agreement.
 
 ## 4. SPA claim calculation
 
@@ -159,7 +159,7 @@ Gate details:
 6. **Price check.** If item `sell_price` exists and mode is `flag`: `|unit_price − sell_price| > tolerance` → `price_mismatch`. (Rationale: a manufacturer will usually reject a claim where the invoice price differs from the approved SPA price.) Prices are compared per line UoM; if UoMs differ, the item `sell_price` is interpreted per `claim_uom` and the line price is converted per unit of claim UoM.
 7. **Returns netting and cap** (§7 and §4.2).
 8. **Amount** (§4.1) and **rounding** (§6).
-9. **Claim window.** Deadline = date per manufacturer `claim_window_basis` + `claim_window_days`. If `run_date > deadline` → `outside_claim_window` (status `exception`, but `claim_amount` is populated so the UI can show the money at risk). If settings are missing, the gate is skipped with a trace warning.
+9. **Claim window.** Deadline = date per manufacturer `claim_window_basis` + `claim_window_days` (§12; `period_end` = last day of the month of the line's claim date). If `run_date > deadline` → `outside_claim_window` (status `exception`, but `claim_amount` is populated so the UI can show the money at risk). If settings are missing, the gate is skipped with a trace warning.
 
 ### 4.1 Calculation bases
 
@@ -186,7 +186,7 @@ Let `q` = eligible quantity in claim UoM, `C_ref` = reference cost per claim UoM
 
 ### 4.2 Quantity caps
 
-`max_quantity` is the authorised quantity (in claim UoM). With `cap_scope = per_item`, consumption is tracked per `(agreement, item)`; `per_agreement` pools all items.
+`max_quantity` is the authorised quantity (in claim UoM). With `cap_scope = per_item`, consumption is tracked per `(agreement, item)`; `per_agreement` (pooling all items) is Release 2 (rejected by the validator; the engine refuses it whether or not any item has `max_quantity`).
 
 `consumed_before` = quantity already consumed by (a) **claim lines in frozen/active batches** under the same version/item (net of return adjustments), plus (b) earlier lines **in this run's processing order**. Remaining = `max_quantity − consumed_before`.
 
@@ -194,7 +194,7 @@ Let `q` = eligible quantity in claim UoM, `C_ref` = reference cost per claim UoM
 
 **Example S6.** `max_quantity = 100`, `u = 22.00`. Line A (earlier) q=60 → eligible 60 → 1,320.00. Line B (later) q=60 → remaining 40 → eligible 40 → **880.00**, excess 20 flagged.
 
-Returns restore consumption (§7).
+Returns restore consumption (§7). A line that ends `outside_claim_window` keeps its `claim_amount` (money at risk) but does **not** consume the cap, so later lines in the window can still use it.
 
 ### 4.3 Date validity
 
@@ -228,7 +228,7 @@ Rounding is applied to the **cumulative** figure only. **Entry delta = `earned_c
 
 **Example R1 (retroactive catch-up; product plan/research figures).** Tiers: 0 → 1.5%; 1,000,000 → 2.5%; 2,000,000 → 3.5%, retroactive, purchases basis.
 - Cumulative 990,000 → tier 1 → earned 14,850.00 (accrued 14,850.00).
-- Purchases reach exactly 1,000,000 → tier 2 → earned 25,000.00 → **delta = 25,000.00 − 15,000.00 = 10,000.00** (the catch-up).
+- Purchases reach exactly 1,000,000 → tier 2 → earned 25,000.00 → **delta = 25,000.00 − 14,850.00 = 10,150.00** (= 9,900.00 catch-up on the 990,000 (990,000 × (2.5% − 1.5%)) + 250.00 on the new 10,000; owner-approved correction 2026-11-10, the earlier text subtracted 15,000.00, which was never accrued).
 - If instead a 20,000 receipt takes cumulative from 990,000 to 1,010,000: earned 25,250.00; **delta = 25,250.00 − 14,850.00 = 10,400.00** (= 9,900.00 catch-up on prior volume + 500.00 on the new 20,000).
 
 **Example R2 (claw-back).** Cumulative 1,010,000, accrued 25,250.00. A vendor credit of 20,000 → cumulative 990,000 → tier 1 → earned 14,850.00 → **delta = −10,400.00**. Negative deltas are never placed in a claim batch as claim lines; they become `rebate_clawback` adjustments requiring approval.
@@ -239,7 +239,7 @@ Rounding is applied to the **cumulative** figure only. **Entry delta = `earned_c
 
 ### 5.4 Identifying SPA lines (for `spa_lines`)
 
-A sales line is an SPA line if it has a non-null `spa_reference` **or** its calculation result in the same run has `status = eligible` under an SPA agreement. SPA calculation therefore runs before rebate calculation within a run. If both signals disagree, the trace records both and the `spa_reference` wins.
+A sales line is an SPA line if it has a non-null `spa_reference` **or** its calculation result in the same run has `status = eligible` under an SPA agreement. SPA calculation therefore runs before rebate calculation within a run. Either signal suffices (owner decision 2026-11-10): a line with no `spa_reference` that is `eligible` under an SPA agreement is an SPA line, and so is a line with a reference whose SPA result is not eligible. The trace records both signals.
 
 ### 5.5 Rebate claims
 
@@ -249,6 +249,7 @@ A positive accrual delta can be claimed through a claim line with `source_kind =
 
 - Unit amounts keep full precision (`NUMERIC(18,6)`).
 - `timing = per_line`: each line's claim amount is rounded to `scale` using `mode`; batch total = sum of rounded lines.
+- Return adjustments (§7) are always rounded per line with the prior claim's `mode` and `scale`, whatever that claim's `timing`.
 - `timing = per_document`: lines are summed per sales document (per agreement) in full precision and the **document total** is rounded; the rounded total is allocated back to lines deterministically (largest-remainder method; ties broken by line order) so that line amounts sum to the document total.
 
 **Example S7.** Three lines of one invoice, each `q = 1`, `u = 0.335`:
@@ -264,8 +265,8 @@ For each original line the adapter supplies the engine with: `returned_quantity 
 
 | Situation | Original line result | Return line result |
 |---|---|---|
-| Original **not yet claimed** | Computed on `q − returned_quantity` (net). Trace shows netting | `netted`, amount 0 |
-| Original **claimed** (submitted) | Unchanged (frozen) | `adjustment`: amount `= −(prior_claimed unit amount × |returned qty|)`; becomes a `return_reversal` adjustment proposal |
+| Original **not yet claimed** | Computed on `q − returned_quantity` (net). Trace shows netting. Fully returned (net ≤ 0) → `not_applicable` / `no_claim_due`, amount 0 | `netted`, amount 0 |
+| Original **claimed** (submitted) | Unchanged (frozen) | `adjustment`: amount `= −(prior_claimed unit amount × |returned qty|)`, rounded per line with the prior claim's `mode`/`scale` (§6); becomes a `return_reversal` adjustment proposal |
 | Original claimed but manufacturer `allow_negative_claims = false` | — | Adjustment is held as `proposed` and flagged "cannot be net-claimed; discuss with manufacturer" |
 | Return exceeds original quantity | — | Exception `return_exceeds_original` |
 
@@ -400,7 +401,7 @@ The assessment lists the checks run with their inputs. An LLM **may** draft a pr
 
 | Deadline | Formula |
 |---|---|
-| Claim deadline | `claim_window_basis` date + `claim_window_days` (calendar days) |
+| Claim deadline | `claim_window_basis` date + `claim_window_days` (calendar days). `invoice_date` / `ship_date`: that date of the line. `period_end`: the last calendar day of the month containing the line's claim date (the date-validity date of §4.3: invoice date, or ship date with invoice-date fallback). The trace records the basis and the period end |
 | Dispute/re-claim deadline | `remittance document date` (or `submission_date` per setting) + `dispute_window_days` |
 
 - Pure calendar-day addition; **no weekend or holiday rolling** (conservative: the earlier date is shown).
@@ -408,6 +409,7 @@ The assessment lists the checks run with their inputs. An LLM **may** draft a pr
 - A case without computable deadline gets `deadline_unknown` and sits at the top of the queue.
 
 **Example D1.** Invoice date 2026-03-01 + 60 days = **2026-04-30**; on 2026-05-02 the line is `outside_claim_window`.
+**Example D3 (period end).** Invoice date 2026-03-10, `claim_window_basis = period_end`, 60 days → period end 2026-03-31 → deadline **2026-05-30**; eligible on 2026-05-30 (inclusive), `outside_claim_window` on 2026-05-31. Leap year: 2028-02-10 → period end 2028-02-29.
 **Example D2.** Remittance date 2026-05-15 + 60 days = **2026-07-14**. Notifications at 14, 7, and 3 days before: 2026-06-30, 2026-07-07, 2026-07-11.
 
 ## 12.1 Case lifecycle
@@ -465,11 +467,12 @@ Rules: all numbers are strings; step order is fixed; the trace is canonicalised 
 | GL-S10 | Date basis ship vs invoice | `expired_agreement` vs eligible |
 | GL-S11 | Price mismatch | `price_mismatch`, amount 0 claimed |
 | GL-S12 | Conflict: equal priority / higher priority | `conflicting_agreements` / winner by priority |
-| GL-R1 | Retro crossing | delta 10,000.00 and 10,400.00 |
+| GL-R1 | Retro crossing | delta 10,150.00 and 10,400.00 |
 | GL-R2 | Claw-back | −10,400.00 |
 | GL-R3 | Qualify-only / exclude / boundary | 25,000.00; 25,000.00; 14,999.99 |
 | GL-R4 | Incremental | 27,500.00 |
 | GL-D1/D2 | Deadlines | 2026-04-30; 2026-07-14 |
+| GL-D3 | Claim deadline, `period_end` basis | 2026-05-30 eligible; 2026-05-31 `outside_claim_window` |
 | GL-V1 | Short-pay classification | `short_paid`, 150.00 |
 | GL-V2 | Lump payment | T5 suggestion, two allocations |
 | GL-A1 | Amendment recalculation | −1,000.00 adjustment; v1a unchanged |
