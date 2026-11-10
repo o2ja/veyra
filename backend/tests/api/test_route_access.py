@@ -76,7 +76,7 @@ def _call(api: Api, method: str, url: str) -> Any:
         return api.get(path)
     if method == "DELETE":
         return api.delete(path)
-    sender: Callable[..., Any] = api.post if method == "POST" else api.patch
+    sender: Callable[..., Any] = {"POST": api.post, "PUT": api.put}.get(method, api.patch)
     return sender(path, json={})
 
 

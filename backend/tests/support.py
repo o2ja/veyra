@@ -89,6 +89,10 @@ class Api:
         r: Response = self.client.patch(f"/api/v1{path}", json=json, headers=self._headers(headers))
         return r
 
+    def put(self, path: str, json: Any = None, headers: dict[str, str] | None = None) -> Response:
+        r: Response = self.client.put(f"/api/v1{path}", json=json, headers=self._headers(headers))
+        return r
+
     def delete(self, path: str, headers: dict[str, str] | None = None) -> Response:
         r: Response = self.client.delete(f"/api/v1{path}", headers=self._headers(headers))
         return r

@@ -26,6 +26,20 @@ if NEGCTL and TEST_DB != NEGCTL_DB:
 ROLES = ("rebate_owner", "rebate_app", "rebate_ai_writer", "rebate_readonly", "rebate_lookup")
 
 
+def pytest_configure(config: pytest.Config) -> None:
+    config.addinivalue_line("markers", "performance: slow baseline runs; only with -m performance")
+
+
+def pytest_collection_modifyitems(config: pytest.Config, items: list[pytest.Item]) -> None:
+    """Performance tests are deselected unless selected explicitly with ``-m performance``."""
+    if "performance" in (config.getoption("markexpr") or ""):
+        return
+    skipped = [i for i in items if i.get_closest_marker("performance")]
+    if skipped:
+        config.hook.pytest_deselected(items=skipped)
+        items[:] = [i for i in items if not i.get_closest_marker("performance")]
+
+
 @dataclass(frozen=True)
 class DbUrls:
     admin: str

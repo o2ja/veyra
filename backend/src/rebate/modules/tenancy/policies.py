@@ -28,6 +28,7 @@ PERMISSIONS: dict[str, frozenset[str]] = {
     "file.upload": _WRITERS,
     "import.run": _WRITERS,
     "masterdata.write": _WRITERS,
+    "manufacturer_settings.write": _APPROVERS,  # API_SPECIFICATION.md §2.3: settings write A P
     "mapping.write": _WRITERS,
     "agreement.draft": _WRITERS,
     "agreement.approve": _APPROVERS,

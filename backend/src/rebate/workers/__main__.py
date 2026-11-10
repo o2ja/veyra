@@ -13,7 +13,7 @@ from rebate.core.config import get_settings
 from rebate.core.db import assert_safe_role, make_engine
 from rebate.core.jobs import run_once
 from rebate.core.logging import configure_logging
-from rebate.modules import files, identity, tenancy  # noqa: F401  (each registers its job handlers)
+from rebate.modules import files, identity, ingestion, tenancy  # noqa: F401  (each registers its job handlers)
 from rebate.modules.files import storage
 
 log = structlog.get_logger("rebate.worker")

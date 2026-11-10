@@ -21,13 +21,21 @@ from rebate.core.db import assert_safe_role, make_engine, transaction
 from rebate.core.errors import CsrfFailed, DomainError, RateLimited, Unauthenticated, error_body
 from rebate.core.ids import new_id
 from rebate.core.logging import configure_logging
-from rebate.modules import audit, files, identity, tenancy
+from rebate.modules import audit, files, identity, ingestion, masterdata, tenancy
 from rebate.modules.identity import ratelimit
 
 log = structlog.get_logger("rebate.api")
 
 # Every API router, in one place: the route-access meta-test walks exactly these.
-MODULE_ROUTERS = (identity.router, tenancy.router, audit.router, files.router, jobs_router.router)
+MODULE_ROUTERS = (
+    identity.router,
+    tenancy.router,
+    audit.router,
+    files.router,
+    jobs_router.router,
+    masterdata.router,
+    ingestion.router,
+)
 PUBLIC_ROUTERS = (health.router,)
 
 _HTTP_CODES = {404: "not_found", 405: "method_not_allowed", 413: "payload_too_large"}

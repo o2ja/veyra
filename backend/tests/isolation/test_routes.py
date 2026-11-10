@@ -6,7 +6,7 @@ disabled; the negative control checks exactly that.
 
 import re
 from collections.abc import Iterator
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Any
 
 import pytest
@@ -15,8 +15,10 @@ from fastapi.routing import APIRoute
 from rebate.api.app import MODULE_ROUTERS
 from rebate.modules.files import storage
 from tests.conftest import DbUrls
+from tests.integration.conftest import Workspace, clean_file, import_file, put, run_import, seed_master, walk
 from tests.security.flows import full_admin
 from tests.support import Api, api_client, fake_clock, latest_token, make_app, unique_email
+from tests.testdata import data
 
 
 @dataclass
@@ -28,6 +30,7 @@ class Side:
     invitee: str
     file_id: str
     job_id: str
+    s3: dict[str, str] = field(default_factory=dict)  # S3 path parameter -> one id of this tenant
 
 
 @pytest.fixture(scope="module")
@@ -51,13 +54,41 @@ def sides(migrated_db: DbUrls) -> Iterator[tuple[Side, Side]]:
             )
             assert up.status_code == 201, up.text
             job = api.get("/jobs", params={"status": "queued"}).json()["data"][0]
-            out.append(
-                Side(
-                    api, me["tenant"]["id"], me["user"]["id"], inv["id"], invitee, up.json()["id"], job["id"]
-                )
+            side = Side(
+                api, me["tenant"]["id"], me["user"]["id"], inv["id"], invitee, up.json()["id"], job["id"]
             )
+            side.s3 = _seed_s3(Workspace(api, app, side.tenant_id, side.user_id, {}))
+            out.append(side)
         yield out[0], out[1]
 
+
+def _seed_s3(ws: Workspace) -> dict[str, str]:
+    """Master data, a partial sales import (one line + one unmapped product), a template, purchases."""
+    seed_master(ws)
+    fid = clean_file(ws, "errors.csv", data("sales/sales_with_errors_layoutA.csv"))
+    batch = run_import(ws, fid, "sales", accept_partial=True, template="iso-template")
+    assert batch["status"] == "completed_with_errors", batch
+    assert import_file(ws, "purchases/purchases_VOLT_2026.csv", "purchases")["status"] == "completed"
+
+    def first(path: str) -> str:
+        rows = ws.api.get(path).json()["data"]
+        assert rows, f"{path} must not be empty for the isolation fixture"
+        return str(rows[0]["id"])
+
+    return {
+        "manufacturer_id": ws.manufacturers["VOLT"],
+        "customer_id": first("/customers"),
+        "product_id": first("/products"),
+        "conversion_id": first("/uom-conversions"),
+        "entry_id": first("/unmapped-entities"),
+        "import_id": batch["id"],
+        "template_id": first("/mapping-templates"),
+        "line_id": first("/sales-lines"),
+    }
+
+
+S3_PARAMS = ("manufacturer_id", "customer_id", "product_id", "conversion_id", "entry_id", "import_id",
+             "template_id", "line_id")  # fmt: skip
 
 # path parameter -> attribute of the *other* tenant used as the attack value
 PARAM_SOURCES = {
@@ -65,7 +96,14 @@ PARAM_SOURCES = {
     "invitation_id": "invitation_id",
     "file_id": "file_id",
     "job_id": "job_id",
+    **{p: f"s3.{p}" for p in S3_PARAMS},
 }
+
+
+def _attack_value(side: Side, param: str) -> str:
+    source = PARAM_SOURCES[param]
+    return side.s3[param] if source.startswith("s3.") else str(getattr(side, source))
+
 
 ID_ROUTES = [
     (route, method)
@@ -87,10 +125,22 @@ def _call(api: Api, method: str, path: str, body: Any) -> Any:
         return api.get(path)
     if method == "DELETE":
         return api.delete(path)
+    if method == "PUT":  # If-Match "1" is the first revision/version, so only the id can make it fail
+        return put(api, path, body, headers={"If-Match": '"1"'})
     return (api.post if method == "POST" else api.patch)(path, json=body)
 
 
-BODIES = {"PATCH": {"role": "viewer"}, "POST": {}}
+# A body that passes validation, so the response depends only on whether the id is visible.
+BODIES: dict[str, Any] = {
+    "/users/{user_id}": {"role": "viewer"},
+    "/manufacturers/{manufacturer_id}/reason-code-mappings": {"mappings": []},
+    "/customers/{customer_id}/aliases": {"alias": "ISO ALIAS"},
+    "/products/{product_id}/aliases": {"alias": "ISO-ALIAS", "alias_type": "other"},
+    "/uom-conversions/{conversion_id}": {"factor": "2"},
+    "/unmapped-entities/{entry_id}/resolve": {"action": "ignore"},
+    "/imports/{import_id}/mapping": {"mapping": {}},
+    "/mapping-templates/{template_id}": {"headers": ["a"], "mapping": {}},
+}
 
 
 @pytest.mark.parametrize(("route", "method"), ID_ROUTES, ids=lambda x: getattr(x, "path", x))
@@ -98,10 +148,11 @@ def test_r1_foreign_ids_look_exactly_like_missing_ids(
     sides: tuple[Side, Side], route: APIRoute, method: str
 ) -> None:
     a, b = sides
-    foreign = re.sub(r"\{([^}]+)\}", lambda m: getattr(b, PARAM_SOURCES[m.group(1)]), route.path)
+    foreign = re.sub(r"\{([^}]+)\}", lambda m: _attack_value(b, m.group(1)), route.path)
     missing = re.sub(r"\{[^}]+\}", "00000000-0000-7000-8000-000000000000", route.path)
-    r_foreign = _call(a.api, method, foreign, BODIES.get(method))
-    r_missing = _call(a.api, method, missing, BODIES.get(method))
+    body = BODIES.get(route.path, {}) if method in ("POST", "PATCH", "PUT") else None
+    r_foreign = _call(a.api, method, foreign, body)
+    r_missing = _call(a.api, method, missing, body)
     assert r_foreign.status_code == 404, (
         f"{method} {route.path}: {r_foreign.status_code} {r_foreign.text[:200]}"
     )
@@ -177,3 +228,54 @@ def test_settings_are_the_callers_own(sides: tuple[Side, Side]) -> None:
     b.api.patch("/settings", json={"retention_years": 9}, headers={"If-Match": etag})
     assert a.api.get("/settings").json()["retention_years"] == 7
     assert b.api.get("/settings").json()["retention_years"] == 9
+
+
+S3_LISTS = (
+    "/manufacturers", "/customers", "/products", "/branches", "/uom-conversions", "/unmapped-entities",
+    "/imports", "/mapping-templates", "/sales-lines", "/purchase-lines",
+)  # fmt: skip
+
+
+def _ws(side: Side) -> Workspace:
+    return Workspace(side.api, None, side.tenant_id, side.user_id, {})  # type: ignore[arg-type]
+
+
+@pytest.mark.parametrize("path", S3_LISTS)
+def test_r2_s3_lists_never_contain_the_other_tenant(sides: tuple[Side, Side], path: str) -> None:
+    a, b = sides
+    own, other = set(walk(_ws(a), path, {"limit": 200})), set(walk(_ws(b), path, {"limit": 200}))
+    assert own and other, f"{path}: both tenants need rows, otherwise this proves nothing"
+    assert not own & other, f"{path}: A sees {len(own & other)} of B's rows"
+
+
+@pytest.mark.parametrize(
+    ("path", "param", "source"),
+    [
+        ("/sales-lines", "customer_id", "customer_id"),
+        ("/sales-lines", "product_id", "product_id"),
+        ("/sales-lines", "import_batch_id", "import_id"),
+        ("/purchase-lines", "manufacturer_id", "manufacturer_id"),
+        ("/uom-conversions", "product_id", "product_id"),
+    ],
+)
+def test_r2_filtering_by_a_foreign_id_returns_nothing(
+    sides: tuple[Side, Side], path: str, param: str, source: str
+) -> None:
+    a, b = sides
+    r = a.api.get(path, params={param: b.s3[source]})
+    assert r.status_code == 200 and r.json()["data"] == [], f"{path}?{param}=<B id>: {r.text[:200]}"
+
+
+def test_r3_s3_foreign_mutations_leave_the_other_tenant_unchanged(sides: tuple[Side, Side]) -> None:
+    a, b = sides
+    mfr, conv, entry = b.s3["manufacturer_id"], b.s3["conversion_id"], b.s3["entry_id"]
+    before = b.api.get(f"/manufacturers/{mfr}").json()
+    assert a.api.patch(f"/manufacturers/{mfr}", json={"name": "x"}).status_code == 404
+    assert a.api.delete(f"/uom-conversions/{conv}").status_code == 404
+    assert a.api.post(f"/unmapped-entities/{entry}/resolve", json={"action": "ignore"}).status_code == 404
+    assert b.api.get(f"/manufacturers/{mfr}").json() == before
+    assert conv in walk(_ws(b), "/uom-conversions", {})
+    assert (
+        next(e for e in b.api.get("/unmapped-entities").json()["data"] if e["id"] == entry)["status"]
+        == "open"
+    )
