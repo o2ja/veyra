@@ -118,7 +118,7 @@ function MappingForm({ i, preview, onDone }: { i: ImportOut; preview: Preview; o
         {preview.template ? ` and the template “${preview.template.name}”` : ""}; check them before you
         continue.
       </p>
-      <div className="overflow-x-auto">
+      <div className="overflow-x-auto" tabIndex={0} role="region" aria-label="Column mapping">
         <table className="w-full text-left text-sm">
           <caption className="sr-only">Column mapping</caption>
           <thead className="text-muted">
@@ -452,8 +452,10 @@ export function ImportDetailPage() {
           <div className="flex flex-col gap-4">
             <dl className="grid grid-cols-[max-content_1fr] gap-x-6 gap-y-1 text-sm">
               <dt className="text-muted">Status</dt>
-              <dd role="status" aria-live="polite">
-                {STATUS_TEXT[i.status] ?? i.status}
+              <dd>
+                <span role="status" aria-live="polite">
+                  {STATUS_TEXT[i.status] ?? i.status}
+                </span>
               </dd>
               <dt className="text-muted">File</dt>
               <dd>

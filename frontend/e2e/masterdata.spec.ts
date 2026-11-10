@@ -38,6 +38,7 @@ test("master data: manufacturer and settings, customer and alias, product, UoM c
   await expect(page.getByRole("heading", { name: "Claim and dispute settings" })).toBeVisible();
   await noViolations(page, "/master-data/manufacturers/:id");
   await page.getByLabel("Claim window (days)").fill("60");
+  await page.getByLabel("Claim window starts at").selectOption("invoice_date"); // days and basis go together
   await page.getByRole("button", { name: "Save settings" }).click();
   await expect(page.getByText("Settings saved.")).toBeVisible();
   await page.reload();

@@ -79,7 +79,7 @@ export function DataTable<T extends { id: string }>({
   if (loading) return <Loading />;
   if (!rows?.length) return <Empty>{empty}</Empty>;
   return (
-    <div className="overflow-x-auto">
+    <div className="overflow-x-auto" tabIndex={0} role="region" aria-label={caption}>
       <table className="w-full text-left text-sm">
         <caption className="sr-only">{caption}</caption>
         <thead className="text-muted">
