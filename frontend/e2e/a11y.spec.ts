@@ -44,6 +44,8 @@ test("S1 pages have no automated WCAG 2.1 AA violations", async ({ page }) => {
     "/admin/settings",
     "/audit",
     "/account/security",
+    "/files",
+    "/admin/jobs",
   ]) {
     await page.goto(path);
     await expect(page.getByRole("heading").first()).toBeVisible();

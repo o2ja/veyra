@@ -1,6 +1,7 @@
 import type { RouteObject } from "react-router-dom";
 
 import { AuditPage } from "../features/admin/audit-page";
+import { JobsPage } from "../features/admin/jobs-page";
 import { InvitationsPage } from "../features/admin/invitations-page";
 import { SettingsPage } from "../features/admin/settings-page";
 import { UsersPage } from "../features/admin/users-page";
@@ -15,6 +16,7 @@ import { LoginPage, MfaChallengePage } from "../features/auth/login-pages";
 import { MfaSetupPage } from "../features/auth/mfa-setup-page";
 import { RegisterPage } from "../features/auth/register-page";
 import { SecurityPage } from "../features/auth/security-page";
+import { FilesPage } from "../features/files/files-page";
 import { HomePage } from "../features/home/home-page";
 import { AppLayout } from "./app-layout";
 import { RequirePermission, RequireSession } from "./guards";
@@ -85,6 +87,26 @@ export const routes: RouteObject[] = [
           <RequireSession>
             <RequirePermission permission="settings.read">
               <SettingsPage />
+            </RequirePermission>
+          </RequireSession>
+        ),
+      },
+      {
+        path: "files",
+        element: (
+          <RequireSession>
+            <RequirePermission permission="data.read">
+              <FilesPage />
+            </RequirePermission>
+          </RequireSession>
+        ),
+      },
+      {
+        path: "admin/jobs",
+        element: (
+          <RequireSession>
+            <RequirePermission permission="jobs.manage">
+              <JobsPage />
             </RequirePermission>
           </RequireSession>
         ),

@@ -8,10 +8,12 @@ import { useSession } from "../lib/session";
 
 const NAV = [
   { to: "/", label: "Home", permission: null },
+  { to: "/files", label: "Files", permission: "data.read" },
   { to: "/admin/users", label: "Users", permission: "user.manage" },
   { to: "/admin/invitations", label: "Invitations", permission: "invitation.manage" },
   { to: "/admin/settings", label: "Settings", permission: "settings.read" },
   { to: "/audit", label: "Audit log", permission: "audit.read" },
+  { to: "/admin/jobs", label: "Jobs", permission: "jobs.manage" },
 ] as const;
 
 function WorkspaceSwitcher() {
