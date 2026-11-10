@@ -19,6 +19,8 @@ x-app-env: &app-env
 
 services:
   postgres:
+    # 64 MB Docker default is too small for parallel query DSM on large tables (S3 1M-row run)
+    shm_size: 1g
     image: postgres:16.15-trixie@sha256:f9a7b9ebf6f56201f949db745e47bc423c0f0f8294bafe991cc10bf74b029657
     environment:
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set in .env}
