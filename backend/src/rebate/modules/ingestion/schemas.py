@@ -17,6 +17,8 @@ ImportStatus = Literal[
 ]  # fmt: skip
 TemplateType = Literal["sales", "purchases", "customers", "products", "uom", "agreement_items", "remittance"]
 Header = Annotated[str, StringConstraints(min_length=1, max_length=200, pattern=NO_CONTROL)]
+# canonical field names are short snake_case; bounded so an unknown key is never echoed at length
+FieldName = Annotated[str, StringConstraints(min_length=1, max_length=64, pattern=r"^[a-z][a-z0-9_]*$")]
 SourceSystem = Annotated[str, StringConstraints(pattern=r"^[A-Za-z0-9][A-Za-z0-9_.-]{0,49}$")]
 TemplateName = Annotated[str, StringConstraints(min_length=1, max_length=200, pattern=NO_CONTROL)]
 
@@ -103,7 +105,7 @@ class TemplateRef(BaseModel):
 
 class MappingIn(BaseModel):
     model_config = STRICT
-    mapping: Annotated[dict[str, Header | None], Field(max_length=50)]
+    mapping: Annotated[dict[FieldName, Header | None], Field(max_length=50)]
     options: MappingOptions = MappingOptions()
     save_as_template: TemplateRef | None = None
 
@@ -189,14 +191,14 @@ class TemplateIn(BaseModel):
     name: TemplateName
     import_type: TemplateType
     headers: Annotated[list[Header], Field(min_length=1, max_length=200)]
-    mapping: Annotated[dict[str, Header | None], Field(max_length=50)]
+    mapping: Annotated[dict[FieldName, Header | None], Field(max_length=50)]
     options: MappingOptions = MappingOptions()
 
 
 class TemplateUpdate(BaseModel):
     model_config = STRICT
     headers: Annotated[list[Header], Field(min_length=1, max_length=200)]
-    mapping: Annotated[dict[str, Header | None], Field(max_length=50)]
+    mapping: Annotated[dict[FieldName, Header | None], Field(max_length=50)]
     options: MappingOptions = MappingOptions()
 
 

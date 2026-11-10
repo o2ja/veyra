@@ -724,8 +724,27 @@ class LoadCounts:
     changed: int = 0
 
 
-def load_customers(db: Session, tenant_id: UUID, rows: list[dict[str, Any]], counts: LoadCounts) -> None:
-    """Upsert by code. ``parent_customer_code`` resolves against rows already loaded (phase order)."""
+class ParentCycle(InvalidState):
+    code = "customer_parent_cycle"
+
+    def __init__(self, customer_code: str, parent_code: str) -> None:
+        super().__init__(
+            f"Customer {customer_code} cannot have parent {parent_code}: the hierarchy would contain a cycle."
+        )
+
+
+def _imported(
+    db: Session, who: Who, action: Action, entity: str, row: Any, after: dict[str, Any], before: Any = None
+) -> None:
+    """Audit one master-data row created/changed by an import, in the chunk's transaction."""
+    extra = {} if before is None else {"before": before}
+    _audit(db, who, action, entity, row.id, after=after, **extra)
+
+
+def load_customers(db: Session, who: Who, rows: list[dict[str, Any]], counts: LoadCounts) -> None:
+    """Upsert by code. ``parent_customer_code`` resolves against rows already loaded (phase order).
+    Raises ``ParentCycle`` when a row would make the hierarchy cyclic (checked against the database)."""
+    tenant_id = who.tenant_id
     codes = [r["customer_code"] for r in rows]
     parents = {r["parent_customer_code"] for r in rows if r["parent_customer_code"]}
     existing = {
@@ -757,6 +776,11 @@ def load_customers(db: Session, tenant_id: UUID, rows: list[dict[str, Any]], cou
         if r["parent_customer_code"] and values["parent_customer_id"] is None:
             raise InvalidState(f"parent customer {r['parent_customer_code']} vanished during the import")
         current = existing.get(r["customer_code"])
+        if values["parent_customer_id"] is not None:
+            try:
+                _check_parent(db, tenant_id, current.id if current else None, values["parent_customer_id"])
+            except ValidationFailed:
+                raise ParentCycle(r["customer_code"], r["parent_customer_code"]) from None
         if current is None:
             new = Customer(
                 tenant_id=tenant_id,
@@ -767,10 +791,14 @@ def load_customers(db: Session, tenant_id: UUID, rows: list[dict[str, Any]], cou
                 **values,
             )
             db.add(new)
+            db.flush()
+            _imported(db, who, Action.CUSTOMER_CREATED, "customer", new, {"code": new.code, **values})
             parent_ids[new.code] = new.id  # a later row of this chunk may name it as parent
             counts.inserted += 1
         elif any(getattr(current, k) != v for k, v in values.items()):
-            _apply(current, values)
+            changed = {k: v for k, v in values.items() if getattr(current, k) != v}
+            before, after = _apply(current, changed)
+            _imported(db, who, Action.CUSTOMER_UPDATED, "customer", current, after, before)
             counts.changed += 1
         else:
             counts.unchanged += 1
@@ -779,7 +807,8 @@ def load_customers(db: Session, tenant_id: UUID, rows: list[dict[str, Any]], cou
     db.flush()
 
 
-def load_products(db: Session, tenant_id: UUID, rows: list[dict[str, Any]], counts: LoadCounts) -> None:
+def load_products(db: Session, who: Who, rows: list[dict[str, Any]], counts: LoadCounts) -> None:
+    tenant_id = who.tenant_id
     skus = [r["sku"] for r in rows]
     existing = {
         p.sku: p
@@ -800,14 +829,16 @@ def load_products(db: Session, tenant_id: UUID, rows: list[dict[str, Any]], coun
         }
         current = existing.get(r["sku"])
         if current is None:
-            db.add(
-                Product(
-                    tenant_id=tenant_id, id=new_id(), sku=r["sku"], created_at=now, updated_at=now, **values
-                )
+            product = Product(
+                tenant_id=tenant_id, id=new_id(), sku=r["sku"], created_at=now, updated_at=now, **values
             )
+            db.add(product)
+            _imported(db, who, Action.PRODUCT_CREATED, "product", product, {"sku": product.sku, **values})
             counts.inserted += 1
         elif any(getattr(current, k) != v for k, v in values.items()):
-            _apply(current, values)
+            changed = {k: v for k, v in values.items() if getattr(current, k) != v}
+            before, after = _apply(current, changed)
+            _imported(db, who, Action.PRODUCT_UPDATED, "product", current, after, before)
             counts.changed += 1
         else:
             counts.unchanged += 1
@@ -827,9 +858,8 @@ def resolve_matching(db: Session, who: Who, kind: str, values: list[str]) -> Non
             _auto_resolve(db, who, kind, value, entity_id)
 
 
-def load_uom_conversions(
-    db: Session, tenant_id: UUID, rows: list[dict[str, Any]], counts: LoadCounts
-) -> None:
+def load_uom_conversions(db: Session, who: Who, rows: list[dict[str, Any]], counts: LoadCounts) -> None:
+    tenant_id = who.tenant_id
     now = clock.now()
     for r in rows:
         product_id = UUID(r["product_id"]) if r["product_id"] else None
@@ -847,15 +877,18 @@ def load_uom_conversions(
         )
         factor = Decimal(r["factor"])
         if current is None:
-            db.add(
-                UomConversion(
-                    tenant_id=tenant_id, id=new_id(), product_id=product_id, from_uom=r["from_uom"],
-                    to_uom=r["to_uom"], factor=factor, created_at=now, updated_at=now,
-                )
+            conv = UomConversion(
+                tenant_id=tenant_id, id=new_id(), product_id=product_id, from_uom=r["from_uom"],
+                to_uom=r["to_uom"], factor=factor, created_at=now, updated_at=now,
             )  # fmt: skip
+            db.add(conv)
+            _imported(db, who, Action.UOM_CONVERSION_CREATED, "uom_conversion", conv, {
+                "product_id": product_id, "from_uom": conv.from_uom, "to_uom": conv.to_uom, "factor": factor,
+            })  # fmt: skip
             counts.inserted += 1
         elif current.factor != factor:
-            _apply(current, {"factor": factor})
+            before, after = _apply(current, {"factor": factor})
+            _imported(db, who, Action.UOM_CONVERSION_UPDATED, "uom_conversion", current, after, before)
             counts.changed += 1
         else:
             counts.unchanged += 1

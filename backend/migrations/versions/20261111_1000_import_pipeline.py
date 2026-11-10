@@ -193,6 +193,7 @@ def upgrade() -> None:
     )
 
     _versioning_function()
+    _successor_and_currency_functions()
     _sales_tables()
     _purchase_tables()
 
@@ -211,7 +212,18 @@ def upgrade() -> None:
             f"CREATE TRIGGER trg_{table}_no_truncate BEFORE TRUNCATE ON {table} "
             "FOR EACH STATEMENT EXECUTE FUNCTION fn_forbid_mutation()"
         )
-        op.execute(f"REVOKE DELETE, TRUNCATE ON {table} FROM rebate_app")
+        op.execute(
+            f"CREATE CONSTRAINT TRIGGER trg_{table}_successor AFTER UPDATE OF superseded_by_id ON {table} "
+            "DEFERRABLE INITIALLY DEFERRED FOR EACH ROW WHEN (NEW.superseded_by_id IS NOT NULL) "
+            "EXECUTE FUNCTION fn_source_successor_check()"
+        )
+        op.execute(
+            f"CREATE TRIGGER trg_{table}_currency BEFORE INSERT OR UPDATE OF currency_code ON {table} "
+            "FOR EACH ROW EXECUTE FUNCTION fn_source_currency_check()"
+        )
+        # Only the two versioning columns are ever updatable by the app role (column-level grant).
+        op.execute(f"REVOKE UPDATE, DELETE, TRUNCATE ON {table} FROM rebate_app")
+        op.execute(f"GRANT UPDATE (is_current, superseded_by_id) ON {table} TO rebate_app")
 
 
 def _versioning_function() -> None:
@@ -231,6 +243,66 @@ def _versioning_function() -> None:
             END IF;
             IF OLD.superseded_by_id IS NOT NULL AND NEW.superseded_by_id IS DISTINCT FROM OLD.superseded_by_id THEN
                 RAISE EXCEPTION '%: superseded_by_id is set once', TG_TABLE_NAME USING ERRCODE = 'restrict_violation';
+            END IF;
+            RETURN NEW;
+        END
+        $$
+        """
+    )
+
+
+def _successor_and_currency_functions() -> None:
+    # Deferred (commit-time) check of every retirement: the successor exists, is a different row with the same
+    # natural key, is the next version and is current (DATABASE_SCHEMA.md §5).
+    op.execute(
+        """
+        CREATE FUNCTION fn_source_successor_check() RETURNS trigger
+        LANGUAGE plpgsql SET search_path = pg_catalog AS $$
+        DECLARE
+            succ jsonb;
+            cur jsonb := to_jsonb(NEW);
+            k text;
+            keys text[] := ARRAY['source_system', 'doc_type', 'document_number'];
+        BEGIN
+            IF TG_TABLE_NAME IN ('sales_document_lines', 'purchase_document_lines') THEN
+                keys := keys || 'line_number'::text;
+            END IF;
+            IF NEW.superseded_by_id = NEW.id THEN
+                RAISE EXCEPTION '%: a row cannot supersede itself', TG_TABLE_NAME USING ERRCODE = 'restrict_violation';
+            END IF;
+            EXECUTE format('SELECT to_jsonb(s) FROM public.%I s WHERE s.tenant_id = $1 AND s.id = $2', TG_TABLE_NAME)
+                INTO succ USING NEW.tenant_id, NEW.superseded_by_id;
+            IF succ IS NULL THEN
+                RAISE EXCEPTION '%: successor % does not exist', TG_TABLE_NAME, NEW.superseded_by_id
+                    USING ERRCODE = 'restrict_violation';
+            END IF;
+            FOREACH k IN ARRAY keys LOOP
+                IF succ -> k IS DISTINCT FROM cur -> k THEN
+                    RAISE EXCEPTION '%: successor has a different natural key (%)', TG_TABLE_NAME, k
+                        USING ERRCODE = 'restrict_violation';
+                END IF;
+            END LOOP;
+            IF (succ ->> 'version')::int <> NEW.version + 1 OR NOT (succ ->> 'is_current')::boolean THEN
+                RAISE EXCEPTION '%: successor must be the current version %', TG_TABLE_NAME, NEW.version + 1
+                    USING ERRCODE = 'restrict_violation';
+            END IF;
+            RETURN NULL;
+        END
+        $$
+        """
+    )
+    # ADR-024: source amounts are in the tenant currency (validated equal to tenant_settings.currency_code).
+    op.execute(
+        """
+        CREATE FUNCTION fn_source_currency_check() RETURNS trigger
+        LANGUAGE plpgsql SET search_path = pg_catalog AS $$
+        DECLARE
+            expected char(3);
+        BEGIN
+            SELECT currency_code INTO expected FROM public.tenant_settings WHERE tenant_id = NEW.tenant_id;
+            IF expected IS NULL OR NEW.currency_code IS DISTINCT FROM expected THEN
+                RAISE EXCEPTION '%: currency % is not the workspace currency %', TG_TABLE_NAME, NEW.currency_code,
+                    coalesce(expected, '(none)') USING ERRCODE = 'check_violation';
             END IF;
             RETURN NEW;
         END
@@ -359,7 +431,7 @@ def _sales_tables() -> None:
     )
     for sql in (
         "CREATE UNIQUE INDEX uq_sales_document_lines_natural_key ON sales_document_lines "
-        "(tenant_id, source_system, document_number, line_number) WHERE is_current",
+        "(tenant_id, source_system, doc_type, document_number, line_number) WHERE is_current",
         "CREATE INDEX ix_sales_document_lines_manufacturer_date ON sales_document_lines "
         "(tenant_id, manufacturer_id, invoice_date) WHERE is_current",
         "CREATE INDEX ix_sales_document_lines_customer_date ON sales_document_lines "
@@ -476,7 +548,7 @@ def _purchase_tables() -> None:
     )
     for sql in (
         "CREATE UNIQUE INDEX uq_purchase_document_lines_natural_key ON purchase_document_lines "
-        "(tenant_id, source_system, document_number, line_number) WHERE is_current",
+        "(tenant_id, source_system, doc_type, document_number, line_number) WHERE is_current",
         "CREATE INDEX ix_purchase_document_lines_manufacturer_date ON purchase_document_lines "
         "(tenant_id, manufacturer_id, document_date) WHERE is_current",
         "CREATE INDEX ix_purchase_document_lines_tenant_id_import_batch_id ON purchase_document_lines "
