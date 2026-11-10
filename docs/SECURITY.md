@@ -59,6 +59,7 @@ Roles: `admin`, `approver`, `analyst`, `viewer`. Permissions are enforced in the
 |---|---|
 | Allow-list | `.csv`, `.xlsx`, `.pdf` only. Reject `.xlsm`, `.xls`, `.xlsb`, archives, executables, scripts, HTML, SVG |
 | Triple check | Extension, declared MIME, and magic bytes (`python-magic`) must agree |
+| CSV text encoding | UTF-8, UTF-8 with BOM, Windows-1252 and UTF-16 LE/BE **with BOM** are accepted (S3); the detected encoding is recorded on the import batch. Without a BOM, strict UTF-8 is tried first, then Windows-1252. Bytes valid in neither, and text containing NUL (binary content, UTF-16 without BOM) are rejected with 422 `encoding_unsupported` and a "save as CSV UTF-8" message; decoding never substitutes replacement characters. Other single-byte code pages are read as Windows-1252 (a known limit: the preview shows the result before confirmation) |
 | Size | CSV/XLSX ≤ 50 MB, PDF ≤ 25 MB (config); streaming upload with running size check; reject early |
 | Storage | Stream to quarantine key; never to local disk beyond a temp file in a per-request dir; random object keys; original name stored as metadata only (sanitised, never used in paths) |
 | Malware | ClamAV `clamd` scan job before any parsing; `infected`/`error` → file unusable, admin notified; signatures updated daily. Content clamd cannot fully scan (over `MaxFileSize`/`MaxScanSize`/`MaxRecursion`, encrypted, OLE2 macros) is reported as a finding (`AlertExceedsMax`, `AlertEncrypted`, `AlertOLE2Macros`), never as clean |
