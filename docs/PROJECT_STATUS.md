@@ -27,12 +27,12 @@ S1 signed off by the owner 2026-11-10. Evidence and open points: `docs/reports/S
 ### S3–S6 batch (in progress, started 2026-11-10; S2 approved)
 
 Multi-agent waves (worktree branches, orchestrator merges). Resume point:
-- Wave A: `s6-pure` (S6.1 minus OCR, S6.3) **merged** (#3, CI green). `s5-engine` (S5.1–S5.2) PR #2: built and
-  tested; applying owner decisions (R1 = 10,150.00; SPA line = reference OR eligible, commit d76aff6), then
-  financial-correctness review before merge. `s3-backend` (S3.1–S3.4, S3.6, lease + encodings requirements):
-  in progress; see `docs/reports/notes/a1-s3-backend-resume.md` on that branch.
-- Next: security + DB review of S3; Wave B (S4 backend, S3 frontend); Wave C (S5 orchestration, S6 backend,
-  S4 frontend); Wave D (S5/S6 frontend, integration, performance, docs, browser QA). Briefs: orchestrator scratchpad.
+- Wave A: `s6-pure` merged (#3). `s5-engine` PR #2: financial review done (FAIL: R1 breakdown text, period_end
+  not implemented, Release-2 values not rejected); fixes in progress on the branch, then a second review pass on the
+  fixes only, then merge. `s3-backend`: finishing (perf test, isolation, client, docs, PR). Main a6963e2 adds OCR to the image.
+- Next: security + DB review of S3 → merge → rebuild images (OCR) → Wave B (B1 S4 backend, B2 S3 frontend) →
+  Wave C (C1/C2/C3 briefs in `docs/reports/notes/briefs/`) → Wave D (S5/S6 frontend, browser QA).
+- `period_end` defined by orchestrator: last day of the calendar month of the line's claim date (flag to owner).
 - Open engine rules (raise instead of guessing): `cap_scope=per_agreement`, `tier_metric=quantity`,
   `claim_window_basis=period_end`.
 
