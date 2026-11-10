@@ -7,7 +7,7 @@
 | Item | State |
 |---|---|
 | Phase | **Release 1 build** |
-| Current stage | **S2 complete 2026-11-10**, awaiting owner review (`docs/reports/S2_COMPLETION_REPORT.md`) |
+| Current stage | **S3–S6 batch in progress** (S2 approved 2026-11-10); see §3 |
 | Application code | S0 skeleton + S1: identity, tenancy, audit modules; auth/MFA/sessions/CSRF; admin UI; isolation suite with negative control |
 | Synthetic test data | Generated and self-checked (`testdata/`) |
 
@@ -23,6 +23,18 @@
 ## 3. In progress
 
 S1 signed off by the owner 2026-11-10. Evidence and open points: `docs/reports/S1_COMPLETION_REPORT.md`. CI green on `main` (jobs: backend incl. isolation negative control, frontend, e2e (Playwright W1–W2 + axe), api-contract, secrets, images).
+
+### S3–S6 batch (in progress, started 2026-11-10; S2 approved)
+
+Multi-agent waves (worktree branches, orchestrator merges). Resume point:
+- Wave A: `s6-pure` (S6.1 minus OCR, S6.3) **merged** (#3, CI green). `s5-engine` (S5.1–S5.2) PR #2: built and
+  tested; applying owner decisions (R1 = 10,150.00; SPA line = reference OR eligible, commit d76aff6), then
+  financial-correctness review before merge. `s3-backend` (S3.1–S3.4, S3.6, lease + encodings requirements):
+  in progress; see `docs/reports/notes/a1-s3-backend-resume.md` on that branch.
+- Next: security + DB review of S3; Wave B (S4 backend, S3 frontend); Wave C (S5 orchestration, S6 backend,
+  S4 frontend); Wave D (S5/S6 frontend, integration, performance, docs, browser QA). Briefs: orchestrator scratchpad.
+- Open engine rules (raise instead of guessing): `cap_scope=per_agreement`, `tier_metric=quantity`,
+  `claim_window_basis=period_end`.
 
 ## 4. Pending
 
