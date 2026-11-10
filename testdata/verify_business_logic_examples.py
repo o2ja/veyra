@@ -77,6 +77,9 @@ results.append(check("D2", d2, date(2026, 7, 14)))
 results.append(check("D2 -14", d2 - timedelta(days=14), date(2026, 6, 30)))
 results.append(check("D2 -7", d2 - timedelta(days=7), date(2026, 7, 7)))
 results.append(check("D2 -3", d2 - timedelta(days=3), date(2026, 7, 11)))
+# D3: period_end basis = last day of the claim-date month + window
+results.append(check("D3", date(2026, 3, 31) + timedelta(days=60), date(2026, 5, 30)))
+results.append(check("D3 leap", date(2028, 2, 29) + timedelta(days=60), date(2028, 4, 29)))
 # V1 / V2
 results.append(check("V1 variance", D("2200.00") - D("2050.00"), D("150.00")))
 results.append(check("V2 lump", D("2200.00") + D("2230.00"), D("4430.00")))
