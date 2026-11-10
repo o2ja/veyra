@@ -3,6 +3,7 @@ parent cycles, PAN in headers, errors CSV export, mapping key limits. Real Postg
 
 import csv
 import io
+import time
 import uuid
 
 import pytest
@@ -129,3 +130,39 @@ def test_mapping_key_longer_than_64_chars_is_rejected(ws: Workspace) -> None:
     ok_shape = put(ws.api, f"/imports/{batch['id']}/mapping", {"mapping": {"a" * 64: "qty"}})
     assert ok_shape.status_code == 422  # passes the schema, refused as an unknown field
     assert "unknown_field" in {d["code"] for d in ok_shape.json()["error"]["details"]}
+
+
+def test_template_with_a_card_number_header_is_rejected(ws: Workspace) -> None:
+    body = {
+        "name": "pan template",
+        "import_type": "customers",
+        "headers": ["code", "name", "4111 1111 1111 1111"],
+        "mapping": {"customer_code": "code", "customer_name": "name"},
+    }
+    r = ws.api.post("/mapping-templates", json=body)
+    assert r.status_code == 422, r.text
+    assert ("headers[2]", "card_number") in {(d["field"], d["code"]) for d in r.json()["error"]["details"]}
+    ok = ws.api.post("/mapping-templates", json={**body, "headers": ["code", "name", "x"]})
+    assert ok.status_code == 201, ok.text
+    update = {k: body[k] for k in ("headers", "mapping")}
+    bad = put(ws.api, f"/mapping-templates/{ok.json()['id']}", update, {"If-Match": '"1"'})
+    assert bad.status_code == 422 and "card_number" in {d["code"] for d in bad.json()["error"]["details"]}
+
+
+@pytest.mark.performance  # about 45 s; run with -m performance (the default run covers cycles via CYA/CYB)
+def test_deep_customer_chain_loads_in_bounded_time_and_cycles_still_fail(ws: Workspace) -> None:
+    n = 20_000
+    rows = ["customer_code,customer_name,parent_customer_code", "CH00000,Chain 0 (SYNTHETIC),"]
+    rows += [f"CH{i:05d},Chain {i} (SYNTHETIC),CH{i - 1:05d}" for i in range(1, n)]
+    t0 = time.perf_counter()
+    done = run_import(ws, clean_file(ws, "chain.csv", ("\n".join(rows) + "\n").encode()), "customers")
+    elapsed = time.perf_counter() - t0
+    assert done["status"] == "completed" and done["counts"]["inserted"] == n, done
+    assert elapsed < 60, f"{n}-customer chain took {elapsed:.0f}s"
+    # the root becomes a child of the deepest existing customer: a cycle through existing rows only
+    head = "customer_code,customer_name,parent_customer_code\n"
+    body = f"{head}CH00000,Chain 0 (SYNTHETIC),CH{n - 1:05d}\n"
+    cyc = run_import(ws, clean_file(ws, "chaincycle.csv", body.encode()), "customers")
+    assert cyc["status"] == "failed", cyc
+    codes = [e["code"] for e in ws.api.get(f"/imports/{cyc['id']}/errors").json()["data"]]
+    assert "customer_parent_cycle" in codes

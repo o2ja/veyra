@@ -749,14 +749,14 @@ def check_parent_cycles(db: Session, tenant_id: UUID, parents: dict[str, str | N
     graph.update(parents)
     done: set[str] = set()
     for start in parents:
-        path: list[str] = []
+        path: set[str] = set()
         node: str | None = start
         while node is not None and node not in done:
             if node in path:
                 raise ParentCycle(node, graph.get(node) or "")
-            path.append(node)
+            path.add(node)
             node = graph.get(node)
-        done.update(path)
+        done |= path
 
 
 def _imported(
@@ -802,7 +802,13 @@ def load_customers(db: Session, who: Who, rows: list[dict[str, Any]], counts: Lo
         if r["parent_customer_code"] and values["parent_customer_id"] is None:
             raise InvalidState(f"parent customer {r['parent_customer_code']} vanished during the import")
         current = existing.get(r["customer_code"])
-        if values["parent_customer_id"] is not None:
+        # A new customer has no children, so it cannot close a cycle; only a changed parent of an existing
+        # customer is walked (one query per ancestor). The whole file was checked before the first chunk.
+        if (
+            current is not None
+            and values["parent_customer_id"] is not None
+            and values["parent_customer_id"] != current.parent_customer_id
+        ):
             try:
                 _check_parent(db, tenant_id, current.id if current else None, values["parent_customer_id"])
             except ValidationFailed:

@@ -165,6 +165,11 @@ def check_mapping(
             {"field": "options.defaults", "code": "invalid", "message": "Defaults must map fields to text."}
         )
         defaults = {}
+    for i, h in enumerate(headers):
+        if n.find_card_number(h) is not None:  # PAN guard: template headers are stored
+            details.append(
+                {"field": f"headers[{i}]", "code": "card_number", "message": "Card numbers are not allowed."}
+            )
     for k, v in defaults.items():
         if n.find_card_number(v) is not None:  # PAN guard: a default is stored on templates and batches
             details.append(
