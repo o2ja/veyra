@@ -171,7 +171,20 @@ or a hand derivation from the files and BUSINESS_LOGIC §7, never from the code'
   tests failed with ISOLATION-BREACH, all independent tests (grants, route matrix incl. every S3 route) passed.
   `MIN_TESTS` raised 64 -> 233.
 
-## 6. Performance baseline (1M rows): NOT RECORDED
+Rerun after the PR #4 review fixes (2026-11-10): full backend suite 1162 passed / 4 failed (isolation D5 on the
+four source tables: the new currency trigger refused the foreign-tenant insert before RLS WITH CHECK could;
+fixed by letting the trigger skip rows whose tenant is not the session's, which RLS always refuses). After the
+fix: `tests/isolation` + schema lint + migration helpers + `test_source_integrity.py` 247 passed; negative
+control OK (121 RLS-dependent tests detected the breach, all independent tests passed).
+
+## 6. Performance baseline (1M rows): RECORDED 2026-11-10 (third attempt overall, first after the fixes)
+
+Result (one run, shared dev stack, Postgres `shm_size` 1g, Docker VM 7.6 GiB, 12 CPUs, other agents' load present):
+`PERF rows=1000000 bytes=163437435 parse+validate=362.1s (2761 rows/s) load=714.5s (1400 rows/s)
+total=1076.6s (929 rows/s) peak_rss=1184MB (before 239MB)`; all 1,000,000 lines inserted, batch `completed`,
+no Postgres crash. Postgres container peaked at about 1.65 GiB during the load. Peak RSS is the test process,
+which runs API and worker in-process. The history of the earlier failed attempts follows.
+
 
 File: `testdata/generate.py --volume 1000000 --out <scratch>` -> `sales_volume_1000000.csv`, 163,437,435 bytes,
 1,000,000 data rows (not committed). Test: `tests/integration/test_import_performance.py`, run with
