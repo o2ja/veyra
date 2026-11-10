@@ -77,7 +77,7 @@ Status labels used in docs: **APPROVED**, **PROPOSED** (awaiting owner), **ASSUM
 
 ## 6. Technology (approved; see `TECH_STACK.md`)
 
-Backend: Python 3.14 (one version locally, in Docker and CI; ADR-027), FastAPI (sync handlers), SQLAlchemy 2.x + psycopg 3, Alembic, Pydantic v2, Procrastinate (pending S2 spike), structlog. Frontend: React 18, TypeScript, Vite, React Router, TanStack Query/Table, React Hook Form + Zod, Tailwind + Radix, generated OpenAPI client. Tooling: uv, ruff, mypy, pytest, hypothesis, Vitest, Playwright, import-linter, bandit, pip-audit, gitleaks.
+Backend: Python 3.14 (one version locally, in Docker and CI; ADR-027), FastAPI (sync handlers), SQLAlchemy 2.x + psycopg 3, Alembic, Pydantic v2, Postgres job queue in `core/jobs.py` (ADR-005: Procrastinate spike not adopted), structlog. Frontend: React 18, TypeScript, Vite, React Router, TanStack Query/Table, React Hook Form + Zod, Tailwind + Radix, generated OpenAPI client. Tooling: uv, ruff, mypy, pytest, hypothesis, Vitest, Playwright, import-linter, bandit, pip-audit, gitleaks.
 
 Not approved (ask first): BaaS, microservices/Kubernetes, Redis/Kafka/RabbitMQ, GraphQL, Next.js, Redux, JWT in localStorage, NoSQL for financial data, PyMuPDF (AGPL), LLM-computed numbers, a rules scripting DSL, floats for money, `create_all`.
 

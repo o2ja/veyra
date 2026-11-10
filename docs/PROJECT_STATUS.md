@@ -49,7 +49,7 @@ Stages S0–S11 per `DEVELOPMENT_ROADMAP.md` / `IMPLEMENTATION_PLAN.md`. Release
 | K-5 | Legal/commercial review (terms, DPA, data retention) not done | Needed before a paid pilot | Owner to engage counsel |
 | K-6 | `minio/minio` images are no longer publicly pullable (Docker Hub: not found; quay.io: 401) | Resolved 2026-11-09: owner approved SeaweedFS for local dev and CI (ADR-017); image added in S2 | Closed |
 | K-7 | Starlette deprecates `httpx` for `TestClient` (warning; suggests `httpx2`) | Test-only warning | Swap the test dependency when convenient |
-| K-9 | **Temporary in-process background pool** (S1.6, `core/mail.py`): emails go to Mailpit over SMTP from a 2-thread pool fed after commit; the forgot-password lookup/token/audit work runs there too (timing fix). Not durable, no retry; the API refuses to start outside `local`/`ci` | A crash or SMTP failure loses the email (and, for forgot-password, the token); no production email | Replace both with jobs in S2.1 (`docs/reports/S1_KICKOFF_REPORT.md` §5) |
+| K-9 | Temporary in-process background pool (S1) | — | **Closed in S2**: all email and the forgot-password work run as queued jobs with retries and a visible dead-letter state |
 | K-8 | `minimatch` 10.x advisory GHSA-g3hv-75wg-m249 in ESLint tooling (dev only) | None at runtime | npm `overrides` pins minimatch 11.0.5; remove the override once ESLint ships it |
 
 ## 7. Risks being watched

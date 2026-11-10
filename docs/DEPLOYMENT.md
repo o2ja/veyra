@@ -23,11 +23,11 @@ Docker + Docker Compose; GNU make and a POSIX shell (on Windows: Git Bash); Pyth
 | Service | Image | Ports (host) | Purpose |
 |---|---|---|---|
 | `postgres` | `postgres:16.15` (pinned by digest) | `${POSTGRES_HOST_PORT:-5432}` | Database (volume `pgdata`). Host port is configurable for machines that already run Postgres |
-| `seaweedfs` | `chrislusf/seaweedfs` (ADR-017), **added in S2** behind profile `s2`, pinned by digest | 8333 (S3) | S3-compatible storage (replaces MinIO, whose images are no longer published) |
-| `clamav` | `clamav/clamav:1.4.6` (digest); Compose profile `s2`, not started by default until S2 | 3310 | Malware scanning |
+| `seaweedfs` | `chrislusf/seaweedfs:4.50` (ADR-017), profile `s2` (enabled by the Makefile), pinned by digest; `infra/seaweedfs/start.sh` writes the S3 identity from env; SSE-S3 key from `SEAWEEDFS_SSE_KEY` | 8333 (S3) | S3-compatible storage. Dev/CI only: its filer IAM gRPC is unauthenticated and the SSE key-encryption key is stored on the filer unwrapped (ports not published beyond the Docker network; production uses the OD-3/OD-4 provider) |
+| `clamav` | `clamav/clamav:1.4.6` (digest), profile `s2`; signatures ship in the image, `freshclamd` updates daily; `infra/clamav/clamd.conf` = image default + `StreamMaxLength 60M` (uploads up to 50 MB) | 3310 | Malware scanning |
 | `mailpit` | `axllent/mailpit:v1.33.1` (digest) | 1025/8025 | Local SMTP + inbox UI |
 | `api` | built from `backend/` | 8000 | FastAPI (reload in dev) |
-| `worker` | built from `backend/`; **added in S2** with the job queue | — | Job worker |
+| `worker` | built from `backend/` (`python -m rebate.workers`), profile `s2` | — | Job worker: email, malware scans; creates the bucket (versioning + default SSE) on start |
 | `frontend` | built from `frontend/` | 5173 | Vite dev server (proxy `/api` → `api`) |
 
 Convenience commands (`Makefile`): `make env`, `make up`, `make down`, `make db-init`, `make migrate`, `make test`, `make test-isolation`, `make lint`, `make gen-client`, `make check-client`. Later stages add `make seed-synthetic` and `make e2e`. All dev ports bind to `127.0.0.1` only.
@@ -55,11 +55,15 @@ Defined by `core/config.py` (pydantic-settings). `.env.example` contains placeho
 | `DATABASE_URL_OWNER` | `…rebate_owner…` | Migrations only; not present in the running API container |
 | `DATABASE_URL_AI` | `…rebate_ai_writer…` | AI gateway sessions |
 | `S3_ENDPOINT_URL`, `S3_REGION`, `S3_BUCKET`, `S3_ACCESS_KEY_ID`, `S3_SECRET_ACCESS_KEY` | | SeaweedFS locally |
+| `S3_PUBLIC_ENDPOINT_URL` | `http://localhost:8333` | Host the browser uses for presigned URLs (signatures include the host) |
+| `SEAWEEDFS_SSE_KEY` | 64 hex chars | Dev/CI SeaweedFS SSE-S3 key (`make env` generates it) |
+| `PRESIGNED_URL_SECONDS` | `300` | ≤ 300 (SECURITY.md §4) |
+| `UPLOAD_MAX_MB_SPREADSHEET`, `UPLOAD_MAX_MB_PDF` | `50`, `25` | FR-FI-03 |
+| `SMTP_STARTTLS`, `SMTP_USER`, `SMTP_PASSWORD` | | Required STARTTLS in staging/production |
 | `CLAMD_HOST`, `CLAMD_PORT` | `clamav`, `3310` | |
 | `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASSWORD`, `MAIL_FROM` | | Mailpit locally |
 | `LLM_PROVIDER`, `LLM_API_KEY`, `LLM_MODEL_PRIMARY`, `LLM_MODEL_SECONDARY`, `AI_DAILY_COST_CAP_USD` | | **Unset by default; AI disabled** until OD-2 approval |
 | `ENCRYPTION_KEYS` | `k1:<base64 32 bytes>` | MFA secrets (AES-256-GCM). Comma-separated `kid:key`; the **first is active** for new encryptions, all listed keys decrypt. **Rotation:** add the new key first in the list, deploy, run the re-encrypt command (added with the first rotation need; until then old keys stay listed), remove the old key. Never reuse a kid |
-| `EMAIL_BACKEND` | `smtp_inprocess` | **Temporary (S1, K-9)**: refuses to start unless `APP_ENV` is `local` or `ci`; replaced by the job-based sender in S2 |
 | `TRUSTED_PROXY_IPS` | `` (empty) | `X-Forwarded-For` honoured only from these peers (Caddy) |
 | `SESSION_IDLE_MINUTES` / `SESSION_ABSOLUTE_HOURS` | `30` / `12` | |
 | `SENTRY_DSN` | | Optional |

@@ -185,7 +185,9 @@ export function FilesPage() {
                 <tr key={f.id} className="border-t border-line">
                   <td className="py-2">{f.original_name}</td>
                   <td>{f.kind}</td>
-                  <td>{(f.size_bytes / 1024).toFixed(1)} KB</td>
+                  <td>
+                    {f.size_bytes < 1024 ? `${f.size_bytes} B` : `${(f.size_bytes / 1024).toFixed(1)} KB`}
+                  </td>
                   <td
                     role="status"
                     className={

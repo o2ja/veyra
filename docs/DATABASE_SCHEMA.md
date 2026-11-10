@@ -81,7 +81,13 @@ Auth events of a known user that have no single tenant (failed login, lockout, p
 
 **audit_seals**: `id`, `tenant_id`, `from_audit_id NN`, `to_audit_id NN`, `prev_hash`, `seal_hash NN`, `sealed_at`.
 
-**file_objects**: `id`, `kind` (`import`,`agreement`,`remittance`,`export`,`attachment`), `original_name`, `storage_key NN`, `size_bytes NN`, `sha256 char(64) NN`, `declared_mime`, `detected_mime`, `scan_status` (`pending`,`clean`,`infected`,`error`), `scan_detail`, `uploaded_by`, `created_at`. `UNIQUE (tenant_id, kind, sha256)` for kinds `import`,`remittance`,`agreement` (partial index) to detect same-file re-upload.
+**file_objects**: `id`, `kind` (`import`,`agreement`,`remittance`,`export`,`attachment`), `original_name`, `storage_key NN`, `size_bytes NN`, `sha256 char(64) NN`, `declared_mime`, `detected_mime NN`, `scan_status` (`pending`,`clean`,`infected`,`error`), `scan_detail`, `uploaded_by NN`, `created_at`, `scanned_at` (S2). `UNIQUE (tenant_id, kind, sha256)` for kinds `import`,`remittance`,`agreement` (partial index, excluding `error` rows) to detect same-file re-upload. S2: CHECK that `storage_key` is this tenant's quarantine or clean key; trigger `fn_file_objects_identity_immutable` rejects changes to the file's identity columns and any change once the outcome is `clean`/`infected`; `rebate_app` has no DELETE.
+
+**jobs** (global, S2, ADR-005 fallback): `id`, `tenant_id` (nullable; NULL only for user-level identity emails), `kind`, `payload jsonb` (ids only, ≤ 2 KB), `status` (`queued`,`running`,`succeeded`,`failed`), `attempts`, `max_attempts`, `run_at`, `locked_until`, `last_error` (exception class or our own message, ≤ 500 chars), `dedupe_key UNIQUE`, `created_by`, `created_at`, `updated_at`, `finished_at`. No RLS by design (the worker claims across tenants); every API read filters `tenant_id` explicitly and the route isolation suite covers it; the schema lint lists it as a documented global table. `rebate_readonly` has no access.
+
+**password_reset_requests** (global, S2): `id`, `email citext`, `created_at`. The forgot-password job payload carries this id; the job deletes the row.
+
+S2 token decision: `pending_registrations.token_hash`, `user_tokens.token_hash` and `invitations.token_hash` are nullable; the email job mints the token, stores only its hash and sends the link in one transaction.
 
 **idempotency_keys**: `tenant_id`, `key text`, `endpoint`, `request_hash`, `response_status`, `response_body jsonb`, `created_at`, `expires_at`. PK `(tenant_id, key, endpoint)`.
 

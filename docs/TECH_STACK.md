@@ -12,7 +12,7 @@
 | ORM / migrations | SQLAlchemy 2.x (sync) + psycopg 3, Alembic | Explicit SQL control, Postgres features |
 | Validation | Pydantic v2 | Request/response models, rules schema, AI output schema |
 | Database | PostgreSQL 16+ | System of record, constraints, RLS, job queue |
-| Job queue | Procrastinate (Postgres-backed) | Transactional enqueue, no extra infrastructure |
+| Job queue | Postgres `SKIP LOCKED` queue in `core/jobs.py` (ADR-005 fallback, S2) | Transactional enqueue, no extra infrastructure |
 | Object storage | S3-compatible via boto3 (SeaweedFS locally and in CI; ADR-017) | Raw files and exports |
 | Frontend | React 18 + TypeScript + Vite SPA | Back-office app; no SEO need |
 | Reverse proxy / TLS | Caddy | Automatic HTTPS, simple config |
@@ -30,7 +30,7 @@
 | SQLAlchemy 2.x, `psycopg[binary]` 3 | ORM/Core | Sync engine. Use Core/SQL for bulk loads (`COPY`, `INSERT … ON CONFLICT`) |
 | Alembic | Migrations | Forward-only in shared environments |
 | Pydantic v2, pydantic-settings | Schemas and config | Strict mode for money fields |
-| Procrastinate | Job queue and periodic tasks | Uses Postgres `LISTEN/NOTIFY` and `FOR UPDATE SKIP LOCKED`. Spike in S2; fallback is a minimal in-house `SKIP LOCKED` queue (ADR-005) |
+| ~~Procrastinate~~ → `core/jobs.py` | Job queue | **S2 spike: not adopted** (cannot enqueue inside our transaction); in-house `SKIP LOCKED` queue per ADR-005 fallback |
 | `argon2-cffi` | Password hashing | Argon2id |
 | `pyotp` | TOTP MFA | Plus recovery codes (hashed) |
 | `cryptography` | AES-256-GCM for MFA secrets | S1 D-2; keys from env `ENCRYPTION_KEYS` |
@@ -39,8 +39,9 @@
 | `structlog` | Structured logging | JSON, request id + tenant id binding |
 | `sentry-sdk` | Error tracking | Scrub PII; self-hostable alternative acceptable |
 | `boto3` | S3-compatible storage client | Presigned URLs, short expiry |
-| `clamd` (client) | Malware scanning | |
-| `python-magic` | Magic-byte file type detection | |
+| clamd INSTREAM (stdlib `socket`, `files/scanner.py`) | Malware scanning | S2: the `clamd` PyPI client is unmaintained since 2014; the protocol is ~30 lines |
+| `python-magic` | Magic-byte file type detection | Needs `libmagic1` in the image (S2) |
+| `python-multipart` | Multipart upload parsing for FastAPI | S2 |
 | `charset-normalizer` | CSV encoding detection | |
 | `openpyxl`, `python-calamine` | Excel read (strings only) | Read-only mode, no macros, no external links, no formulas evaluated |
 | `XlsxWriter` | Excel export | Sanitise formula-injection (`SECURITY.md`) |

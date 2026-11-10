@@ -105,9 +105,10 @@ Legend: **R** = roles allowed (A admin, P approver, N analyst, V viewer). Writes
 
 | Method & path | Purpose | R |
 |---|---|---|
-| `POST /files` (multipart: `file`, `kind`) | Upload to quarantine; returns `file` with `scan_status=pending` | A P N |
+| `POST /files` (multipart: `file`, `kind`) | Upload to quarantine; returns `file` with `scan_status=pending`. `kind` ∈ `import`, `agreement`, `remittance`, `attachment`. Requires `Content-Length` (411 `length_required`); larger than the limit → 413 before the body is read. Rejections: 422 `upload_rejected` with a detail code (`type_not_allowed`, `declared_type_mismatch`, `content_type_mismatch`, `macros`, `archive_ratio`, `archive_too_large`, `archive_too_complex`, `encrypted`, `not_a_workbook`, `empty`); same content already uploaded for that kind → 409 `duplicate_file` (detail message = existing file id) | A P N |
+| `GET /files` | List (newest first; `limit` ≤ 200, `before` = last id) — added S2 | all |
 | `GET /files/{id}` | Metadata and scan status | all |
-| `GET /files/{id}/download-url` | Short-lived presigned URL (audited) | all |
+| `GET /files/{id}/download-url` | Short-lived presigned URL (≤ 300 s, `Content-Disposition: attachment`; audited). Only `clean` files: otherwise 409 `invalid_state` | all |
 
 ### 2.3 Master data
 
@@ -220,7 +221,7 @@ Legend: **R** = roles allowed (A admin, P approver, N analyst, V viewer). Writes
 | Method & path | Purpose | R |
 |---|---|---|
 | `GET /jobs/{id}` | Job status/progress/result | creator, A |
-| `GET /jobs?status=failed` | Failed/dead jobs | A |
+| `GET /jobs?status=failed` | Jobs of the active workspace by status (`queued`, `running`, `succeeded`, `failed`; default `failed`) | A |
 | `POST /jobs/{id}/retry` | Retry failed job | A |
 | `GET /health/live`, `GET /health/ready` (full path `/api/v1/health/*`) | Unauthenticated; no sensitive data. `ready` checks the database (503 `unavailable` when down) | — |
 
