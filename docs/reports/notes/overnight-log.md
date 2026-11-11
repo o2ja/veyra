@@ -1,8 +1,8 @@
 # Overnight log (2026-11-11/12, unattended)
 
 ## MORNING SUMMARY
-1. Completed and merged: S4 backend (#6, 99dc074) — before tonight.
-2. In progress: S4 UI on `ui/s4` (Antigravity; WIP 85b3a19, draft editor unfinished). S6 backend on `s6-backend` and S5 runs on `s5-runs` (builder agents, parallel).
+1. Completed and merged: S4 backend (#6, 99dc074, before tonight); #9 amendment-rename guard + CI retry (6f01b02).
+2. In progress: S4 UI on `ui/s4` (Antigravity; WIP 85b3a19, draft editor unfinished). S6 backend PR #8 (`s6-backend`, review round 2 fixes); S5 runs PR #7 (`s5-runs`, builder). S4 UI `ui/s4` verified by me (e2e green), awaiting independent UI review.
 3. Blocked / needs decision: none yet.
 4. Failures/findings: main CI c0dfeae backend job failed on flaky `test_register_timing` (34% > 25%, docs-only commit; same code green at 99dc074) → rerun.
 5. Resume: see PROJECT_STATUS.md §3.
@@ -17,3 +17,5 @@
 - S6 (PR #8) built; security+DB review FAIL (4 serious: audit atomicity on retry, stuck active rows after dead-letter, missing rate/concurrency limits per AI_PROCESSING §175, api-contract/doc) + 8 minor → fixes sent back to the builder.
 - 5-hour usage limit hit (all agents stopped ~17:50); resumed after reset. S5 WIP committed+pushed (d743763). S6 WIP not committable (truncated test file fails the hook; not bypassed) → builder resumed to finish it.
 - PR #9 CI: e2e failed 3/3 retries (runner cannot resolve Ubuntu mirrors — GitHub/Azure infra), backend failed on `test_login_timing` flake (34%, reversed direction vs earlier flake). Both environmental; rerun later. If the timing test keeps flaking, consider a follow-up to make it robust (more samples) — not weakened tonight.
+- PR #9 MERGED (6f01b02): amendment rename refused + CI Playwright-install retry. CI green after mirror outage ended.
+- S6 fixes round 1 (ffe115d): 2nd-pass review PASS on S1–S4 + most minors; M5 now serious (advisory lock held across provider call, unbounded wait on sync mapping) + 4 minor races → round 2 sent to builder. PR #8 e2e files.spec timeout was a flake (rerun green).
