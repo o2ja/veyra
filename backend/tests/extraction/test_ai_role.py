@@ -4,10 +4,11 @@ role may read file_objects and the extraction tables and write only extraction r
 it must not be able to touch anything else (in particular drafts, versions, master data, users)."""
 
 from collections.abc import Iterator
+from typing import Any, cast
 from uuid import UUID
 
 import pytest
-from sqlalchemy import Engine, text
+from sqlalchemy import CursorResult, Engine, text
 from sqlalchemy.exc import DBAPIError
 
 from rebate.core.db import make_engine, transaction
@@ -124,7 +125,8 @@ def queued(ws: Workspace) -> tuple[UUID, UUID]:
 
 def _run(engine: Engine, tenant: UUID, sql: str, **params: object) -> int:
     with transaction(engine, tenant) as db:
-        return db.execute(text(sql), params).rowcount
+        result = cast(CursorResult[Any], db.execute(text(sql), params))
+        return result.rowcount
 
 
 def test_the_ai_role_can_write_results_of_its_own_tenants_extraction(

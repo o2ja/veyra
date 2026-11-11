@@ -9,10 +9,11 @@ from contextlib import contextmanager
 from uuid import UUID
 
 import pytest
-from sqlalchemy import Connection, Engine, text
+from sqlalchemy import Connection, Engine, create_engine, text
 from sqlalchemy.exc import DBAPIError
 
 from rebate.core.ids import new_id
+from tests.conftest import DbUrls
 from tests.isolation.conftest import TENANT_TABLES, World, breach
 
 
@@ -332,6 +333,13 @@ S4_UPDATABLE = {
 S4_MOVABLE = ("agreements", "agreement_drafts")
 
 
+# ---- S6 tables (AI extraction): attacked as rebate_app and as the restricted rebate_ai_writer ------------
+S6_ROWS: dict[str, tuple[str, str]] = {
+    "document_extractions": ("id", "extraction"),
+    "ai_invocations": ("id", "invocation"),
+}
+
+
 def test_every_tenant_isolated_table_is_in_the_isolation_suite(admin_engine: Engine) -> None:
     """Every table carrying the tenant_isolation policy is attacked by D1/D7/D8/D12, and every S3 one by the
     S3 D-series below (policies survive the negative control's DISABLE ROW LEVEL SECURITY)."""
@@ -351,7 +359,8 @@ def test_every_tenant_isolated_table_is_in_the_isolation_suite(admin_engine: Eng
         "file_objects",
     }
     assert policed == set(TENANT_TABLES), policed ^ set(TENANT_TABLES)
-    assert policed - s2 == set(S3_ROWS) | set(S4_ROWS), (policed - s2) ^ (set(S3_ROWS) | set(S4_ROWS))
+    known = set(S3_ROWS) | set(S4_ROWS) | set(S6_ROWS)
+    assert policed - s2 == known, (policed - s2) ^ known
 
 
 def _outcome(conn: Connection, sql: str, params: dict[str, object]) -> str:
@@ -510,3 +519,86 @@ def test_d9_s4_no_delete_and_no_tenant_change_of_terms(app_engine: Engine, world
     assert deleted.startswith("error: permission denied"), deleted
     if table not in S4_MOVABLE:
         assert moved.startswith("error: permission denied"), moved
+
+
+@pytest.fixture(scope="module")
+def ai_engine(migrated_db: DbUrls) -> Iterator[Engine]:
+    from tests.extraction.conftest import ai_url
+
+    engine = create_engine(ai_url(migrated_db))
+    yield engine
+    engine.dispose()
+
+
+@pytest.mark.parametrize("table", sorted(S6_ROWS))
+@pytest.mark.parametrize("role", ["app", "ai"])
+def test_d2_s6_select_by_foreign_id_returns_nothing(
+    app_engine: Engine, ai_engine: Engine, world: World, table: str, role: str
+) -> None:
+    column, key = S6_ROWS[table]
+    engine = app_engine if role == "app" else ai_engine
+    with as_app(engine, world.a.tenant_id) as conn:
+        own = conn.execute(text(f"SELECT 1 FROM {table} WHERE {column} = :id"), {"id": world.a.s6[key]}).all()
+        rows = conn.execute(
+            text(f"SELECT 1 FROM {table} WHERE {column} = :id"), {"id": world.b.s6[key]}
+        ).all()
+    assert own, f"{table}: fixture row for A must be visible to A as {role}"
+    assert rows == [], breach(f"A reads B's {table} row by id as {role}")
+
+
+def test_d3_s6_ai_role_cannot_update_a_foreign_extraction(ai_engine: Engine, world: World) -> None:
+    with as_app(ai_engine, world.a.tenant_id) as conn:
+        got = _outcome(
+            conn,
+            "UPDATE document_extractions SET status = 'processing' WHERE id = :id",
+            {"id": world.b.s6["extraction"]},
+        )
+    assert got == "n=0", breach(f"A (as the AI role) updated B's extraction ({got})")
+
+
+def test_d5_s6_ai_role_cannot_write_a_ledger_row_into_another_tenant(ai_engine: Engine, world: World) -> None:
+    with as_app(ai_engine, world.a.tenant_id) as conn:
+        got = _outcome(
+            conn,
+            "INSERT INTO ai_invocations (tenant_id, id, extraction_id, purpose, provider, model, prompt_version, "
+            "status) VALUES (:b, gen_random_uuid(), NULL, 'mapping', 'p', 'm', 'v', 'ok')",
+            {"b": world.b.tenant_id},
+        )
+    assert got == "rls", breach(f"A (as the AI role) wrote a ledger row into tenant B ({got})")
+
+
+def test_d7_s6_ai_role_without_tenant_context_sees_nothing(ai_engine: Engine, world: World) -> None:
+    with as_app(ai_engine, None) as conn:
+        counts = {
+            t: conn.execute(text(f"SELECT count(*) FROM {t}")).scalar_one()
+            for t in ("document_extractions", "ai_invocations", "file_objects")
+        }
+    assert counts == {"document_extractions": 0, "ai_invocations": 0, "file_objects": 0}, breach(str(counts))
+
+
+@pytest.mark.parametrize("table", sorted(S6_ROWS))
+def test_d9_s6_nobody_deletes_and_the_app_role_cannot_write_results(
+    app_engine: Engine, ai_engine: Engine, world: World, table: str
+) -> None:
+    """Grants and triggers, independent of RLS: the ledger and the extraction rows are never deleted, the app
+    role cannot update them, and the AI role cannot change identity columns."""
+    column, key = S6_ROWS[table]
+    with as_app(app_engine, world.a.tenant_id) as conn:
+        results = [
+            _outcome(conn, f"DELETE FROM {table} WHERE {column} = :id", {"id": world.a.s6[key]}),
+            _outcome(
+                conn,
+                f"UPDATE {table} SET tenant_id = :b WHERE {column} = :id",
+                {"b": world.b.tenant_id, "id": world.a.s6[key]},
+            ),
+        ]
+    with as_app(ai_engine, world.a.tenant_id) as conn:
+        results += [
+            _outcome(conn, f"DELETE FROM {table} WHERE {column} = :id", {"id": world.a.s6[key]}),
+            _outcome(
+                conn,
+                f"UPDATE {table} SET tenant_id = :b WHERE {column} = :id",
+                {"b": world.b.tenant_id, "id": world.a.s6[key]},
+            ),
+        ]
+    assert all(r.startswith("error: permission denied") for r in results), results

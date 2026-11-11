@@ -56,6 +56,9 @@ TENANT_TABLES: dict[str, str] = {
     "agreement_version_items": "tenant_id",
     "agreement_version_customers": "tenant_id",
     "agreement_version_tiers": "tenant_id",
+    # S6 AI extraction
+    "document_extractions": "tenant_id",
+    "ai_invocations": "tenant_id",
 }
 
 
@@ -72,6 +75,7 @@ class TenantData:
     file_ids: list[UUID] = field(default_factory=list)
     s3: dict[str, UUID] = field(default_factory=dict)  # one row id per S3 tenant table
     s4: dict[str, UUID] = field(default_factory=dict)  # one row id per S4 tenant table
+    s6: dict[str, UUID] = field(default_factory=dict)  # one row id per S6 tenant table
 
 
 @dataclass
@@ -130,6 +134,7 @@ def _tenant(conn: Connection, name: str, admin_email: str) -> TenantData:
     data.file_ids.append(fid)
     data.s3 = _s3_rows(conn, tid, admin, fid)
     data.s4 = _s4_rows(conn, tid, admin, data.s3)
+    data.s6 = _s6_rows(conn, tid, admin, fid)
     conn.execute(
         text(
             "INSERT INTO audit_log (tenant_id, occurred_at, actor_type, actor_user_id, action, "
@@ -215,6 +220,20 @@ def _s4_rows(conn: Connection, t: UUID, user: UUID, s3: dict[str, UUID]) -> dict
         "VALUES (:t, :ver, :cust, 'include')",
         "INSERT INTO agreement_version_tiers (tenant_id, id, version_id, tier_number, lower_bound, rate) "
         "VALUES (:t, :tier, :ver, 1, 0, 0.01)",
+    ):
+        conn.execute(text(sql), p)
+    return ids
+
+
+def _s6_rows(conn: Connection, t: UUID, user: UUID, file_id: UUID) -> dict[str, UUID]:
+    """One row in each S6 tenant table (the extraction a queued request, the ledger row tied to it)."""
+    ids = {"extraction": new_id(), "invocation": new_id()}
+    p = {"t": t, "u": user, "f": file_id, **ids}
+    for sql in (
+        "INSERT INTO document_extractions (tenant_id, id, file_id, kind, created_by) "
+        "VALUES (:t, :extraction, :f, 'agreement', :u)",
+        "INSERT INTO ai_invocations (tenant_id, id, extraction_id, purpose, provider, model, prompt_version, status) "
+        "VALUES (:t, :invocation, :extraction, 'agreement_pass_a', 'anthropic', 'm', 'v', 'ok')",
     ):
         conn.execute(text(sql), p)
     return ids
