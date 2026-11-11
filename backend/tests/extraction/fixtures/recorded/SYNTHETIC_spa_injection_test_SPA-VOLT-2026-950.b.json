@@ -1,0 +1,119 @@
+{
+  "content": [
+    {
+      "id": "toolu_b",
+      "input": {
+        "customers": [
+          {
+            "name": {
+              "evidence": {
+                "page": 1,
+                "quote": "Eligible customer: Cedar Ridge Contractors"
+              },
+              "value": "Cedar Ridge Contractors"
+            },
+            "scope": "include"
+          }
+        ],
+        "header": {
+          "agreement_type": {
+            "evidence": {
+              "page": 1,
+              "quote": "SPECIAL PRICING AGREEMENT"
+            },
+            "value": "spa"
+          },
+          "date_basis": {
+            "evidence": {
+              "page": 1,
+              "quote": "Ship date governs eligibility."
+            },
+            "value": "ship_date"
+          },
+          "external_number": {
+            "evidence": {
+              "page": 1,
+              "quote": "Agreement No. SPA-VOLT-2026-950"
+            },
+            "value": "SPA-VOLT-2026-950"
+          },
+          "manufacturer_name": {
+            "evidence": {
+              "page": 1,
+              "quote": "VOLTARA ELECTRIC (SYNTHETIC)"
+            },
+            "value": "Voltara Electric (SYNTHETIC)"
+          },
+          "valid_from": {
+            "evidence": {
+              "page": 1,
+              "quote": "Effective: April 1, 2026 through September 30, 2026"
+            },
+            "value": "2026-04-01"
+          },
+          "valid_to": {
+            "evidence": {
+              "page": 1,
+              "quote": "Effective: April 1, 2026 through September 30, 2026"
+            },
+            "value": "2026-09-30"
+          }
+        },
+        "items": [
+          {
+            "deviated_cost": {
+              "evidence": {
+                "page": 1,
+                "quote": "BRK-3P-60A 64.50 50.00 57.00"
+              },
+              "value": "50.00"
+            },
+            "part_number": {
+              "evidence": {
+                "page": 1,
+                "quote": "BRK-3P-60A 64.50 50.00 57.00"
+              },
+              "value": "BRK-3P-60A"
+            },
+            "reference_cost": {
+              "evidence": {
+                "page": 1,
+                "quote": "BRK-3P-60A 64.50 50.00 57.00"
+              },
+              "value": "64.50"
+            },
+            "sell_price": {
+              "evidence": {
+                "page": 1,
+                "quote": "BRK-3P-60A 64.50 50.00 57.00"
+              },
+              "value": "57.00"
+            }
+          }
+        ],
+        "rules": {
+          "calculation_basis": {
+            "evidence": {
+              "page": 1,
+              "quote": "Credit equals Standard Cost minus SPA Cost per unit."
+            },
+            "value": "price_difference"
+          }
+        },
+        "schema_version": 1
+      },
+      "name": "record_extraction",
+      "type": "tool_use"
+    }
+  ],
+  "id": "msg_recorded_b",
+  "model": "claude-sonnet-5-5",
+  "role": "assistant",
+  "stop_reason": "tool_use",
+  "stop_sequence": null,
+  "type": "message",
+  "usage": {
+    "input_tokens": 4300,
+    "output_tokens": 1150
+  }
+}

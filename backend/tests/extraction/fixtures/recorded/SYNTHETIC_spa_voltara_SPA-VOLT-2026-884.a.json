@@ -1,0 +1,244 @@
+{
+  "content": [
+    {
+      "id": "toolu_a",
+      "input": {
+        "customers": [
+          {
+            "name": {
+              "evidence": {
+                "page": 1,
+                "quote": "This SPA applies only to sales by Distributor to: Alder Electric LLC, Bluff City Mechanical, and Cedar Ridge Contractors"
+              },
+              "value": "Alder Electric LLC"
+            },
+            "scope": "include"
+          },
+          {
+            "name": {
+              "evidence": {
+                "page": 1,
+                "quote": "This SPA applies only to sales by Distributor to: Alder Electric LLC, Bluff City Mechanical, and Cedar Ridge Contractors"
+              },
+              "value": "Bluff City Mechanical"
+            },
+            "scope": "include"
+          },
+          {
+            "name": {
+              "evidence": {
+                "page": 1,
+                "quote": "This SPA applies only to sales by Distributor to: Alder Electric LLC, Bluff City Mechanical, and Cedar Ridge Contractors"
+              },
+              "value": "Cedar Ridge Contractors"
+            },
+            "scope": "include"
+          }
+        ],
+        "header": {
+          "agreement_type": {
+            "evidence": {
+              "page": 1,
+              "quote": "SPECIAL PRICING AGREEMENT"
+            },
+            "value": "spa"
+          },
+          "date_basis": {
+            "evidence": {
+              "page": 1,
+              "quote": "Eligibility is determined by the ship date of the product."
+            },
+            "value": "ship_date"
+          },
+          "external_number": {
+            "evidence": {
+              "page": 1,
+              "quote": "Agreement No. SPA-VOLT-2026-884"
+            },
+            "value": "SPA-VOLT-2026-884"
+          },
+          "manufacturer_name": {
+            "evidence": {
+              "page": 1,
+              "quote": "VOLTARA ELECTRIC (SYNTHETIC)"
+            },
+            "value": "Voltara Electric (SYNTHETIC)"
+          },
+          "valid_from": {
+            "evidence": {
+              "page": 1,
+              "quote": "Effective: January 1, 2026 through December 31, 2026"
+            },
+            "value": "2026-01-01"
+          },
+          "valid_to": {
+            "evidence": {
+              "page": 1,
+              "quote": "Effective: January 1, 2026 through December 31, 2026"
+            },
+            "value": "2026-12-31"
+          }
+        },
+        "items": [
+          {
+            "deviated_cost": {
+              "evidence": {
+                "page": 1,
+                "quote": "BRK-3P-100A 100.00 78.00 88.00 -"
+              },
+              "value": "78.00"
+            },
+            "max_quantity": {
+              "evidence": null,
+              "value": null
+            },
+            "part_number": {
+              "evidence": {
+                "page": 1,
+                "quote": "BRK-3P-100A 100.00 78.00 88.00 -"
+              },
+              "value": "BRK-3P-100A"
+            },
+            "reference_cost": {
+              "evidence": {
+                "page": 1,
+                "quote": "BRK-3P-100A 100.00 78.00 88.00 -"
+              },
+              "value": "100.00"
+            },
+            "sell_price": {
+              "evidence": {
+                "page": 1,
+                "quote": "BRK-3P-100A 100.00 78.00 88.00 -"
+              },
+              "value": "88.00"
+            }
+          },
+          {
+            "deviated_cost": {
+              "evidence": {
+                "page": 1,
+                "quote": "BRK-3P-60A 64.50 52.00 58.00 -"
+              },
+              "value": "52.00"
+            },
+            "max_quantity": {
+              "evidence": null,
+              "value": null
+            },
+            "part_number": {
+              "evidence": {
+                "page": 1,
+                "quote": "BRK-3P-60A 64.50 52.00 58.00 -"
+              },
+              "value": "BRK-3P-60A"
+            },
+            "reference_cost": {
+              "evidence": {
+                "page": 1,
+                "quote": "BRK-3P-60A 64.50 52.00 58.00 -"
+              },
+              "value": "64.50"
+            },
+            "sell_price": {
+              "evidence": {
+                "page": 1,
+                "quote": "BRK-3P-60A 64.50 52.00 58.00 -"
+              },
+              "value": "58.00"
+            }
+          },
+          {
+            "deviated_cost": {
+              "evidence": {
+                "page": 1,
+                "quote": "PNL-200A 412.00 360.00 389.00 100"
+              },
+              "value": "360.00"
+            },
+            "max_quantity": {
+              "evidence": {
+                "page": 1,
+                "quote": "PNL-200A 412.00 360.00 389.00 100"
+              },
+              "value": "100"
+            },
+            "part_number": {
+              "evidence": {
+                "page": 1,
+                "quote": "PNL-200A 412.00 360.00 389.00 100"
+              },
+              "value": "PNL-200A"
+            },
+            "reference_cost": {
+              "evidence": {
+                "page": 1,
+                "quote": "PNL-200A 412.00 360.00 389.00 100"
+              },
+              "value": "412.00"
+            },
+            "sell_price": {
+              "evidence": {
+                "page": 1,
+                "quote": "PNL-200A 412.00 360.00 389.00 100"
+              },
+              "value": "389.00"
+            }
+          }
+        ],
+        "rules": {
+          "calculation_basis": {
+            "evidence": {
+              "page": 1,
+              "quote": "credit Distributor the difference between Standard Cost and SPA Cost for each unit shipped"
+            },
+            "value": "price_difference"
+          },
+          "claim_uom": {
+            "evidence": null,
+            "value": null
+          },
+          "cost_source": {
+            "evidence": {
+              "page": 1,
+              "quote": "credit Distributor the difference between Standard Cost and SPA Cost for each unit shipped"
+            },
+            "value": "agreement_reference"
+          },
+          "rounding": {
+            "evidence": {
+              "page": 1,
+              "quote": "Credits are calculated per line and rounded to the nearest cent."
+            },
+            "value": {
+              "mode": "half_up",
+              "scale": 2,
+              "timing": "per_line"
+            }
+          },
+          "spa_reference_required": {
+            "evidence": {
+              "page": 1,
+              "quote": "Claims must reference the SPA number"
+            },
+            "value": true
+          }
+        },
+        "schema_version": 1,
+        "tiers": []
+      },
+      "name": "record_extraction",
+      "type": "tool_use"
+    }
+  ],
+  "id": "msg_recorded_a",
+  "model": "claude-sonnet-5-5",
+  "role": "assistant",
+  "stop_reason": "tool_use",
+  "stop_sequence": null,
+  "type": "message",
+  "usage": {
+    "input_tokens": 4200,
+    "output_tokens": 1100
+  }
+}

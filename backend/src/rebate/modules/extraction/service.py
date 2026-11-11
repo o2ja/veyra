@@ -14,7 +14,7 @@ from typing import Any
 from uuid import UUID
 
 import structlog
-from sqlalchemy import Engine, func, select, text, update
+from sqlalchemy import Engine, func, insert, select, text, update
 from sqlalchemy.orm import Session
 
 from rebate.core import clock
@@ -124,17 +124,20 @@ def request_extraction(db: Session, who: Who, file_id: UUID, rerun: bool) -> tup
         existing.status in ("queued", "processing") or (not rerun and existing.status == "completed")
     ):
         return existing, False
-    row = DocumentExtraction(
-        tenant_id=who.tenant_id,
-        id=new_id(),
-        file_id=file_id,
-        kind="agreement",
-        status="queued",
-        created_by=who.user_id,
-        created_at=clock.now(),
+    new_row = new_id()
+    # column list = the INSERT grant of rebate_app: it can queue a request, never write a result
+    db.execute(
+        insert(DocumentExtraction).values(
+            tenant_id=who.tenant_id,
+            id=new_row,
+            file_id=file_id,
+            kind="agreement",
+            status="queued",
+            created_by=who.user_id,
+            created_at=clock.now(),
+        )
     )
-    db.add(row)
-    db.flush()
+    row = get_extraction(db, who.tenant_id, new_row)
     enqueue(
         db,
         JOB,
@@ -181,10 +184,11 @@ def list_extractions(
 
 
 def draft_id_of(db: Session, tenant_id: UUID, extraction_id: UUID) -> UUID | None:
-    return db.scalar(
+    found: UUID | None = db.scalar(
         text("SELECT id FROM agreement_drafts WHERE tenant_id = :t AND extraction_id = :e"),
         {"t": tenant_id, "e": extraction_id},
     )
+    return found
 
 
 def usage(db: Session, tenant_id: UUID, settings: Settings, days: int = 30) -> dict[str, Any]:
@@ -550,7 +554,7 @@ def _run(db: Session, ctx: JobContext, ex: DocumentExtraction, ai: Engine) -> No
     if warned:  # validator warnings lower the affected fields one confidence step (§6)
         report = run_verification(doc, raw_a, raw_b, schema_validator=_format_errors, warned_keys=warned)
     fields = [field_view(f) for f in report.fields.values()]
-    result = {
+    outcome = {
         "schema_version": 1,
         "agreement_type": report.agreement_type,
         "payload": body,
@@ -575,7 +579,7 @@ def _run(db: Session, ctx: JobContext, ex: DocumentExtraction, ai: Engine) -> No
         tenant,
         ex.id,
         status="completed",
-        result=result,
+        result=outcome,
         evidence_check=evidence_check,
         validation=validation,
         confidence=NUMERIC[report.draft_confidence],

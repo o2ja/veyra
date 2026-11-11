@@ -91,7 +91,9 @@ def build_payload(
     manufacturer_codes: dict[str, str],
     customer_codes: dict[str, str],
 ) -> dict[str, Any]:
-    v = lambda k: value_of(fields, k)  # noqa: E731
+    def v(key: str) -> Any:
+        return value_of(fields, key)
+
     kind = v("header.agreement_type")
     mfr = v("header.manufacturer_name")
     number = v("header.external_number")
