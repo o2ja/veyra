@@ -105,4 +105,17 @@
 
 ## G. Performance baseline (1M lines)
 
-See the section appended below by the final run (or "not run" with the reason).
+`pytest -m performance tests/integration/test_calculation_performance.py` (file = the 2,000-line SYNTHETIC volume file
+replicated 500 times with unique invoice numbers, because the generator needs `reportlab`, which is not installed in the
+dev image; real import pipeline). Single calculation run over 1,000,000 sales lines, one manufacturer, SPA-VOLT-2026-884:
+**630.5 s = 1,586 lines/s**; process peak RSS **1,253 MB** (the import phase of the same process set that peak, so the
+calculation stayed below it). Memory is bounded by `runs.WINDOW_LINES` (50,000 lines per engine call, whole invoice dates,
+cap state carried between windows; tested identical to the single-window result). An earlier unwindowed attempt
+(one engine call per manufacturer) died without output at 1M lines (about 7 KB per line, ~7 GB: out of memory in the 7.6 GB
+Docker VM), which is why the windowing exists. All 1M lines ended outside the claim window (run date = real today, the file is
+dated 2026), so the eligible count of this run is not a correctness figure. Machine: shared Docker VM, other agents active.
+
+## H. Known CI notes
+
+CI `e2e` failed on runner infra (Ubuntu mirror DNS while installing Playwright deps); rerun requested. `test_timing`
+flakiness is unrelated to this branch.
