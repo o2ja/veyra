@@ -95,6 +95,8 @@ class Settings(BaseSettings):
     # Uploads and malware scanning (SECURITY.md §4)
     upload_max_mb_spreadsheet: int = Field(default=50, ge=1, le=50)
     upload_max_mb_pdf: int = Field(default=25, ge=1, le=50)
+    # every request body except file uploads (draft payloads <= 5 MB, API_SPECIFICATION.md §1)
+    body_max_mb: int = Field(default=6, ge=1, le=50)
     clamd_host: str = "clamav"
     clamd_port: int = 3310
 

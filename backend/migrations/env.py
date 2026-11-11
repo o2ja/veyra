@@ -7,6 +7,7 @@ from sqlalchemy import create_engine
 
 from rebate.core import jobs as _jobs_model  # noqa: F401  (register tables)
 from rebate.core.db import Base
+from rebate.modules.agreements import models as _agreements_models  # noqa: F401
 from rebate.modules.audit import models as _audit_models  # noqa: F401
 from rebate.modules.files import models as _files_models  # noqa: F401
 from rebate.modules.identity import models as _identity_models  # noqa: F401

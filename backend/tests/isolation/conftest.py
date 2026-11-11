@@ -48,6 +48,14 @@ TENANT_TABLES: dict[str, str] = {
     "sales_document_lines": "tenant_id",
     "purchase_documents": "tenant_id",
     "purchase_document_lines": "tenant_id",
+    # S4 agreements
+    "agreements": "tenant_id",
+    "agreement_drafts": "tenant_id",
+    "agreement_draft_revisions": "tenant_id",
+    "agreement_versions": "tenant_id",
+    "agreement_version_items": "tenant_id",
+    "agreement_version_customers": "tenant_id",
+    "agreement_version_tiers": "tenant_id",
 }
 
 
@@ -63,6 +71,7 @@ class TenantData:
     invitation_ids: list[UUID] = field(default_factory=list)
     file_ids: list[UUID] = field(default_factory=list)
     s3: dict[str, UUID] = field(default_factory=dict)  # one row id per S3 tenant table
+    s4: dict[str, UUID] = field(default_factory=dict)  # one row id per S4 tenant table
 
 
 @dataclass
@@ -120,6 +129,7 @@ def _tenant(conn: Connection, name: str, admin_email: str) -> TenantData:
     )
     data.file_ids.append(fid)
     data.s3 = _s3_rows(conn, tid, admin, fid)
+    data.s4 = _s4_rows(conn, tid, admin, data.s3)
     conn.execute(
         text(
             "INSERT INTO audit_log (tenant_id, occurred_at, actor_type, actor_user_id, action, "
@@ -178,6 +188,33 @@ def _s3_rows(conn: Connection, t: UUID, user: UUID, file_id: UUID) -> dict[str, 
         "source_system, doc_type, document_number, line_number, sku_raw, manufacturer_id, quantity, uom, unit_cost, "
         f"extended_amount, currency_code, document_date, row_hash) VALUES (:t, :pline, :pdoc, :batch, 2, 'ISO', "
         f"'receipt', 'RCV-ISO', 1, 'ISO-SKU', :mfr, 1, 'EA', 1, 1, 'USD', '2026-06-01', '{h}')",
+    ):
+        conn.execute(text(sql), p)
+    return ids
+
+
+def _s4_rows(conn: Connection, t: UUID, user: UUID, s3: dict[str, UUID]) -> dict[str, UUID]:
+    """One row in every S4 tenant table. One transaction: version terms can only be added by the
+    transaction that created the version (trigger)."""
+    ids = {k: new_id() for k in ("agr", "draft", "rev", "ver", "item", "tier")}
+    p = {"t": t, "u": user, "mfr": s3["mfr"], "prod": s3["prod"], "cust": s3["cust"], **ids}
+    for sql in (
+        "INSERT INTO agreements (tenant_id, id, manufacturer_id, agreement_type, external_number, name, created_by) "
+        "VALUES (:t, :agr, :mfr, 'spa', 'SPA-ISO', 'Iso SPA', :u)",
+        "INSERT INTO agreement_drafts (tenant_id, id, agreement_id, source, payload, payload_schema_version, "
+        "created_by) VALUES (:t, :draft, :agr, 'manual', '{}', 1, :u)",
+        "INSERT INTO agreement_draft_revisions (tenant_id, id, draft_id, revision, payload, edited_by) "
+        "VALUES (:t, :rev, :draft, 1, '{}', :u)",
+        "INSERT INTO agreement_versions (tenant_id, id, agreement_id, version_number, status, valid_from, valid_to, "
+        "rules, rules_schema_version, source, draft_id, content_hash, created_by, approved_by, activated_at, "
+        "created_txid) VALUES (:t, :ver, :agr, 1, 'active', '2026-01-01', '2026-12-31', '{}', 1, 'manual', :draft, "
+        "repeat('a', 64), :u, :u, now(), 0)",
+        "INSERT INTO agreement_version_items (tenant_id, id, version_id, line_number, product_id, deviated_cost) "
+        "VALUES (:t, :item, :ver, 1, :prod, 1)",
+        "INSERT INTO agreement_version_customers (tenant_id, version_id, customer_id, scope) "
+        "VALUES (:t, :ver, :cust, 'include')",
+        "INSERT INTO agreement_version_tiers (tenant_id, id, version_id, tier_number, lower_bound, rate) "
+        "VALUES (:t, :tier, :ver, 1, 0, 0.01)",
     ):
         conn.execute(text(sql), p)
     return ids

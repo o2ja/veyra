@@ -313,6 +313,25 @@ S3_SOURCE = ("sales_documents", "sales_document_lines", "purchase_documents", "p
 S3_MUTABLE = sorted(set(S3_ROWS) - set(S3_SOURCE))
 
 
+# ---- S4 tables (agreements) -----------------------------------------------------------------------------
+S4_ROWS: dict[str, tuple[str, str]] = {
+    "agreements": ("id", "agr"),
+    "agreement_drafts": ("id", "draft"),
+    "agreement_draft_revisions": ("id", "rev"),
+    "agreement_versions": ("id", "ver"),
+    "agreement_version_items": ("id", "item"),
+    "agreement_version_customers": ("version_id", "ver"),
+    "agreement_version_tiers": ("id", "tier"),
+}
+# UPDATE granted to the app role: fully (agreements, drafts) or on the status columns only (versions).
+S4_UPDATABLE = {
+    "agreements": "tenant_id = tenant_id",
+    "agreement_drafts": "tenant_id = tenant_id",
+    "agreement_versions": "status = status",
+}
+S4_MOVABLE = ("agreements", "agreement_drafts")
+
+
 def test_every_tenant_isolated_table_is_in_the_isolation_suite(admin_engine: Engine) -> None:
     """Every table carrying the tenant_isolation policy is attacked by D1/D7/D8/D12, and every S3 one by the
     S3 D-series below (policies survive the negative control's DISABLE ROW LEVEL SECURITY)."""
@@ -332,7 +351,7 @@ def test_every_tenant_isolated_table_is_in_the_isolation_suite(admin_engine: Eng
         "file_objects",
     }
     assert policed == set(TENANT_TABLES), policed ^ set(TENANT_TABLES)
-    assert policed - s2 == set(S3_ROWS), (policed - s2) ^ set(S3_ROWS)
+    assert policed - s2 == set(S3_ROWS) | set(S4_ROWS), (policed - s2) ^ (set(S3_ROWS) | set(S4_ROWS))
 
 
 def _outcome(conn: Connection, sql: str, params: dict[str, object]) -> str:
@@ -417,3 +436,77 @@ def test_d9_s3_source_tables_cannot_be_deleted_or_moved(app_engine: Engine, worl
     assert moved.startswith("error: permission denied"), (
         moved
     )  # UPDATE granted on is_current/superseded_by_id only
+
+
+@pytest.mark.parametrize("table", sorted(S4_ROWS))
+def test_d2_s4_select_by_foreign_id_returns_nothing(app_engine: Engine, world: World, table: str) -> None:
+    column, key = S4_ROWS[table]
+    with as_app(app_engine, world.a.tenant_id) as conn:
+        rows = conn.execute(
+            text(f"SELECT 1 FROM {table} WHERE {column} = :id"), {"id": world.b.s4[key]}
+        ).all()
+    assert rows == [], breach(f"A reads B's {table} row by id")
+
+
+@pytest.mark.parametrize("table", sorted(S4_UPDATABLE))
+def test_d3_s4_update_foreign_row_affects_nothing(app_engine: Engine, world: World, table: str) -> None:
+    column, key = S4_ROWS[table]
+    with as_app(app_engine, world.a.tenant_id) as conn:
+        got = _outcome(
+            conn, f"UPDATE {table} SET {S4_UPDATABLE[table]} WHERE {column} = :id", {"id": world.b.s4[key]}
+        )
+    assert got == "n=0", breach(f"A updated B's {table} row ({got})")
+
+
+@pytest.mark.parametrize("table", sorted(S4_ROWS))
+def test_d5_s4_insert_into_foreign_tenant_is_rejected(app_engine: Engine, world: World, table: str) -> None:
+    """As the S3 D5, with an explicit column list: generated columns (valid_range) cannot be inserted."""
+    with as_app(app_engine, world.a.tenant_id) as conn:
+        cols = ", ".join(
+            conn.execute(
+                text(
+                    "SELECT column_name FROM information_schema.columns WHERE table_schema = 'public' "
+                    "AND table_name = :t AND is_generated = 'NEVER' ORDER BY ordinal_position"
+                ),
+                {"t": table},
+            ).scalars()
+        )
+        got = _outcome(
+            conn,
+            f"INSERT INTO {table} ({cols}) SELECT {cols} FROM jsonb_populate_record(NULL::{table}, "
+            f"(SELECT to_jsonb(x) || jsonb_build_object('tenant_id', CAST(:b AS uuid), 'id', gen_random_uuid()) "
+            f"FROM {table} x WHERE tenant_id = :a LIMIT 1))",
+            {"a": world.a.tenant_id, "b": world.b.tenant_id},
+        )
+    assert got == "rls", breach(f"insert of a {table} row into tenant B was not rejected by RLS ({got})")
+
+
+@pytest.mark.parametrize("table", S4_MOVABLE)
+def test_d6_s4_moving_a_row_to_another_tenant_is_rejected(
+    app_engine: Engine, world: World, table: str
+) -> None:
+    column, key = S4_ROWS[table]
+    with as_app(app_engine, world.a.tenant_id) as conn:
+        got = _outcome(
+            conn,
+            f"UPDATE {table} SET tenant_id = :b WHERE {column} = :id",
+            {"b": world.b.tenant_id, "id": world.a.s4[key]},
+        )
+    assert got == "rls", breach(f"A moved its {table} row into tenant B ({got})")
+
+
+@pytest.mark.parametrize("table", sorted(S4_ROWS))
+def test_d9_s4_no_delete_and_no_tenant_change_of_terms(app_engine: Engine, world: World, table: str) -> None:
+    """No DELETE on any S4 table; versions, their terms and revisions cannot change tenant (no UPDATE grant on
+    the column). Grants, so independent of RLS."""
+    column, key = S4_ROWS[table]
+    with as_app(app_engine, world.a.tenant_id) as conn:
+        deleted = _outcome(conn, f"DELETE FROM {table} WHERE {column} = :id", {"id": world.a.s4[key]})
+        moved = _outcome(
+            conn,
+            f"UPDATE {table} SET tenant_id = :b WHERE {column} = :id",
+            {"b": world.b.tenant_id, "id": world.a.s4[key]},
+        )
+    assert deleted.startswith("error: permission denied"), deleted
+    if table not in S4_MOVABLE:
+        assert moved.startswith("error: permission denied"), moved

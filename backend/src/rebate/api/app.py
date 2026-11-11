@@ -10,6 +10,7 @@ import structlog
 from fastapi import FastAPI, Request, Response
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
+from pydantic import BaseModel
 from starlette.concurrency import run_in_threadpool
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
@@ -21,7 +22,7 @@ from rebate.core.db import assert_safe_role, make_engine, transaction
 from rebate.core.errors import CsrfFailed, DomainError, RateLimited, Unauthenticated, error_body
 from rebate.core.ids import new_id
 from rebate.core.logging import configure_logging
-from rebate.modules import audit, files, identity, ingestion, masterdata, tenancy
+from rebate.modules import agreements, audit, files, identity, ingestion, masterdata, tenancy
 from rebate.modules.identity import ratelimit
 
 log = structlog.get_logger("rebate.api")
@@ -35,6 +36,7 @@ MODULE_ROUTERS = (
     jobs_router.router,
     masterdata.router,
     ingestion.router,
+    agreements.router,
 )
 PUBLIC_ROUTERS = (health.router,)
 
@@ -103,6 +105,43 @@ async def _upload_gate(request: Request) -> JSONResponse | None:
     return await run_in_threadpool(_upload_caller, request)
 
 
+class BodyTooLarge(DomainError):
+    code = "payload_too_large"
+    status_code = 413
+    message = "The request body is too large."
+
+
+async def _body_gate(request: Request) -> JSONResponse | None:
+    """Every request except the upload route: refuse a body above ``body_max_mb`` before it is parsed.
+    A declared Content-Length is checked up front; a body without one (chunked) is read with a running
+    count and refused as soon as it passes the cap, else handed on to the route unchanged."""
+    if request.url.path == UPLOAD_PATH and request.method == "POST":
+        return None
+    settings: Settings = request.app.state.settings
+    cap = settings.body_max_mb * 1024 * 1024
+    length = request.headers.get("content-length")
+    chunked = "transfer-encoding" in request.headers
+    if (
+        chunked and length is not None
+    ):  # h11 frames such a body as chunked: a small CL would hide a large body
+        return _error(
+            DomainError("Send either Content-Length or Transfer-Encoding, not both."), _request_id(request)
+        )
+    if length is not None:
+        if not length.isdigit():
+            return _error(DomainError("Invalid Content-Length."), _request_id(request))
+        return _error(BodyTooLarge(), _request_id(request)) if int(length) > cap else None
+    if not chunked:
+        return None
+    body = bytearray()
+    async for chunk in request.stream():
+        body += chunk
+        if len(body) > cap:
+            return _error(BodyTooLarge(), _request_id(request))
+    request._body = bytes(body)  # replayed to the route by Starlette's cached request
+    return None
+
+
 async def _request_context(request: Request, call_next: Callable[[Request], Awaitable[Response]]) -> Response:
     request_id = str(new_id())  # never trust a client-supplied id
     request.state.request_id = request_id
@@ -110,7 +149,7 @@ async def _request_context(request: Request, call_next: Callable[[Request], Awai
     structlog.contextvars.bind_contextvars(request_id=request_id)
     started = time.perf_counter()
     try:
-        early = await _upload_gate(request)
+        early = await _upload_gate(request) or await _body_gate(request)
         response = early if early is not None else await call_next(request)
     except Exception:
         log.exception("unhandled_error")
@@ -169,6 +208,27 @@ def _register_error_handlers(app: FastAPI) -> None:
         return JSONResponse(error_body(code, message, _request_id(request)), exc.status_code)
 
 
+def _publish_schemas(app: FastAPI, models: tuple[type[BaseModel], ...]) -> None:
+    """Add models that no route declares (a draft payload is stored unvalidated, so routes take a plain object)
+    to the OpenAPI components, so the generated client carries their types. A name clash fails loudly."""
+    base = app.openapi
+
+    def openapi() -> dict[str, Any]:
+        if app.openapi_schema:
+            return app.openapi_schema
+        doc = base()
+        components = doc.setdefault("components", {}).setdefault("schemas", {})
+        for model in models:
+            schema = model.model_json_schema(ref_template="#/components/schemas/{model}")
+            for name, definition in {**schema.pop("$defs", {}), model.__name__: schema}.items():
+                if components.get(name, definition) != definition:
+                    raise RuntimeError(f"OpenAPI schema name clash: {name}")
+                components[name] = definition
+        return doc
+
+    app.openapi = openapi  # type: ignore[method-assign]
+
+
 def create_app(settings: Settings | None = None) -> FastAPI:
     settings = settings or get_settings()
     configure_logging(settings.log_level)
@@ -198,4 +258,5 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.include_router(health.router, prefix=API_PREFIX)
     for router in MODULE_ROUTERS:
         app.include_router(router, prefix=API_PREFIX, dependencies=[RequestContextDep])
+    _publish_schemas(app, (agreements.Payload,))  # the draft payload (DraftOut.payload, DraftUpdate.payload)
     return app

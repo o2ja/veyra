@@ -5,6 +5,7 @@ disabled; the negative control checks exactly that.
 """
 
 import re
+import uuid
 from collections.abc import Iterator
 from dataclasses import dataclass, field
 from typing import Any
@@ -15,6 +16,7 @@ from fastapi.routing import APIRoute
 from rebate.api.app import MODULE_ROUTERS
 from rebate.modules.files import storage
 from tests.conftest import DbUrls
+from tests.integration.agreements_support import activate, payload
 from tests.integration.conftest import Workspace, clean_file, import_file, put, run_import, seed_master, walk
 from tests.security.flows import full_admin
 from tests.support import Api, api_client, fake_clock, latest_token, make_app, unique_email
@@ -31,6 +33,7 @@ class Side:
     file_id: str
     job_id: str
     s3: dict[str, str] = field(default_factory=dict)  # S3 path parameter -> one id of this tenant
+    s4: dict[str, str] = field(default_factory=dict)  # S4 path parameter -> one id of this tenant
 
 
 @pytest.fixture(scope="module")
@@ -58,6 +61,7 @@ def sides(migrated_db: DbUrls) -> Iterator[tuple[Side, Side]]:
                 api, me["tenant"]["id"], me["user"]["id"], inv["id"], invitee, up.json()["id"], job["id"]
             )
             side.s3 = _seed_s3(Workspace(api, app, side.tenant_id, side.user_id, {}))
+            side.s4 = _seed_s4(api)
             out.append(side)
         yield out[0], out[1]
 
@@ -87,6 +91,20 @@ def _seed_s3(ws: Workspace) -> dict[str, str]:
     }
 
 
+def _seed_s4(api: Api) -> dict[str, str]:
+    """Two approved agreements (four-eyes off: one admin is maker and approver here)."""
+    etag = api.get("/settings").headers["ETag"]
+    assert (
+        api.patch("/settings", json={"four_eyes_required": False}, headers={"If-Match": etag}).status_code
+        == 200
+    )
+    v1 = activate(api, api, payload("SPA-VOLT-2026-884"))
+    v2 = activate(api, api, payload("REB-VOLT-2026"))
+    return {"agreement_id": v1["agreement_id"], "draft_id": v1["draft_id"], "version_id": v1["id"],
+            "other_version_id": v2["id"]}  # fmt: skip
+
+
+S4_PARAMS = ("agreement_id", "draft_id", "version_id", "other_version_id")
 S3_PARAMS = ("manufacturer_id", "customer_id", "product_id", "conversion_id", "entry_id", "import_id",
              "template_id", "line_id")  # fmt: skip
 
@@ -97,12 +115,15 @@ PARAM_SOURCES = {
     "file_id": "file_id",
     "job_id": "job_id",
     **{p: f"s3.{p}" for p in S3_PARAMS},
+    **{p: f"s4.{p}" for p in S4_PARAMS},
 }
 
 
 def _attack_value(side: Side, param: str) -> str:
     source = PARAM_SOURCES[param]
-    return side.s3[param] if source.startswith("s3.") else str(getattr(side, source))
+    if source.startswith("s3."):
+        return side.s3[param]
+    return side.s4[param] if source.startswith("s4.") else str(getattr(side, source))
 
 
 ID_ROUTES = [
@@ -127,7 +148,9 @@ def _call(api: Api, method: str, path: str, body: Any) -> Any:
         return api.delete(path)
     if method == "PUT":  # If-Match "1" is the first revision/version, so only the id can make it fail
         return put(api, path, body, headers={"If-Match": '"1"'})
-    return (api.post if method == "POST" else api.patch)(path, json=body)
+    if method == "POST":  # approve needs an Idempotency-Key, items:import an If-Match; others ignore them
+        return api.post(path, json=body, headers={"Idempotency-Key": str(uuid.uuid4()), "If-Match": '"1"'})
+    return api.patch(path, json=body)
 
 
 # A body that passes validation, so the response depends only on whether the id is visible.
@@ -140,6 +163,15 @@ BODIES: dict[str, Any] = {
     "/unmapped-entities/{entry_id}/resolve": {"action": "ignore"},
     "/imports/{import_id}/mapping": {"mapping": {}},
     "/mapping-templates/{template_id}": {"headers": ["a"], "mapping": {}},
+    "/agreements/{agreement_id}/cancel": {"effective_date": "2026-06-01", "reason": "x"},
+    "/agreement-drafts/{draft_id}": {"payload": {}},
+    "/agreement-drafts/{draft_id}/items:import": {
+        "file_id": "00000000-0000-7000-8000-000000000000",
+        "rate_format": "percent",
+    },
+    "/agreement-drafts/{draft_id}/submit": {"acknowledged_warnings": []},
+    "/agreement-drafts/{draft_id}/return": {"comment": "x"},
+    "/agreement-drafts/{draft_id}/reject": {"reason": "x"},
 }
 
 
@@ -232,7 +264,7 @@ def test_settings_are_the_callers_own(sides: tuple[Side, Side]) -> None:
 
 S3_LISTS = (
     "/manufacturers", "/customers", "/products", "/branches", "/uom-conversions", "/unmapped-entities",
-    "/imports", "/mapping-templates", "/sales-lines", "/purchase-lines",
+    "/imports", "/mapping-templates", "/sales-lines", "/purchase-lines", "/agreements", "/agreement-drafts",
 )  # fmt: skip
 
 
@@ -279,3 +311,23 @@ def test_r3_s3_foreign_mutations_leave_the_other_tenant_unchanged(sides: tuple[S
         next(e for e in b.api.get("/unmapped-entities").json()["data"] if e["id"] == entry)["status"]
         == "open"
     )
+
+
+def test_r3_s4_foreign_mutations_leave_the_other_tenant_unchanged(sides: tuple[Side, Side]) -> None:
+    a, b = sides
+    agreement, version = b.s4["agreement_id"], b.s4["version_id"]
+    before = b.api.get(f"/agreement-versions/{version}").json()
+    cancel = {"effective_date": "2026-01-01", "reason": "x"}
+    assert a.api.post(f"/agreements/{agreement}/cancel", json=cancel).status_code == 404
+    assert (
+        a.api.post("/agreement-drafts", json={"source": "manual", "amends_version_id": version}).status_code
+        == 404
+    )
+    assert (
+        a.api.post("/agreement-drafts", json={"source": "manual", "agreement_id": agreement}).status_code
+        == 404
+    )
+    assert b.api.get(f"/agreement-versions/{version}").json() == before
+    assert b.api.get(f"/agreements/{agreement}").json()["cancelled_at"] is None
+    r = a.api.get(f"/agreement-versions/{a.s4['version_id']}/diff/{version}")
+    assert r.status_code == 404, r.text  # one own and one foreign version
