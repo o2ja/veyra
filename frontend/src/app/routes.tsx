@@ -30,6 +30,7 @@ import { ManufacturerDetailPage, ManufacturersPage } from "../features/masterdat
 import { ProductDetailPage, ProductsPage } from "../features/masterdata/products-pages";
 import { UnmappedPage } from "../features/masterdata/unmapped-page";
 import { UomPage } from "../features/masterdata/uom-page";
+import { AgreementsPage } from "../features/agreements/agreements-page";
 import { AppLayout } from "./app-layout";
 import { RequirePermission, RequireSession } from "./guards";
 import { RouteError } from "./route-error";
@@ -170,6 +171,8 @@ export const routes: RouteObject[] = [
       guarded("master-data/uom", "data.read", <UomPage />),
       guarded("master-data/branches", "data.read", <BranchesPage />),
       guarded("master-data/unmapped", "masterdata.write", <UnmappedPage />),
+      // S4: agreements and drafts
+      guarded("agreements", "data.read", <AgreementsPage />),
     ],
   },
 ];
