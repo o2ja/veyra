@@ -55,8 +55,11 @@
 4. Preflight (create and execute): unsupported stored rules, `period_end` basis for a manufacturer with SPA agreements,
    and a sales-basis rebate with `spa_lines != include` whose period starts before `date_from` (the SPA-line signal would be
    incomplete) are refused with 422 / failed run. Chosen over silently computing a wrong qualifying volume.
-5. Split-supersede for rebates: several versions of one agreement for the same period -> the version with the latest
-   `valid_from` in force at the run's end date governs the cumulative figure (ledger key = agreement + period start).
+5. **OWNER DECISION NEEDED (split-supersede inside a rebate period).** BUSINESS_LOGIC §9.2/A1 says lines before the
+   amendment stay under the old terms; for a retroactive tier rebate it is not defined how the cumulative figure splits
+   across two term sets. Not decided here: a rebate run whose period is covered by several versions with different
+   `content_hash` is refused with 422 `split_period_terms_need_decision` (names agreement and versions); identical-terms
+   splits run. Tested both ways.
 6. Items with a `customer_id` in `agreement_version_items` are ignored by the loader (the payload has no per-customer
    items; engine items are product-only, a2-engine note C16).
 7. Frozen claims: `claims.frozen.FrozenClaimSource` (`prior_claims`, `consumption`, `frozen_claims`); default
@@ -102,6 +105,19 @@
 - S5.6 (frontend) is not part of this branch. The "missed claims" endpoints (`/missed-claims`) are S7/S10 scope.
 - Memory: one engine call per manufacturer holds that manufacturer's lines and traces; see the performance numbers below.
 - Rebate preview with sales basis counts only lines with an SPA reference as SPA lines (no SPA results exist for a draft).
+
+## F2. Review round (financial + DB review of PR #7)
+
+- F1 above. F2: `on_dead` fails a queued/running run; a run found `running` while the tenant lock is free is failed
+  (`stale_run`); waiting for the lock ends the job and queues a new one 30 s later (no attempt burned). F3: SQL on other
+  modules' tables moved into `calc_reads.py` in ingestion, agreements, masterdata (exported read functions); results and
+  ledger entries carry denormalised document/manufacturer/agreement/tier columns so lists need no cross-module join.
+  F4: `run_date` = business date of today; `as_of` only pins version visibility. F5: indexes `(tenant_id, run_id, id)` and
+  `(tenant_id, run_id, status, id)`, duplicate runs index dropped. F6: DATABASE_SCHEMA / API_SPECIFICATION updated. F7:
+  the migration turns `period_end` settings into `month_end` (old meaning) and bumps their revision. F10: adjustment
+  approval columns move only with a status change; the tracker disjointness is in the isolation route tests.
+- Re-chain: S6 (PR #8) had not merged when this was written; when `20261113_0900_extraction` is on main, set
+  `down_revision` of `20261114_0900_calc_runs` to it.
 
 ## G. Performance baseline (1M lines)
 

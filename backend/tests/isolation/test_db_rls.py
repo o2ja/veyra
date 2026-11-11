@@ -593,3 +593,20 @@ def test_s5_triggers_forbid_mutation_even_for_the_owner(
         with admin_engine.connect() as conn:
             got = _outcome(conn, sql, {"id": world.a.s5[key]})
         assert "append-only" in got, got
+
+
+def test_s5_adjustment_approval_columns_move_only_with_the_status(admin_engine: Engine, world: World) -> None:
+    key = world.a.s5["adj"]
+    with admin_engine.connect() as conn:
+        got = _outcome(
+            conn,
+            "UPDATE claim_adjustments SET approved_by = :u, approved_at = now() WHERE id = :id",
+            {"u": world.a.admin_user_id, "id": key},
+        )
+        ok = _outcome(
+            conn,
+            "UPDATE claim_adjustments SET status = 'approved', approved_by = :u, approved_at = now() WHERE id = :id",
+            {"u": world.a.admin_user_id, "id": key},
+        )
+    assert "approval columns change only with the status" in got, got
+    assert ok == "n=1", ok
