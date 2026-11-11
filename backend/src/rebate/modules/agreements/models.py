@@ -74,6 +74,7 @@ class AgreementDraft(Base):
         UniqueConstraint("tenant_id", "id", name="uq_agreement_drafts_tenant_id_id"),
         _fk("agreement_id", "agreements", "fk_agreement_drafts_agreements"),
         _fk("source_file_id", "file_objects", "fk_agreement_drafts_file_objects"),
+        _fk("extraction_id", "document_extractions", "fk_agreement_drafts_document_extractions"),
         _fk("amends_version_id", "agreement_versions", "fk_agreement_drafts_amends_version", use_alter=True),
         _fk(
             "resulting_version_id",
@@ -94,7 +95,7 @@ class AgreementDraft(Base):
     payload_schema_version: Mapped[int] = mapped_column(Integer)
     revision: Mapped[int] = mapped_column(Integer, server_default="1")
     validation: Mapped[dict[str, Any] | None] = mapped_column(JSONB)
-    extraction_id: Mapped[UUID | None] = mapped_column()  # FK to document_extractions arrives in S6
+    extraction_id: Mapped[UUID | None] = mapped_column()
     source_file_id: Mapped[UUID | None] = mapped_column()
     created_by: Mapped[UUID] = mapped_column(_user_fk("fk_agreement_drafts_created_by"))
     submitted_by: Mapped[UUID | None] = mapped_column(_user_fk("fk_agreement_drafts_submitted_by"))

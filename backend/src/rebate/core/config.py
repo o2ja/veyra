@@ -6,6 +6,7 @@ is a recorded decision (CLAUDE.md §18), not a silent edit.
 
 import base64
 import binascii
+from decimal import Decimal
 from functools import lru_cache
 from ipaddress import ip_address
 from typing import Annotated, Literal, Self
@@ -99,6 +100,26 @@ class Settings(BaseSettings):
     body_max_mb: int = Field(default=6, ge=1, le=50)
     clamd_host: str = "clamav"
     clamd_port: int = 3310
+
+    # AI gateway (S6, AI_PROCESSING.md). OD-2 is unresolved: with no key configured no provider call is possible.
+    database_url_ai: SecretStr | None = (
+        None  # rebate_ai_writer connection; the gateway refuses to run without it
+    )
+    anthropic_api_key: SecretStr | None = None
+    ai_model: str = "claude-sonnet-5-5"
+    ai_model_pass_b: str | None = None  # a different model for pass B, if configured
+    ai_max_output_tokens: int = Field(default=16000, ge=256, le=64000)
+    ai_request_timeout_seconds: float = Field(default=120.0, gt=0, le=600)
+    ai_max_attempts: int = Field(default=4, ge=1, le=6)  # per call: timeout/5xx/429 (AI_PROCESSING.md 10)
+    ai_backoff_base_seconds: float = Field(default=2.0, ge=0)
+    ai_backoff_max_seconds: float = Field(default=30.0, ge=0)
+    # ASSUMPTION: list prices in USD per million tokens; review with the provider terms (OD-2).
+    ai_price_input_per_mtok: Decimal = Decimal("3.00")
+    ai_price_output_per_mtok: Decimal = Decimal("15.00")
+    ai_daily_cost_cap_usd: Decimal = Decimal("25.00")  # per tenant and UTC day
+    ai_daily_token_cap: int = Field(default=2_000_000, ge=1)
+    ocr_timeout_seconds: int = Field(default=180, ge=10, le=900)
+    ocr_memory_mb: int = Field(default=4096, ge=512)
 
     @field_validator("trusted_proxy_ips", mode="before")
     @classmethod
