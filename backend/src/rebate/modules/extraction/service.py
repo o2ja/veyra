@@ -134,6 +134,9 @@ def request_extraction(
         existing.status in ("queued", "processing") or (not rerun and existing.status == "completed")
     ):
         return existing, False
+    db.execute(  # serialise the count-then-insert of this workspace (no two requests both see room)
+        text("SELECT pg_advisory_xact_lock(hashtextextended(:k, 0))"), {"k": f"ai-active:{who.tenant_id}"}
+    )
     active = db.scalar(
         select(func.count())
         .select_from(DocumentExtraction)
@@ -383,6 +386,10 @@ def _master_names(db: Session, tenant_id: UUID) -> tuple[dict[str, str], dict[st
     return manufacturers, customers
 
 
+class _Superseded(Exception):
+    pass
+
+
 class _Stop(Exception):
     def __init__(self, status: str, code: str, detail: str | None = None, *, draft: bool = False) -> None:
         super().__init__(code)
@@ -455,6 +462,22 @@ def _settle(
     leaves the extraction unfinished (the job retries and gets here again) and never a final status without
     its draft and audit entry. Idempotent: an existing draft/audit entry is reused."""
     with transaction(engine, ex.tenant_id) as d:
+        # lock the row: a concurrent reaper/dead-letter that failed it must not be followed by a draft
+        current = d.scalar(
+            text("SELECT status FROM document_extractions WHERE tenant_id = :t AND id = :i FOR UPDATE"),
+            {"t": ex.tenant_id, "i": ex.id},
+        )
+        if current in FINAL and current != status:
+            raise _Superseded
+        stored = d.scalar(
+            text(
+                "SELECT after ->> 'status' FROM audit_log WHERE tenant_id = :t AND entity_id = :e "
+                "AND action = :a ORDER BY occurred_at LIMIT 1"
+            ),
+            {"t": ex.tenant_id, "e": ex.id, "a": Action.EXTRACTION_FINISHED.value},
+        )
+        if stored is not None and stored != status:  # a retry must not contradict what was audited
+            raise PermanentError(f"extraction already settled as {stored}, refusing to settle as {status}")
         found = draft_id_of(d, ex.tenant_id, ex.id)
         if found is not None:
             validation = d.scalar(
@@ -502,8 +525,8 @@ def _fail_unfinished(db: Session, tenant_id: UUID, code: str, detail: str, **whe
     )
     if "extraction_id" in where:
         sql += " AND id = :i"
-    if "before" in where:
-        sql += " AND created_at < :b"
+    if "older_than" in where:  # DB time, like updated_at (the progress marker every AI-role write refreshes)
+        sql += " AND updated_at < now() - make_interval(secs => :b)"
     result = db.execute(
         text(sql),
         {
@@ -512,7 +535,7 @@ def _fail_unfinished(db: Session, tenant_id: UUID, code: str, detail: str, **whe
             "n": clock.now(),
             "t": tenant_id,
             "i": where.get("extraction_id"),
-            "b": where.get("before"),
+            "b": where.get("older_than"),
         },
     )
     return int(getattr(result, "rowcount", 0) or 0)
@@ -524,7 +547,7 @@ def reap_stale(db: Session, tenant_id: UUID) -> int:
         tenant_id,
         "stale",
         "The extraction did not finish in time; enter manually or start it again.",
-        before=clock.now() - STALE_AFTER,
+        older_than=STALE_AFTER.total_seconds(),
     )
 
 
@@ -570,8 +593,13 @@ def process(db: Session, ctx: JobContext) -> None:
         return
     try:
         _run(db, ctx, ex, ai)
+    except _Superseded:
+        log.info("extraction.superseded", extraction_id=str(ex.id))
     except _Stop as stop:
-        _settle(ctx.engine, ex, stop.status, stop.code, manual=stop.draft)
+        try:
+            _settle(ctx.engine, ex, stop.status, stop.code, manual=stop.draft)
+        except _Superseded:
+            return
         _write(ai, tenant, ex.id, **_stop_row(ex, stop))  # last: the draft and audit entry are durable
         log.info("extraction.stopped", extraction_id=str(ex.id), status=stop.status, code=stop.code)
 

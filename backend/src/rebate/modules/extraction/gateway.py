@@ -25,6 +25,8 @@ from uuid import UUID
 import anthropic
 import structlog
 from sqlalchemy import Engine, func, select, text
+from sqlalchemy.exc import DBAPIError
+from sqlalchemy.exc import TimeoutError as SATimeoutError
 from tenacity import RetryCallState, Retrying, retry_if_exception, stop_after_attempt, wait_exponential_jitter
 
 from rebate.core import clock
@@ -57,6 +59,12 @@ class CapReached(GatewayError):
 
 class ProviderUnavailable(GatewayError):
     code = "provider_unavailable"
+
+
+class ProviderBusy(GatewayError):
+    """The workspace's AI slot is taken (or the pool is exhausted): retryable, never a 500."""
+
+    code = "provider_busy"
 
 
 class ProviderFailure(GatewayError):
@@ -344,16 +352,55 @@ class Gateway:
         schema: dict[str, Any],
         attempts: int,
         timeout: float,
+        wait: bool,
     ) -> dict[str, Any]:
         digest = hashlib.sha256(f"{system}\n\x1f{user}".encode()).hexdigest()
-        failure: GatewayError | None = None
-        status, code, resp = "ok", None, None
         # One transaction per call: the advisory lock serialises a tenant's calls, so the cap check below sees
         # every earlier call's ledger row (no check-then-call race) and caps hold across worker processes.
+        try:
+            return self._locked_call(
+                tenant_id, extraction_id, purpose, model, prompt_version, digest, system, user, tool, schema,
+                attempts, timeout, wait,
+            )  # fmt: skip
+        except SATimeoutError as exc:  # connection pool exhausted: busy, not a 500
+            raise ProviderBusy("no database connection available") from exc
+
+    def _take_slot(self, db: Any, tenant_id: UUID, wait: bool) -> None:
+        key = {"k": f"ai:{tenant_id}"}
+        if not wait:  # request path: never queue behind another call
+            if not db.scalar(text("SELECT pg_try_advisory_xact_lock(hashtextextended(:k, 0))"), key):
+                raise ProviderBusy("another AI call of this workspace is in progress")
+            return
+        millis = int(self.settings.ai_lock_timeout_seconds * 1000)  # an int: safe to inline
+        db.execute(text(f"SET LOCAL lock_timeout = {millis}"))
+        try:
+            db.execute(text("SELECT pg_advisory_xact_lock(hashtextextended(:k, 0))"), key)
+        except DBAPIError as exc:
+            if getattr(exc.orig, "sqlstate", None) == "55P03":  # lock_not_available
+                raise ProviderBusy("another AI call of this workspace is in progress") from exc
+            raise
+        db.execute(text("SET LOCAL lock_timeout = 0"))
+
+    def _locked_call(
+        self,
+        tenant_id: UUID,
+        extraction_id: UUID | None,
+        purpose: str,
+        model: str,
+        prompt_version: str,
+        digest: str,
+        system: str,
+        user: str,
+        tool: str,
+        schema: dict[str, Any],
+        attempts: int,
+        timeout: float,
+        wait: bool,
+    ) -> dict[str, Any]:
+        failure: GatewayError | None = None
+        status, code, resp = "ok", None, None
         with transaction(self.engine, tenant_id) as db:
-            db.execute(
-                text("SELECT pg_advisory_xact_lock(hashtextextended(:k, 0))"), {"k": f"ai:{tenant_id}"}
-            )
+            self._take_slot(db, tenant_id, wait)
             self._check_caps(db, tenant_id)  # CapReached: rolled back, nothing recorded, no call made
             started = time.monotonic()
             try:
@@ -406,6 +453,7 @@ class Gateway:
         repair_purpose: str = "agreement_repair",
         max_attempts: int | None = None,
         timeout: float | None = None,
+        wait_for_lock: bool = True,
     ) -> CallResult:
         """One logical model call (+ at most one repair). Raises a ``GatewayError`` subclass on failure.
         ``max_attempts`` / ``timeout`` tighten the limits for synchronous callers (request path)."""
@@ -425,6 +473,7 @@ class Gateway:
             schema,
             attempts,
             seconds,
+            wait_for_lock,
         )
         if validate is None:
             return CallResult(data, False, model)
@@ -451,6 +500,7 @@ class Gateway:
             schema,
             attempts,
             seconds,
+            wait_for_lock,
         )
         try:
             validate(data)

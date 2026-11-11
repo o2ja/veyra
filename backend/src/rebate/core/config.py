@@ -118,6 +118,9 @@ class Settings(BaseSettings):
     ai_price_output_per_mtok: Decimal = Decimal("15.00")
     ai_daily_cost_cap_usd: Decimal = Decimal("25.00")  # per tenant and UTC day
     ai_daily_token_cap: int = Field(default=2_000_000, ge=1)
+    ai_lock_timeout_seconds: float = Field(
+        default=120.0, gt=0, le=600
+    )  # wait for the workspace's AI slot (jobs)
     ai_requests_per_minute: int = Field(
         default=10, ge=1
     )  # per tenant: POST /document-extractions, suggest-mapping

@@ -84,6 +84,7 @@ def suggest_mapping(db: Session, who: Who, settings: Settings, import_id: UUID) 
             repair=False,
             max_attempts=settings.ai_mapping_max_attempts,
             timeout=settings.ai_mapping_timeout_seconds,
+            wait_for_lock=False,  # the request path never queues behind another call
         )
     except gateway.GatewayError as exc:  # every provider/SDK/limit failure is a 503, never a 500
         log.warning("mapping.failed", code=exc.code, error=str(exc)[:200])

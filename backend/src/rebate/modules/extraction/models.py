@@ -63,6 +63,7 @@ class DocumentExtraction(Base):
     error_detail: Mapped[str | None] = mapped_column(Text)
     created_by: Mapped[UUID] = mapped_column(ForeignKey("users.id", name="fk_document_extractions_users"))
     created_at: Mapped[datetime] = mapped_column(TS, server_default="now()")
+    updated_at: Mapped[datetime] = mapped_column(TS, server_default="now()")
     completed_at: Mapped[datetime | None] = mapped_column(TS)
 
 

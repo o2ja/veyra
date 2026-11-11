@@ -111,6 +111,27 @@ Recall below 1 is by design (fail closed): `rules.rounding` where the text state
 do not resolve, cost_source/spa_reference not stated in the Brightline sheet. These are reviewer decisions, not misses.
 The numbers say nothing about a real model; the quality bar with the owner is still to be agreed after the first live run.
 
+## Review round (PR 8): design as it now stands
+
+- **Final status last.** `_settle` commits the draft and the `extraction.finished` audit entry in a transaction of its own; only then does the
+  AI role write the final status. It locks the row (`FOR UPDATE`), is idempotent (existing draft/audit reused), refuses to settle
+  differently from an audit entry already written (`PermanentError`) and does nothing when the row was failed meanwhile (`_Superseded`:
+  no draft, no audit). A final `completed` row without a draft (older build) gets both on the next job run.
+- **Unfinished rows never block a file.** The app role has a column-level UPDATE (`status, error_code, error_detail, completed_at`) and the
+  guard trigger lets `rebate_app` only turn an unfinished row into `failed` (not final, `error_code` set). Used by the dead-letter hook
+  (`job_failed`) and by the reaper (`stale`) run on every `POST /document-extractions`. Staleness = no progress for `STALE_AFTER` (1 h) measured on
+  `updated_at` (new column, refreshed by the trigger on every write, DB time), not on `created_at`.
+- **Locks and limits.** One advisory lock per workspace and call (`ai:<tenant>`) keeps the cap check and the provider call race-free. Background
+  calls wait at most `AI_LOCK_TIMEOUT_SECONDS` (120) then raise a retryable `ProviderBusy`; the synchronous mapping path uses
+  `pg_try_advisory_xact_lock` and answers 503 at once. Pool exhaustion maps to `ProviderBusy`. A second advisory lock
+  (`ai-active:<tenant>`) serialises the active-extraction count before the insert (`AI_MAX_ACTIVE_EXTRACTIONS`, 3, then 429 `too_many_extractions`).
+  Rate limit `AI_REQUESTS_PER_MINUTE` (10) per workspace and route on `POST /document-extractions` and `suggest-mapping` (`api/deps.py`, fixed window,
+  429 `rate_limited`). Mapping: `AI_MAPPING_MAX_ATTEMPTS` (2), `AI_MAPPING_TIMEOUT_SECONDS` (15), no repair, the request transaction is committed before the call.
+- **`ai.invocation` audit event** per model call (purpose, model, status, cost, usage_in/out, failure; never content), written by the caller
+  from the gateway's content-free summaries, also for failed calls. Repair calls use `agreement_repair` / `mapping_repair`.
+- Grants: `rebate_ai_writer` no longer reads `file_objects`. SDK/parse errors are ledger rows and `ProviderFailure`.
+- Not done: no per-job concurrency cap inside the worker (the cap is on queued+processing rows per workspace).
+
 ## Not done / limitations
 
 - Live run and live baseline (OD-2). No concurrency limit on extractions and no extra rate limit on the new endpoints beyond

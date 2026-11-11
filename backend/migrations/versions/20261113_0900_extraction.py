@@ -55,6 +55,7 @@ def upgrade() -> None:
             error_detail text,
             created_by uuid NOT NULL,
             created_at timestamptz NOT NULL DEFAULT now(),
+            updated_at timestamptz NOT NULL DEFAULT now(),
             completed_at timestamptz,
             CONSTRAINT pk_document_extractions PRIMARY KEY (id),
             CONSTRAINT uq_document_extractions_tenant_id_id UNIQUE (tenant_id, id),
@@ -103,6 +104,7 @@ def upgrade() -> None:
                 RAISE EXCEPTION 'the app role may only mark an unfinished extraction failed'
                     USING ERRCODE = 'restrict_violation';
             END IF;
+            NEW.updated_at := now();  -- progress marker for the stale-row reaper
             RETURN NEW;
         END
         $$

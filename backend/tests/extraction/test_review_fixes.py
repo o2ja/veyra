@@ -1,6 +1,7 @@
 """Independent review of PR 8 (S1-S4 and minors): each test fails without its fix."""
 
 import threading
+import time
 from datetime import timedelta
 from decimal import Decimal
 from pathlib import Path
@@ -12,17 +13,18 @@ import pytest
 from fastapi import FastAPI
 from sqlalchemy import text
 
-from rebate.core.db import make_engine
+from rebate.core import clock
+from rebate.core.db import make_engine, transaction
 from rebate.modules.extraction import gateway, prompts, service
 from tests.conftest import DbUrls
-from tests.extraction.conftest import ai_overrides
+from tests.extraction.conftest import ai_overrides, ai_url
 from tests.extraction.replay import Replay, error, ok
 from tests.extraction.support import agreement_file, golden_file, set_ai, start
 from tests.extraction.test_gateway import SYSTEM, USER, VALID, Rig, _validate
 from tests.extraction.test_golden import SPA_884
 from tests.integration.conftest import Workspace, clean_file, new_workspace
 from tests.integration.conftest import start as start_import
-from tests.support import FakeClock, api_client, drain, make_app
+from tests.support import FakeClock, api_client, drain, make_app, make_settings
 
 ZERO = "00000000-0000-4000-8000-000000000000"
 
@@ -96,17 +98,6 @@ def test_s1_same_for_the_manual_entry_draft(
     assert (
         len(_drafts_of(enabled, r.json()["id"])) == 1 and len(_finished_events(enabled, r.json()["id"])) == 1
     )
-
-
-def test_s1_a_completed_row_without_its_draft_is_repaired(enabled: Workspace, migrated_db: DbUrls) -> None:
-    """Rows written by an older build (final status but no draft): the job rebuilds draft and audit once."""
-    from tests.extraction.support import extract
-
-    ex = extract(enabled, golden_file(enabled, SPA_884))
-    assert ex["draft_id"]
-    assert len(_finished_events(enabled, ex["id"])) == 1
-    drain(enabled.app)  # a repeated job run is a no-op
-    assert len(_drafts_of(enabled, ex["id"])) == 1 and len(_finished_events(enabled, ex["id"])) == 1
 
 
 # ---- S2: unfinished rows never block a file --------------------------------------------------------------------
@@ -383,3 +374,193 @@ def test_m11_repair_purpose_is_per_caller(rig_: Rig, replay: Replay) -> None:
 @pytest.fixture
 def rig_(ws: Workspace, replay: Replay, migrated_db: DbUrls) -> Rig:
     return Rig(migrated_db, replay, UUID(ws.tenant_id))
+
+
+# ---- second review pass ---------------------------------------------------------------------------------------
+
+
+def _hold_slot(rig: Rig):  # type: ignore[no-untyped-def]
+    """Hold the workspace's AI slot (the advisory lock a provider call keeps) from another connection."""
+    cm = transaction(rig.engine, rig.tenant)
+    db = cm.__enter__()
+    db.execute(text("SELECT pg_advisory_xact_lock(hashtextextended(:k, 0))"), {"k": f"ai:{rig.tenant}"})
+    return cm
+
+
+def test_m5_sync_path_never_queues_behind_a_busy_slot(
+    enabled: Workspace, replay: Replay, migrated_db: DbUrls
+) -> None:
+    rig = Rig(migrated_db, replay, UUID(enabled.tenant_id))
+    batch = _csv_import(enabled)
+    cm = _hold_slot(rig)
+    try:
+        t0 = time.monotonic()
+        r = enabled.api.post(f"/imports/{batch['id']}/suggest-mapping")
+        assert r.status_code == 503 and r.json()["error"]["code"] == "ai_unavailable"
+        assert time.monotonic() - t0 < 5  # answered at once, not after the lock holder
+    finally:
+        cm.__exit__(None, None, None)
+    assert replay.calls == []
+
+
+def test_m5_background_path_waits_a_bounded_time_then_reports_busy(
+    ws: Workspace, replay: Replay, migrated_db: DbUrls
+) -> None:
+    rig = Rig(migrated_db, replay, UUID(ws.tenant_id), ai_lock_timeout_seconds=1.0)
+    cm = _hold_slot(rig)
+    try:
+        t0 = time.monotonic()
+        with pytest.raises(gateway.ProviderBusy):
+            rig.call()
+        assert 0.8 < time.monotonic() - t0 < 10
+    finally:
+        cm.__exit__(None, None, None)
+    assert replay.calls == []
+    replay.script.append(ok(VALID))
+    assert rig.call().data == VALID  # the slot is free again
+
+
+def test_m5_pool_exhaustion_is_a_gateway_error_not_a_500(
+    ws: Workspace, replay: Replay, migrated_db: DbUrls, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from sqlalchemy.exc import TimeoutError as SATimeoutError
+
+    rig = Rig(migrated_db, replay, UUID(ws.tenant_id))
+
+    def exhausted(*_a: Any, **_k: Any) -> Any:
+        raise SATimeoutError("QueuePool limit reached")
+
+    monkeypatch.setattr(rig.gw, "_locked_call", exhausted)
+    with pytest.raises(gateway.ProviderBusy):
+        rig.call()
+
+
+def test_ma_progress_not_age_decides_staleness(
+    enabled: Workspace, monkeypatch: pytest.MonkeyPatch, migrated_db: DbUrls
+) -> None:
+    """Queued long ago, then picked up: the row is alive. Age since creation would fail it mid-job."""
+    monkeypatch.setattr(service, "STALE_AFTER", timedelta(seconds=2))
+    fid = golden_file(enabled, SPA_884)
+    first = start(enabled, fid)
+    time.sleep(3)  # older than STALE_AFTER since creation
+    ai = make_engine(ai_url(migrated_db))
+    try:
+        service._write(ai, UUID(enabled.tenant_id), UUID(first.json()["id"]), status="processing")
+    finally:
+        ai.dispose()
+    again = start(enabled, fid)  # the reaper runs here
+    assert again.status_code == 200 and again.json()["id"] == first.json()["id"]
+    assert enabled.api.get(f"/document-extractions/{first.json()['id']}").json()["status"] == "processing"
+    time.sleep(3)  # no progress for longer than STALE_AFTER: now it is failed
+    third = start(enabled, fid)
+    assert third.status_code == 202 and third.json()["id"] != first.json()["id"]
+    assert enabled.api.get(f"/document-extractions/{first.json()['id']}").json()["error_code"] == "stale"
+
+
+def test_ma_a_failed_row_gets_no_draft_and_no_audit_afterwards(
+    enabled: Workspace, migrated_db: DbUrls
+) -> None:
+    r = start(enabled, golden_file(enabled, SPA_884))
+    app = make_engine(migrated_db.app)
+    tenant = UUID(enabled.tenant_id)
+    try:
+        with transaction(app, tenant) as db:
+            ex = service.get_extraction(db, tenant, UUID(r.json()["id"]))
+            db.expunge(ex)
+        with transaction(app, tenant) as db:  # the reaper / dead-letter failed it meanwhile
+            service._fail_unfinished(db, tenant, "stale", "x", extraction_id=ex.id)
+        with pytest.raises(service._Superseded):
+            service._settle(app, ex, "completed", None, body={"payload_schema_version": 1})
+    finally:
+        app.dispose()
+    assert _drafts_of(enabled, r.json()["id"]) == [] and _finished_events(enabled, r.json()["id"]) == []
+
+
+def test_mc_a_retry_cannot_contradict_the_audited_outcome(enabled: Workspace, migrated_db: DbUrls) -> None:
+    from rebate.core.jobs import PermanentError
+
+    ex = start(
+        enabled, golden_file(enabled, SPA_884)
+    ).json()  # queued: the crash window before the final write
+    app = make_engine(migrated_db.app)
+    tenant = UUID(enabled.tenant_id)
+    try:
+        with transaction(app, tenant) as db:
+            row = service.get_extraction(db, tenant, UUID(ex["id"]))
+            db.expunge(row)
+        service._settle(
+            app, row, "completed", None, body={"payload_schema_version": 1}
+        )  # draft + audit exist
+        with pytest.raises(PermanentError):  # a retry that now wants another outcome is refused
+            service._settle(app, row, "needs_manual_entry", "corrupt", manual=True)
+    finally:
+        app.dispose()
+    assert len(_drafts_of(enabled, ex["id"])) == 1 and len(_finished_events(enabled, ex["id"])) == 1
+
+
+def test_mb_the_active_extraction_cap_has_no_count_then_insert_race(
+    ws: Workspace, migrated_db: DbUrls
+) -> None:
+    from rebate.core.errors import RateLimited
+    from rebate.modules.masterdata import Who
+
+    set_ai(ws, True)
+    a, b = golden_file(ws, SPA_884), golden_file(ws, "SYNTHETIC_rebate_voltara_REB-VOLT-2026")
+    settings = make_settings(migrated_db.app, **ai_overrides(migrated_db, ai_max_active_extractions=1))
+    who = Who(UUID(ws.tenant_id), UUID(ws.user_id), {})
+    engine = make_engine(migrated_db.app)
+    outcome: dict[str, Any] = {}
+
+    def second() -> None:
+        try:
+            with transaction(engine, who.tenant_id) as db:
+                service.request_extraction(db, who, UUID(b), False, settings)
+            outcome["ok"] = True
+        except RateLimited as exc:
+            outcome["error"] = exc
+
+    try:
+        first_tx = transaction(engine, who.tenant_id)
+        db1 = first_tx.__enter__()
+        service.request_extraction(db1, who, UUID(a), False, settings)  # not committed yet
+        t = threading.Thread(target=second)
+        t.start()
+        t.join(1.0)
+        assert t.is_alive()  # the second request waits for the first one's transaction
+        first_tx.__exit__(None, None, None)  # commit
+        t.join(10)
+    finally:
+        engine.dispose()
+    assert isinstance(outcome.get("error"), service.TooManyExtractions) and "ok" not in outcome
+
+
+def test_md_a_completed_row_without_a_draft_is_repaired(enabled: Workspace, migrated_db: DbUrls) -> None:
+    """The state itself: a completed extraction row (final status written) with no draft and no audit entry."""
+    from tests.extraction.support import extract
+
+    fid = golden_file(enabled, SPA_884)
+    done = extract(enabled, fid)
+    rerun = start(enabled, fid, rerun=True)  # a second row, queued, its job not run yet
+    assert rerun.status_code == 202
+    new_id = UUID(rerun.json()["id"])
+    ai = make_engine(ai_url(migrated_db))
+    try:
+        service._write(
+            ai,
+            UUID(enabled.tenant_id),
+            new_id,
+            status="completed",
+            result=done["result"],
+            confidence=Decimal("1.000"),
+            completed_at=clock.now(),
+        )
+    finally:
+        ai.dispose()
+    assert _drafts_of(enabled, str(new_id)) == [] and _finished_events(enabled, str(new_id)) == []
+    drain(enabled.app)  # the job meets a final row without its draft
+    drafts = _drafts_of(enabled, str(new_id))
+    assert len(drafts) == 1 and len(_finished_events(enabled, str(new_id))) == 1
+    draft = enabled.api.get(f"/agreement-drafts/{drafts[0]}").json()
+    assert draft["payload"] == done["result"]["payload"] and draft["source"] == "ai_extraction"
+    drain(enabled.app)
+    assert len(_drafts_of(enabled, str(new_id))) == 1  # idempotent
