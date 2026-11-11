@@ -828,7 +828,7 @@ function ValidationPanel({
           <Alert tone={v.valid ? "ok" : "danger"}>
             {v.valid ? "Validation passed." : `${v.error_count} validation error(s).`}
             {v.warnings.length > 0 ? ` ${v.warnings.length} warning(s).` : ""}
-            <span className="ml-2 text-xs opacity-75">Checked {utc(v.validated_at)}</span>
+            <span className="ml-2 text-xs">Checked {utc(v.validated_at)}</span>
           </Alert>
 
           {(v.references.unresolved_customers.length > 0 || v.references.unresolved_skus.length > 0) && (

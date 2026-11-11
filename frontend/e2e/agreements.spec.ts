@@ -10,7 +10,13 @@ async function noViolations(page: Page, name: string) {
   const result = await new AxeBuilder({ page })
     .withTags(["wcag2a", "wcag2aa", "wcag21a", "wcag21aa"])
     .analyze();
-  const summary = result.violations.map((v) => `${v.id} (${v.nodes.length})`);
+  const summary = result.violations.map(
+    (v) =>
+      `${v.id} (${v.nodes.length}): ${v.nodes
+        .slice(0, 3)
+        .map((n) => n.target.join(" "))
+        .join(" | ")}`,
+  );
   expect(summary, `${name}: ${summary.join(", ")}`).toEqual([]);
 }
 
@@ -147,7 +153,7 @@ test("W5 + W7: SPA and Rebate drafts, validation error fix, four-eyes approval, 
 
   await page.getByRole("button", { name: "Save draft" }).click();
   await expect(page.getByText("Draft saved.")).toBeVisible();
-  await page.getByRole("button", { name: "Validate" }).click();
+  await page.getByRole("region", { name: "Validation" }).getByRole("button", { name: "Validate" }).click();
   await expect(page.getByText(/validation error\(s\)/)).toBeVisible();
 
   // Fix the validation error
@@ -155,7 +161,7 @@ test("W5 + W7: SPA and Rebate drafts, validation error fix, four-eyes approval, 
   await page.getByLabel("Valid to").fill("2026-12-31");
   await page.getByRole("button", { name: "Save draft" }).click();
   await expect(page.getByText("Draft saved.")).toBeVisible();
-  await page.getByRole("button", { name: "Validate" }).click();
+  await page.getByRole("region", { name: "Validation" }).getByRole("button", { name: "Validate" }).click();
   await expect(page.getByText("Validation passed.")).toBeVisible();
 
   await page.getByRole("button", { name: "Submit for approval" }).click();
@@ -210,7 +216,7 @@ test("W5 + W7: SPA and Rebate drafts, validation error fix, four-eyes approval, 
   }
   await page.getByRole("button", { name: "Save draft" }).click();
   await expect(page.getByText("Draft saved.")).toBeVisible();
-  await page.getByRole("button", { name: "Validate" }).click();
+  await page.getByRole("region", { name: "Validation" }).getByRole("button", { name: "Validate" }).click();
   await expect(page.getByText("Validation passed.")).toBeVisible();
   await page.getByRole("button", { name: "Submit for approval" }).click();
   await expect(page.getByText("Draft submitted for approval.")).toBeVisible();
@@ -232,10 +238,10 @@ test("W5 + W7: SPA and Rebate drafts, validation error fix, four-eyes approval, 
   await page.getByRole("button", { name: "Amend version" }).click();
   await expect(page).toHaveURL(/\/agreement-drafts\/[0-9a-f-]+$/);
   const amendDraftId = page.url().split("/").pop() ?? "";
-  await page.getByLabel("Name", { exact: true }).fill("Voltara contractor SPA 2026 Rev 2 (SYNTHETIC)");
+  await page.getByLabel("Priority", { exact: true }).fill("7"); // versioned; the name is per agreement
   await page.getByRole("button", { name: "Save draft" }).click();
   await expect(page.getByText("Draft saved.")).toBeVisible();
-  await page.getByRole("button", { name: "Validate" }).click();
+  await page.getByRole("region", { name: "Validation" }).getByRole("button", { name: "Validate" }).click();
   await expect(page.getByText("Validation passed.")).toBeVisible();
   await page.getByRole("button", { name: "Submit for approval" }).click();
   await expect(page.getByText("Draft submitted for approval.")).toBeVisible();
@@ -254,8 +260,8 @@ test("W5 + W7: SPA and Rebate drafts, validation error fix, four-eyes approval, 
 
   await history.getByRole("link", { name: "Diff prior" }).first().click();
   await expect(page).toHaveURL(/\/agreements\/versions\/[0-9a-f-]+\/diff\/[0-9a-f-]+$/);
-  await expect(page.getByRole("table", { name: "Version differences" })).toContainText(
-    "Voltara contractor SPA 2026 Rev 2 (SYNTHETIC)",
-  );
+  const diffTable = page.getByRole("table", { name: "Version differences" });
+  await expect(diffTable).toContainText("priority");
+  await expect(diffTable).toContainText("7");
   await noViolations(page, "/agreements/versions/:id/diff/:otherId");
 });

@@ -112,13 +112,14 @@ export function SelectField({
   children,
   ...props
 }: SelectHTMLAttributes<HTMLSelectElement> & { label: string; children: ReactNode }) {
-  const id = useId();
+  const generated = useId();
+  const id = props.id ?? generated; // a caller's id must also be the label's target
   return (
     <div className="flex flex-col gap-1">
       <label htmlFor={id} className="text-sm font-medium">
         {label}
       </label>
-      <select id={id} className="rounded-md border border-line bg-panel px-3 py-2 text-sm" {...props}>
+      <select className="rounded-md border border-line bg-panel px-3 py-2 text-sm" {...props} id={id}>
         {children}
       </select>
     </div>
