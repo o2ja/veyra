@@ -894,6 +894,25 @@ def preview(db: Session, batch: ImportBatch, limit: int = 20) -> dict[str, Any]:
     }
 
 
+def mapping_sample(db: Session, tenant_id: UUID, batch_id: UUID, limit: int = 5) -> dict[str, Any]:
+    """What an AI mapping suggestion may see (AI_PROCESSING.md §9): the headers, the target field names and at
+    most ``limit`` staged rows, cells aligned to the headers. Nothing else of the file leaves the system."""
+    batch = get_batch(db, tenant_id, batch_id)
+    headers = list(batch.headers or [])
+    staged = db.scalars(
+        select(ImportStagedRow)
+        .where(ImportStagedRow.tenant_id == tenant_id, ImportStagedRow.import_batch_id == batch.id)
+        .order_by(ImportStagedRow.row_number)
+        .limit(limit)
+    )
+    return {
+        "import_type": batch.import_type,
+        "headers": headers,
+        "fields": [f.name for f in FIELDS[batch.import_type]],
+        "rows": [[str(r.raw.get(h, "")) for h in headers] for r in staged],
+    }
+
+
 def list_errors(
     db: Session, tenant_id: UUID, batch_id: UUID, *, limit: int, cursor: str | None
 ) -> list[ImportRowError]:
