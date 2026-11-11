@@ -127,7 +127,7 @@ class ManufacturerSettingsIn(BaseModel):
 
     model_config = STRICT
     claim_window_days: Days | None = None
-    claim_window_basis: Literal["invoice_date", "ship_date", "period_end"] | None = None
+    claim_window_basis: Literal["invoice_date", "ship_date", "month_end", "period_end"] | None = None
     dispute_window_days: Days | None = None
     dispute_window_basis: Literal["remittance_date", "submission_date"] | None = None
     allow_negative_claims: bool = False

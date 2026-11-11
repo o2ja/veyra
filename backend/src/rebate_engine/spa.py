@@ -213,12 +213,16 @@ def _claim_window(
         ev.trace.step("claim_window", skipped=True)
         return True
     basis = settings.claim_window_basis
-    period_end: date | None = None
-    if basis == "period_end":
+    month_end: date | None = None
+    if basis == "period_end":  # rebates only (owner decision 2026-11-11); SPA lines use month_end
+        raise EngineRuleError(
+            "claim_window_basis 'period_end' applies to rebates only; use 'month_end' for SPA lines"
+        )
+    if basis == "month_end":
         # last calendar day of the month of the line's claim date (the date-validity date, §4.3)
         claim_date = _line_date(ev.line, version.rules.date_basis, ev.trace)
-        period_end = claim_date.replace(day=monthrange(claim_date.year, claim_date.month)[1])
-        start = period_end
+        month_end = claim_date.replace(day=monthrange(claim_date.year, claim_date.month)[1])
+        start = month_end
     elif basis in ("invoice_date", "ship_date"):
         start = _line_date(ev.line, basis, ev.trace)
     else:
@@ -228,7 +232,7 @@ def _claim_window(
     ev.trace.step(
         "claim_window",
         basis=basis,
-        period_end=period_end,
+        month_end=month_end,
         days=settings.claim_window_days,
         deadline=due,
         run_date=run_date,

@@ -116,7 +116,9 @@ class ManufacturerSettings:
 
     manufacturer_id: str
     conflict_policy: str = "flag"  # flag | priority
-    claim_window_basis: str | None = None  # invoice_date | ship_date | period_end
+    claim_window_basis: str | None = (
+        None  # invoice_date | ship_date | month_end (SPA lines); period_end applies to rebates only
+    )
     claim_window_days: int | None = None
     allow_negative_claims: bool = False
 
