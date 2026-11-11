@@ -196,3 +196,17 @@ test("intOrRaw converts whole numbers and passes anything else through unchanged
   expect(intOrRaw("2.5")).toBe("2.5");
   expect(intOrRaw("abc")).toBe("abc");
 });
+
+test("applyEdit adds or removes one row without filling defaults into the other rows", () => {
+  const raw = [{ sku: "A" }, { sku: "B", rate: 5 }]; // server rows with missing and odd values
+  const view = [
+    { sku: "A", rate: null },
+    { sku: "B", rate: 5 },
+  ];
+  const added = applyEdit(raw, view, [...view, { sku: "", rate: null }]);
+  expect(added).toEqual([{ sku: "A" }, { sku: "B", rate: 5 }, { sku: "", rate: null }]);
+  const removed = applyEdit(raw, view, [view[1]]);
+  expect(removed).toEqual([{ sku: "B", rate: 5 }]);
+  const removedLast = applyEdit(raw, view, [view[0]]);
+  expect(removedLast).toEqual([{ sku: "A" }]);
+});

@@ -183,8 +183,22 @@ export function applyEdit(raw: unknown, prev: unknown, next: unknown): unknown {
     for (const k of Object.keys(next)) out[k] = applyEdit(out[k], prev[k], next[k]);
     return Object.fromEntries(Object.entries(out).filter(([k]) => k in next || !(k in prev)));
   }
-  if (Array.isArray(next) && Array.isArray(prev) && Array.isArray(raw) && next.length === prev.length) {
-    return next.map((n, i) => applyEdit(raw[i], prev[i], n));
+  if (Array.isArray(next) && Array.isArray(prev) && Array.isArray(raw) && raw.length === prev.length) {
+    if (next.length === prev.length) return next.map((n, i) => applyEdit(raw[i], prev[i], n));
+    // one row added or removed: only that row changes; every other row stays exactly as the server sent it
+    const same = (x: unknown, y: unknown) => JSON.stringify(x) === JSON.stringify(y);
+    if (next.length === prev.length + 1) {
+      let k = 0;
+      while (k < prev.length && same(prev[k], next[k])) k++;
+      if (prev.slice(k).every((p, i) => same(p, next[k + 1 + i])))
+        return [...raw.slice(0, k), next[k], ...raw.slice(k)];
+    }
+    if (next.length === prev.length - 1) {
+      let k = 0;
+      while (k < next.length && same(prev[k], next[k])) k++;
+      if (next.slice(k).every((n, i) => same(n, prev[k + 1 + i])))
+        return [...raw.slice(0, k), ...raw.slice(k + 1)];
+    }
   }
   return next;
 }
