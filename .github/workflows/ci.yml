@@ -232,7 +232,10 @@ jobs:
           (cd frontend && VITE_DEV_API_PROXY=http://localhost:8000 nohup npx vite --port 5173 > ../vite.log 2>&1 &)
           for i in $(seq 60); do curl -sf http://localhost:5173/api/v1/health/ready && break; sleep 1; done
           curl -sf http://localhost:5173/api/v1/health/ready
-      - run: npx --prefix frontend playwright install --with-deps chromium
+      - name: Install Playwright Chromium (apt mirrors flake on runners; retry)
+        run: |
+          for i in 1 2 3; do npx --prefix frontend playwright install --with-deps chromium && exit 0; sleep 60; done
+          exit 1
       - name: Playwright (W1-W2, files, accessibility)
         working-directory: frontend
         run: npx playwright test
