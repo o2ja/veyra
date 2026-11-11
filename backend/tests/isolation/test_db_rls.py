@@ -331,6 +331,16 @@ S4_UPDATABLE = {
 }
 S4_MOVABLE = ("agreements", "agreement_drafts")
 
+# ---- S5 tables (calculation runs) -----------------------------------------------------------------------
+S5_ROWS: dict[str, tuple[str, str]] = {
+    "calculation_runs": ("id", "run"),
+    "calculation_results": ("id", "res"),
+    "rebate_accrual_entries": ("id", "acc"),
+    "claim_adjustments": ("id", "adj"),
+}
+# UPDATE granted to the app role on bookkeeping columns only (results and ledger entries are append-only).
+S5_UPDATABLE = {"calculation_runs": "status = status", "claim_adjustments": "status = status"}
+
 
 def test_every_tenant_isolated_table_is_in_the_isolation_suite(admin_engine: Engine) -> None:
     """Every table carrying the tenant_isolation policy is attacked by D1/D7/D8/D12, and every S3 one by the
@@ -351,7 +361,8 @@ def test_every_tenant_isolated_table_is_in_the_isolation_suite(admin_engine: Eng
         "file_objects",
     }
     assert policed == set(TENANT_TABLES), policed ^ set(TENANT_TABLES)
-    assert policed - s2 == set(S3_ROWS) | set(S4_ROWS), (policed - s2) ^ (set(S3_ROWS) | set(S4_ROWS))
+    everything = set(S3_ROWS) | set(S4_ROWS) | set(S5_ROWS)
+    assert policed - s2 == everything, (policed - s2) ^ everything
 
 
 def _outcome(conn: Connection, sql: str, params: dict[str, object]) -> str:
@@ -510,3 +521,75 @@ def test_d9_s4_no_delete_and_no_tenant_change_of_terms(app_engine: Engine, world
     assert deleted.startswith("error: permission denied"), deleted
     if table not in S4_MOVABLE:
         assert moved.startswith("error: permission denied"), moved
+
+
+@pytest.mark.parametrize("table", sorted(S5_ROWS))
+def test_d2_s5_select_by_foreign_id_returns_nothing(app_engine: Engine, world: World, table: str) -> None:
+    column, key = S5_ROWS[table]
+    with as_app(app_engine, world.a.tenant_id) as conn:
+        rows = conn.execute(
+            text(f"SELECT 1 FROM {table} WHERE {column} = :id"), {"id": world.b.s5[key]}
+        ).all()
+    assert rows == [], breach(f"A reads B's {table} row by id")
+
+
+@pytest.mark.parametrize("table", sorted(S5_UPDATABLE))
+def test_d3_s5_update_foreign_row_affects_nothing(app_engine: Engine, world: World, table: str) -> None:
+    column, key = S5_ROWS[table]
+    with as_app(app_engine, world.a.tenant_id) as conn:
+        got = _outcome(
+            conn, f"UPDATE {table} SET {S5_UPDATABLE[table]} WHERE {column} = :id", {"id": world.b.s5[key]}
+        )
+    assert got == "n=0", breach(f"A updated B's {table} row ({got})")
+
+
+@pytest.mark.parametrize("table", sorted(S5_ROWS))
+def test_d5_s5_insert_into_foreign_tenant_is_rejected(app_engine: Engine, world: World, table: str) -> None:
+    with as_app(app_engine, world.a.tenant_id) as conn:
+        cols = ", ".join(
+            conn.execute(
+                text(
+                    "SELECT column_name FROM information_schema.columns WHERE table_schema = 'public' "
+                    "AND table_name = :t AND is_generated = 'NEVER' ORDER BY ordinal_position"
+                ),
+                {"t": table},
+            ).scalars()
+        )
+        got = _outcome(
+            conn,
+            f"INSERT INTO {table} ({cols}) SELECT {cols} FROM jsonb_populate_record(NULL::{table}, "
+            f"(SELECT to_jsonb(x) || jsonb_build_object('tenant_id', CAST(:b AS uuid), 'id', gen_random_uuid()) "
+            f"FROM {table} x WHERE tenant_id = :a LIMIT 1))",
+            {"a": world.a.tenant_id, "b": world.b.tenant_id},
+        )
+    assert got == "rls", breach(f"insert of a {table} row into tenant B was not rejected by RLS ({got})")
+
+
+@pytest.mark.parametrize("table", sorted(S5_ROWS))
+def test_d9_s5_no_delete_and_no_tenant_change(app_engine: Engine, world: World, table: str) -> None:
+    """Append-only history: no DELETE, and the tenant column is not updatable (grants, independent of RLS)."""
+    column, key = S5_ROWS[table]
+    with as_app(app_engine, world.a.tenant_id) as conn:
+        deleted = _outcome(conn, f"DELETE FROM {table} WHERE {column} = :id", {"id": world.a.s5[key]})
+        moved = _outcome(
+            conn,
+            f"UPDATE {table} SET tenant_id = :b WHERE {column} = :id",
+            {"b": world.b.tenant_id, "id": world.a.s5[key]},
+        )
+    assert deleted.startswith("error: permission denied"), deleted
+    assert moved.startswith("error: permission denied"), moved
+
+
+@pytest.mark.parametrize("table", ["calculation_results", "rebate_accrual_entries"])
+def test_s5_triggers_forbid_mutation_even_for_the_owner(
+    admin_engine: Engine, world: World, table: str
+) -> None:
+    """The triggers (not only the revoked privileges) make the calculation history append-only."""
+    column, key = S5_ROWS[table]
+    for sql in (
+        f"UPDATE {table} SET inputs_hash = 'x' WHERE {column} = :id",
+        f"DELETE FROM {table} WHERE {column} = :id",
+    ):
+        with admin_engine.connect() as conn:
+            got = _outcome(conn, sql, {"id": world.a.s5[key]})
+        assert "append-only" in got, got

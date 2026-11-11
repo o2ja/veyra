@@ -2,14 +2,25 @@
 Money is a decimal string; ids are UUIDs; unknown request fields are rejected."""
 
 from datetime import date, datetime
-from typing import Any, Literal
+from typing import Annotated, Any, Literal
 from uuid import UUID
 
-from pydantic import BaseModel, ConfigDict, Field, model_validator
+from pydantic import BaseModel, BeforeValidator, ConfigDict, Field, model_validator
 
 from rebate.core.money import Money
 from rebate.core.validation import STRICT, JsonUUID
 from rebate.modules.masterdata import Page
+
+
+def _iso_text(value: object) -> object:
+    if not isinstance(value, str):
+        raise ValueError("Send an ISO-8601 string.")
+    return value
+
+
+# FastAPI validates the parsed JSON body in strict mode, which refuses str -> date: opt out, but accept strings only.
+JsonDate = Annotated[date, BeforeValidator(_iso_text), Field(strict=False)]
+JsonDateTime = Annotated[datetime, BeforeValidator(_iso_text), Field(strict=False)]
 
 ResultStatus = Literal["eligible", "exception", "netted", "adjustment", "not_applicable"]
 RunStatus = Literal["queued", "running", "completed", "failed", "cancelled"]
@@ -19,9 +30,9 @@ class RunIn(BaseModel):
     model_config = STRICT
 
     manufacturer_ids: list[JsonUUID] = Field(default_factory=list, max_length=500)
-    date_from: date
-    date_to: date
-    as_of: datetime | None = None
+    date_from: JsonDate
+    date_to: JsonDate
+    as_of: JsonDateTime | None = None
 
     @model_validator(mode="after")
     def _window(self) -> RunIn:

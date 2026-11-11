@@ -279,7 +279,7 @@ _SALES = (
     "FROM sales_document_lines l "
     "JOIN import_batches b ON b.tenant_id = l.tenant_id AND b.id = l.import_batch_id "
     "LEFT JOIN products p ON p.tenant_id = l.tenant_id AND p.id = l.product_id "
-    "WHERE l.tenant_id = :t AND l.is_current AND b.status = 'completed' AND b.completed_at <= :cutoff "
+    "WHERE l.tenant_id = :t AND l.is_current AND b.status IN ('completed', 'completed_with_errors') AND b.completed_at <= :cutoff "
     "AND l.manufacturer_id IS NOT DISTINCT FROM CAST(:m AS uuid) "
 )
 
@@ -319,7 +319,7 @@ def load_sales_lines(
                 "FROM sales_document_lines l "
                 "JOIN import_batches b ON b.tenant_id = l.tenant_id AND b.id = l.import_batch_id "
                 "WHERE l.tenant_id = :t AND l.is_current AND l.quantity < 0 AND l.original_line_id IS NOT NULL "
-                "AND b.status = 'completed' AND b.completed_at <= :cutoff AND l.invoice_date <= :cutoff_date "
+                "AND b.status IN ('completed', 'completed_with_errors') AND b.completed_at <= :cutoff AND l.invoice_date <= :cutoff_date "
                 "AND l.manufacturer_id IS NOT DISTINCT FROM CAST(:m AS uuid) GROUP BY l.original_line_id"
             ),
             {**params, "cutoff_date": data_cutoff.date()},
@@ -428,7 +428,7 @@ def purchase_volume_lines(
                 "SELECT l.id, l.document_date, l.product_id, l.quantity, l.extended_amount, l.row_hash "
                 "FROM purchase_document_lines l "
                 "JOIN import_batches b ON b.tenant_id = l.tenant_id AND b.id = l.import_batch_id "
-                "WHERE l.tenant_id = :t AND l.is_current AND b.status = 'completed' AND b.completed_at <= :cutoff "
+                "WHERE l.tenant_id = :t AND l.is_current AND b.status IN ('completed', 'completed_with_errors') AND b.completed_at <= :cutoff "
                 "AND l.manufacturer_id = :m AND l.document_date BETWEEN :d1 AND :d2 "
                 "AND l.product_id IS NOT NULL ORDER BY l.id"
             ),
