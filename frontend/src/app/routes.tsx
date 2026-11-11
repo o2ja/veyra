@@ -32,6 +32,7 @@ import { UnmappedPage } from "../features/masterdata/unmapped-page";
 import { UomPage } from "../features/masterdata/uom-page";
 import { AgreementsPage } from "../features/agreements/agreements-page";
 import { AgreementDetailPage } from "../features/agreements/agreement-detail-page";
+import { DraftEditorPage } from "../features/agreements/draft-editor-page";
 import { DraftsPage } from "../features/agreements/drafts-page";
 import { VersionDetailPage, VersionDiffPage } from "../features/agreements/version-pages";
 import { AppLayout } from "./app-layout";
@@ -180,6 +181,7 @@ export const routes: RouteObject[] = [
       guarded("agreements/versions/:versionId/diff/:otherVersionId", "data.read", <VersionDiffPage />),
       guarded("agreements/:agreementId", "data.read", <AgreementDetailPage />),
       guarded("agreement-drafts", "data.read", <DraftsPage />),
+      guarded("agreement-drafts/:draftId", "data.read", <DraftEditorPage />),
     ],
   },
 ];
