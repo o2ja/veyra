@@ -86,6 +86,8 @@ jobs:
         run: |
           uv export --frozen --no-hashes --no-emit-project -o "$RUNNER_TEMP/req.txt" -q
           uv run pip-audit --strict --no-deps --disable-pip -r "$RUNNER_TEMP/req.txt"
+      - name: OCR tools for the extraction tests (the worker image has them; S6.1)
+        run: sudo apt-get update -qq && sudo apt-get install -y -qq --no-install-recommends ocrmypdf tesseract-ocr-eng
       - run: uv run pytest --junitxml=junit-backend.xml
       - name: no skipped tests
         run: python3 ../infra/scripts/check-no-skips.py junit-backend.xml
