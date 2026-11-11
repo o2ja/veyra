@@ -22,7 +22,7 @@ from rebate.core.db import assert_safe_role, make_engine, transaction
 from rebate.core.errors import CsrfFailed, DomainError, RateLimited, Unauthenticated, error_body
 from rebate.core.ids import new_id
 from rebate.core.logging import configure_logging
-from rebate.modules import agreements, audit, files, identity, ingestion, masterdata, tenancy
+from rebate.modules import agreements, audit, claims, files, identity, ingestion, masterdata, tenancy
 from rebate.modules.identity import ratelimit
 
 log = structlog.get_logger("rebate.api")
@@ -37,6 +37,7 @@ MODULE_ROUTERS = (
     masterdata.router,
     ingestion.router,
     agreements.router,
+    claims.router,
 )
 PUBLIC_ROUTERS = (health.router,)
 

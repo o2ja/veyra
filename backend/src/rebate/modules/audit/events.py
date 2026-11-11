@@ -79,6 +79,10 @@ class Action(StrEnum):
     AGREEMENT_VERSION_EXPIRED = "agreement_version.expired"
     AGREEMENT_VERSION_CANCELLED = "agreement_version.cancelled"
     AGREEMENT_VERSION_EXPIRY_ALERT = "agreement_version.expiry_alert"
+    CALCULATION_RUN_CREATED = "calculation_run.created"
+    CALCULATION_RUN_COMPLETED = "calculation_run.completed"
+    CALCULATION_RUN_FAILED = "calculation_run.failed"
+    CALCULATION_ADJUSTMENTS_PROPOSED = "calculation_run.adjustments_proposed"
 
 
 AUDITED_FIELDS: dict[str, frozenset[str]] = {
@@ -189,6 +193,19 @@ AUDITED_FIELDS: dict[str, frozenset[str]] = {
             "rejection_reason",
             "review_comment",
             "resulting_version_id",
+        }
+    ),
+    "calculation_run": frozenset(
+        {
+            "scope",
+            "status",
+            "as_of",
+            "run_date",
+            "data_cutoff",
+            "engine_version",
+            "totals",
+            "error",
+            "proposed",
         }
     ),
 }
