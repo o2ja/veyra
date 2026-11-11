@@ -6,6 +6,6 @@ from rebate.core.jobs import JobContext, job
 from rebate.modules.extraction import service
 
 
-@job(service.JOB, tenant_scoped=True, max_attempts=service.JOB_MAX_ATTEMPTS)
+@job(service.JOB, tenant_scoped=True, max_attempts=service.JOB_MAX_ATTEMPTS, on_dead=service.on_dead)
 def extract_agreement(db: Session, ctx: JobContext) -> None:
     service.process(db, ctx)

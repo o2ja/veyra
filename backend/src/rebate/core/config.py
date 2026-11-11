@@ -118,6 +118,14 @@ class Settings(BaseSettings):
     ai_price_output_per_mtok: Decimal = Decimal("15.00")
     ai_daily_cost_cap_usd: Decimal = Decimal("25.00")  # per tenant and UTC day
     ai_daily_token_cap: int = Field(default=2_000_000, ge=1)
+    ai_requests_per_minute: int = Field(
+        default=10, ge=1
+    )  # per tenant: POST /document-extractions, suggest-mapping
+    ai_max_active_extractions: int = Field(
+        default=3, ge=1
+    )  # per tenant: queued + processing extract_agreement
+    ai_mapping_max_attempts: int = Field(default=2, ge=1, le=4)  # synchronous path: bounded total time
+    ai_mapping_timeout_seconds: float = Field(default=15.0, gt=0, le=60)
     ocr_timeout_seconds: int = Field(default=180, ge=10, le=900)
     ocr_memory_mb: int = Field(default=4096, ge=512)
 

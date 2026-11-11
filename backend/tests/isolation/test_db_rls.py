@@ -571,9 +571,9 @@ def test_d7_s6_ai_role_without_tenant_context_sees_nothing(ai_engine: Engine, wo
     with as_app(ai_engine, None) as conn:
         counts = {
             t: conn.execute(text(f"SELECT count(*) FROM {t}")).scalar_one()
-            for t in ("document_extractions", "ai_invocations", "file_objects")
+            for t in ("document_extractions", "ai_invocations")
         }
-    assert counts == {"document_extractions": 0, "ai_invocations": 0, "file_objects": 0}, breach(str(counts))
+    assert counts == {"document_extractions": 0, "ai_invocations": 0}, breach(str(counts))
 
 
 @pytest.mark.parametrize("table", sorted(S6_ROWS))

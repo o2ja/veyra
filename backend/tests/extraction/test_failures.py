@@ -241,7 +241,8 @@ def test_gateway_database_url_missing_dead_letters_the_job(migrated_db: DbUrls, 
         set_ai(ws, True)
         r = ws.api.post("/document-extractions", json={"file_id": golden_file(ws, SPA_884)})
         drain(app)
-        assert ws.api.get(f"/document-extractions/{r.json()['id']}").json()["status"] == "queued"
+        ex = ws.api.get(f"/document-extractions/{r.json()['id']}").json()
+        assert ex["status"] == "failed" and ex["error_code"] == "job_failed"  # never stuck queued
         failed = ws.api.get("/jobs", params={"status": "failed"}).json()["data"]
         assert any(j["kind"] == "extract_agreement" for j in failed)
         assert replay.calls == []

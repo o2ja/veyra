@@ -144,17 +144,17 @@ def test_mapping_suggestion_sends_headers_and_at_most_five_masked_rows(ws: Works
     assert ws.api.get("/ai/usage").json()["daily"][0]["calls"] == 1
 
 
-def test_mapping_answer_with_an_unknown_column_is_rejected_after_one_repair(
+def test_mapping_answer_with_an_unknown_column_is_rejected_without_repair(
     ws: Workspace, replay: Replay
 ) -> None:
     set_ai(ws, True)
     batch = _import_needing_a_mapping(ws)
     fields = [f["name"] for f in ws.api.get(f"/imports/{batch['id']}/preview").json()["fields"]]
     bad = ok({"mapping": {fields[0]: "No Such Column"}}, tool="record_mapping")
-    replay.script.extend([bad, bad])
+    replay.script.append(bad)
     r = ws.api.post(f"/imports/{batch['id']}/suggest-mapping")
     assert r.status_code == 503 and r.json()["error"]["code"] == "ai_unavailable"
-    assert len(replay.calls) == 2
+    assert len(replay.calls) == 1  # the synchronous path has a bounded time budget: no repair round trip
 
 
 def test_mapping_suggestion_of_a_foreign_batch_is_not_found(ws: Workspace, replay: Replay) -> None:

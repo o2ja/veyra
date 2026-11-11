@@ -23,9 +23,8 @@ from typing import Any, Protocol
 from uuid import UUID
 
 import anthropic
-import httpx2
 import structlog
-from sqlalchemy import Engine, func, select
+from sqlalchemy import Engine, func, select, text
 from tenacity import RetryCallState, Retrying, retry_if_exception, stop_after_attempt, wait_exponential_jitter
 
 from rebate.core import clock
@@ -36,8 +35,8 @@ from rebate.modules.extraction.models import AiInvocation
 
 log = structlog.get_logger("rebate.ai")
 
-# Tests install a factory returning an httpx2.Client with a recorded-response transport. Production: None.
-HTTP_CLIENT_FACTORY: Callable[[], httpx2.Client] | None = None
+# Tests install a factory returning the SDK HTTP client with a recorded-response transport. Production: None.
+HTTP_CLIENT_FACTORY: Callable[[], Any] | None = None  # returns the SDK's HTTP client (tests only)
 
 
 class GatewayError(Exception):
@@ -58,6 +57,10 @@ class CapReached(GatewayError):
 
 class ProviderUnavailable(GatewayError):
     code = "provider_unavailable"
+
+
+class ProviderFailure(GatewayError):
+    code = "provider_error"
 
 
 class ProviderRefused(GatewayError):
@@ -100,7 +103,7 @@ class Provider(Protocol):
 class AnthropicProvider:
     name = "anthropic"
 
-    def __init__(self, api_key: str, http_client: httpx2.Client | None = None) -> None:
+    def __init__(self, api_key: str, http_client: Any = None) -> None:
         # retries are ours (tenacity), so the SDK must not retry on its own
         self._client = anthropic.Anthropic(api_key=api_key, max_retries=0, http_client=http_client)
 
@@ -188,28 +191,37 @@ class Gateway:
         sleep: Callable[[float], None] = time.sleep,
     ) -> None:
         self.settings, self.engine, self.provider, self._sleep = settings, ai_engine, provider, sleep
+        self.invocations: list[dict[str, Any]] = []  # content-free summaries, for the callers' audit events
+
+    def take_invocations(self) -> list[dict[str, Any]]:
+        out, self.invocations = self.invocations, []
+        return out
 
     # ---- caps ----------------------------------------------------------------------------------------
 
-    def usage_today(self, tenant_id: UUID) -> tuple[Decimal, int]:
+    @staticmethod
+    def _usage(db: Any, tenant_id: UUID) -> tuple[Decimal, int]:
         start = datetime.combine(clock.now().astimezone(UTC).date(), dtime.min, tzinfo=UTC)
-        with transaction(self.engine, tenant_id) as db:
-            cost, tokens = db.execute(
-                select(
-                    func.coalesce(func.sum(AiInvocation.cost_usd), 0),
-                    func.coalesce(
-                        func.sum(
-                            func.coalesce(AiInvocation.input_tokens, 0)
-                            + func.coalesce(AiInvocation.output_tokens, 0)
-                        ),
-                        0,
+        cost, tokens = db.execute(
+            select(
+                func.coalesce(func.sum(AiInvocation.cost_usd), 0),
+                func.coalesce(
+                    func.sum(
+                        func.coalesce(AiInvocation.input_tokens, 0)
+                        + func.coalesce(AiInvocation.output_tokens, 0)
                     ),
-                ).where(AiInvocation.tenant_id == tenant_id, AiInvocation.created_at >= start)
-            ).one()
+                    0,
+                ),
+            ).where(AiInvocation.tenant_id == tenant_id, AiInvocation.created_at >= start)
+        ).one()
         return Decimal(cost), int(tokens)
 
-    def _check_caps(self, tenant_id: UUID) -> None:
-        cost, tokens = self.usage_today(tenant_id)
+    def usage_today(self, tenant_id: UUID) -> tuple[Decimal, int]:
+        with transaction(self.engine, tenant_id) as db:
+            return self._usage(db, tenant_id)
+
+    def _check_caps(self, db: Any, tenant_id: UUID) -> None:
+        cost, tokens = self._usage(db, tenant_id)
         if cost >= self.settings.ai_daily_cost_cap_usd or tokens >= self.settings.ai_daily_token_cap:
             raise CapReached("daily AI cap reached")
 
@@ -227,10 +239,17 @@ class Gateway:
         )
 
     def _attempt(
-        self, model: str, system: str, user: str, tool: str, schema: dict[str, Any]
+        self,
+        model: str,
+        system: str,
+        user: str,
+        tool: str,
+        schema: dict[str, Any],
+        attempts: int,
+        timeout: float,
     ) -> ProviderResponse:
         retrying = Retrying(
-            stop=stop_after_attempt(self.settings.ai_max_attempts),
+            stop=stop_after_attempt(attempts),
             wait=self._wait,
             retry=retry_if_exception(lambda e: isinstance(e, ProviderCallError) and e.retryable),
             sleep=self._sleep,
@@ -244,11 +263,12 @@ class Gateway:
             tool_name=tool,
             schema=schema,
             max_tokens=self.settings.ai_max_output_tokens,
-            timeout=self.settings.ai_request_timeout_seconds,
+            timeout=timeout,
         )
 
     def _record(
         self,
+        db: Any,
         tenant_id: UUID,
         extraction_id: UUID | None,
         purpose: str,
@@ -264,26 +284,39 @@ class Gateway:
         tokens_out = resp.output_tokens if resp else None
         cost = cost_usd(self.settings, tokens_in or 0, tokens_out or 0)
         latency = int((time.monotonic() - started) * 1000)
-        with transaction(self.engine, tenant_id) as db:
-            db.add(
-                AiInvocation(
-                    tenant_id=tenant_id,
-                    id=new_id(),
-                    extraction_id=extraction_id,
-                    purpose=purpose,
-                    provider=self.provider.name,
-                    model=model,
-                    prompt_version=prompt_version,
-                    input_sha256=digest,
-                    input_tokens=tokens_in,
-                    output_tokens=tokens_out,
-                    cost_usd=cost,
-                    latency_ms=latency,
-                    status=status,
-                    error_code=error_code,
-                    created_at=clock.now(),
-                )
+        row_id = new_id()
+        db.add(
+            AiInvocation(
+                tenant_id=tenant_id,
+                id=row_id,
+                extraction_id=extraction_id,
+                purpose=purpose,
+                provider=self.provider.name,
+                model=model,
+                prompt_version=prompt_version,
+                input_sha256=digest,
+                input_tokens=tokens_in,
+                output_tokens=tokens_out,
+                cost_usd=cost,
+                latency_ms=latency,
+                status=status,
+                error_code=error_code,
+                created_at=clock.now(),
             )
+        )
+        self.invocations.append(
+            {
+                "id": row_id,
+                "extraction_id": extraction_id,
+                "purpose": purpose,
+                "model": model,
+                "status": status,
+                "cost_usd": format(cost, "f"),
+                "usage_in": tokens_in,
+                "usage_out": tokens_out,
+                "failure": error_code,
+            }
+        )
         log.info(
             "ai.invocation",
             tenant_id=str(tenant_id),
@@ -309,43 +342,50 @@ class Gateway:
         user: str,
         tool: str,
         schema: dict[str, Any],
+        attempts: int,
+        timeout: float,
     ) -> dict[str, Any]:
         digest = hashlib.sha256(f"{system}\n\x1f{user}".encode()).hexdigest()
-        self._check_caps(tenant_id)
-        started = time.monotonic()
-        try:
-            resp = self._attempt(model, system, user, tool, schema)
-        except ProviderCallError as exc:
-            self._record(
-                tenant_id,
-                extraction_id,
-                purpose,
-                model,
-                prompt_version,
-                digest,
-                "error",
-                started,
-                None,
-                exc.code,
+        failure: GatewayError | None = None
+        status, code, resp = "ok", None, None
+        # One transaction per call: the advisory lock serialises a tenant's calls, so the cap check below sees
+        # every earlier call's ledger row (no check-then-call race) and caps hold across worker processes.
+        with transaction(self.engine, tenant_id) as db:
+            db.execute(
+                text("SELECT pg_advisory_xact_lock(hashtextextended(:k, 0))"), {"k": f"ai:{tenant_id}"}
             )
-            raise ProviderUnavailable(exc.code) from exc
-        if resp.data is None:
+            self._check_caps(db, tenant_id)  # CapReached: rolled back, nothing recorded, no call made
+            started = time.monotonic()
+            try:
+                resp = self._attempt(model, system, user, tool, schema, attempts, timeout)
+            except ProviderCallError as exc:
+                status, code, failure = "error", exc.code, ProviderUnavailable(exc.code)
+            except Exception as exc:  # SDK or response-parsing failure: still a ledger row and a GatewayError
+                status, code, failure = (
+                    "error",
+                    f"sdk_{type(exc).__name__}"[:60],
+                    ProviderFailure(type(exc).__name__),
+                )
+            else:
+                if resp.data is None:
+                    status, failure = "refused", ProviderRefused("the model returned no usable output")
             self._record(
+                db,
                 tenant_id,
                 extraction_id,
                 purpose,
                 model,
                 prompt_version,
                 digest,
-                "refused",
+                status,
                 started,
                 resp,
-                None,
+                code,
             )
-            raise ProviderRefused("the model returned no usable output")
-        self._record(
-            tenant_id, extraction_id, purpose, model, prompt_version, digest, "ok", started, resp, None
-        )
+        if failure is not None:
+            raise failure
+        if resp is None or resp.data is None:  # unreachable: failure is set in both cases
+            raise ProviderFailure("no response")
         return resp.data
 
     def call(
@@ -362,11 +402,30 @@ class Gateway:
         tool: str,
         schema: dict[str, Any],
         validate: Validate | None = None,
+        repair: bool = True,
+        repair_purpose: str = "agreement_repair",
+        max_attempts: int | None = None,
+        timeout: float | None = None,
     ) -> CallResult:
-        """One logical model call (+ at most one repair). Raises a ``GatewayError`` subclass on failure."""
+        """One logical model call (+ at most one repair). Raises a ``GatewayError`` subclass on failure.
+        ``max_attempts`` / ``timeout`` tighten the limits for synchronous callers (request path)."""
         if not ai_enabled:
             raise AiDisabled("AI processing is not enabled for this workspace")
-        data = self._one(tenant_id, extraction_id, purpose, model, prompt_version, system, user, tool, schema)
+        attempts = max_attempts or self.settings.ai_max_attempts
+        seconds = timeout or self.settings.ai_request_timeout_seconds
+        data = self._one(
+            tenant_id,
+            extraction_id,
+            purpose,
+            model,
+            prompt_version,
+            system,
+            user,
+            tool,
+            schema,
+            attempts,
+            seconds,
+        )
         if validate is None:
             return CallResult(data, False, model)
         try:
@@ -374,6 +433,8 @@ class Gateway:
             return CallResult(data, False, model)
         except ValueError as first:
             problem = str(first)[:1000]
+        if not repair:
+            raise InvalidOutput(problem[:500])
         repair_user = (
             f"{user}\n\nYour previous answer was rejected by the validator: {problem}\n"
             "Return a corrected answer through the tool. Do not add anything the document does not state."
@@ -381,13 +442,15 @@ class Gateway:
         data = self._one(
             tenant_id,
             extraction_id,
-            "agreement_repair",
+            repair_purpose,
             model,
             prompt_version,
             system,
             repair_user,
             tool,
             schema,
+            attempts,
+            seconds,
         )
         try:
             validate(data)

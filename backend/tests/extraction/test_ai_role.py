@@ -1,6 +1,6 @@
 """``rebate_ai_writer`` and ``rebate_app`` privileges on the extraction tables, proven with the real roles on a
 real database (catalog check of every table/column, then actual statements). DATABASE_SCHEMA.md §2: the AI
-role may read file_objects and the extraction tables and write only extraction results and its usage ledger;
+role may read the extraction tables (and nothing of file_objects: the job reads files as the app role) and write only extraction results and its usage ledger;
 it must not be able to touch anything else (in particular drafts, versions, master data, users)."""
 
 from collections.abc import Iterator
@@ -25,7 +25,6 @@ RESULT_COLUMNS = {
 }  # fmt: skip
 PRIVS = ("SELECT", "INSERT", "UPDATE", "DELETE", "TRUNCATE", "REFERENCES", "TRIGGER")
 AI_TABLE_GRANTS = {  # the complete list of table-level privileges of the AI role
-    ("file_objects", "SELECT"),
     ("document_extractions", "SELECT"),
     ("ai_invocations", "SELECT"),
     ("ai_invocations", "INSERT"),
@@ -112,7 +111,20 @@ def test_the_app_role_can_queue_a_request_but_never_write_a_result(admin: Engine
                 {"c": col},
             ).scalar_one()
         }
-    assert queued == {"tenant_id", "id", "file_id", "kind", "status", "created_by", "created_at"}
+        assert queued == {"tenant_id", "id", "file_id", "kind", "status", "created_by", "created_at"}
+        failable = {
+            col
+            for (col,) in c.execute(
+                text(
+                    "SELECT column_name FROM information_schema.columns WHERE table_name = 'document_extractions'"
+                )
+            )
+            if c.execute(
+                text("SELECT has_column_privilege('rebate_app', 'document_extractions', :c, 'UPDATE')"),
+                {"c": col},
+            ).scalar_one()
+        }
+    assert failable == {"status", "error_code", "error_detail", "completed_at"}  # only to mark a row failed
 
 
 @pytest.fixture
@@ -172,6 +184,7 @@ def test_the_ai_role_cannot_touch_other_tables_or_identity_columns(
         "SELECT count(*) FROM audit_log",
         "SELECT count(*) FROM jobs",
         "UPDATE tenant_settings SET ai_processing_enabled = true",
+        "SELECT count(*) FROM file_objects",
         "UPDATE file_objects SET scan_status = 'clean'",
         "DELETE FROM file_objects",
         "DELETE FROM document_extractions",
@@ -199,7 +212,6 @@ def test_row_level_security_applies_to_the_ai_role(ai: Engine, queued: tuple[UUI
     assert _run(ai, other, "UPDATE document_extractions SET status = 'failed' WHERE id = :i", i=ex) == 0
     with transaction(ai, other) as db:
         assert db.execute(text("SELECT count(*) FROM document_extractions")).scalar_one() == 0
-        assert db.execute(text("SELECT count(*) FROM file_objects")).scalar_one() == 0
     with transaction(ai, None) as db:  # no tenant context at all: fail closed
         assert db.execute(text("SELECT count(*) FROM document_extractions")).scalar_one() == 0
     with (
@@ -252,3 +264,29 @@ def test_only_agreement_files_can_be_extracted(ws: Workspace) -> None:
     fid = clean_file(ws, "x.csv", b"a,b\n1,2\n")  # kind 'import'
     r = start(ws, fid)
     assert r.status_code == 409 and r.json()["error"]["code"] == "invalid_state"
+
+
+def test_the_app_role_can_only_fail_an_unfinished_row(migrated_db: DbUrls, queued: tuple[UUID, UUID]) -> None:
+    tenant, ex = queued
+    app = make_engine(migrated_db.app)
+    try:
+        with (
+            pytest.raises(DBAPIError) as exc,
+            transaction(app, tenant) as db,
+        ):  # the trigger, not only the grants
+            db.execute(text("UPDATE document_extractions SET status = 'processing' WHERE id = :i"), {"i": ex})
+        assert "may only mark an unfinished extraction failed" in str(exc.value)
+        assert (
+            _run(
+                app,
+                tenant,
+                "UPDATE document_extractions SET status = 'failed', error_code = 'x', completed_at = now() WHERE id = :i",
+                i=ex,
+            )
+            == 1
+        )
+        with pytest.raises(DBAPIError) as exc, transaction(app, tenant) as db:  # and a failed row is final
+            db.execute(text("UPDATE document_extractions SET error_code = 'y' WHERE id = :i"), {"i": ex})
+        assert "final" in str(exc.value)
+    finally:
+        app.dispose()

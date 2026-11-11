@@ -1,12 +1,14 @@
 """S6.4 AI extraction storage: document_extractions, ai_invocations, rebate_ai_writer grants.
 
-- document_extractions: tenant table (RLS ENABLE+FORCE). The app role may only SELECT and INSERT the *queued*
-  request row (column-level INSERT grant: it cannot set results). Every result column is written by
+- document_extractions: tenant table (RLS ENABLE+FORCE). The app role may only SELECT, INSERT the *queued*
+  request row (column-level INSERT grant: it cannot set results) and mark an unfinished row ``failed`` (column-level
+  UPDATE of status/error columns, enforced by the trigger: dead-lettered jobs and stale rows must not block the
+  file forever, even when the AI role is unreachable). Every result column is written by
   rebate_ai_writer through column-level UPDATE; a trigger freezes the identity columns and makes
   completed / needs_manual_entry / failed final (a re-run is a new row).
 - ai_invocations: append-only usage ledger (cost, tokens, hashes; never prompts or responses). Only
   rebate_ai_writer inserts; the app role only reads (usage view, daily caps are checked by the gateway).
-- rebate_ai_writer gets exactly: SELECT file_objects, SELECT/UPDATE(result columns) document_extractions,
+- rebate_ai_writer gets exactly: SELECT/UPDATE(result columns) document_extractions,
   SELECT/INSERT ai_invocations. agreement_drafts / agreement_draft_revisions are NOT granted although
   DATABASE_SCHEMA.md §2 allows them: the draft is written by the worker's app session because the shared
   AgreementValidator needs master-data reads that the AI role must not have (stricter than §2).
@@ -97,6 +99,10 @@ def upgrade() -> None:
                 RAISE EXCEPTION 'a finished extraction is final (re-run creates a new row)'
                     USING ERRCODE = 'restrict_violation';
             END IF;
+            IF current_user = 'rebate_app' AND (NEW.status <> 'failed' OR NEW.error_code IS NULL) THEN
+                RAISE EXCEPTION 'the app role may only mark an unfinished extraction failed'
+                    USING ERRCODE = 'restrict_violation';
+            END IF;
             RETURN NEW;
         END
         $$
@@ -139,7 +145,7 @@ def upgrade() -> None:
             CONSTRAINT fk_ai_invocations_document_extractions FOREIGN KEY (tenant_id, extraction_id)
                 REFERENCES document_extractions (tenant_id, id),
             CONSTRAINT ck_ai_invocations_purpose
-                CHECK (purpose IN ('agreement_pass_a', 'agreement_pass_b', 'agreement_repair', 'mapping')),
+                CHECK (purpose IN ('agreement_pass_a', 'agreement_pass_b', 'agreement_repair', 'mapping', 'mapping_repair')),
             CONSTRAINT ck_ai_invocations_status CHECK (status IN ('ok', 'error', 'refused', 'invalid_output')),
             CONSTRAINT ck_ai_invocations_input_sha256 CHECK (input_sha256 ~ '^[0-9a-f]{64}$'),
             CONSTRAINT ck_ai_invocations_amounts
@@ -168,6 +174,9 @@ def upgrade() -> None:
         "GRANT INSERT (tenant_id, id, file_id, kind, status, created_by, created_at) "
         "ON document_extractions TO rebate_app"
     )
-    op.execute("GRANT SELECT ON file_objects, document_extractions, ai_invocations TO rebate_ai_writer")
+    op.execute("GRANT SELECT ON document_extractions, ai_invocations TO rebate_ai_writer")
     op.execute(f"GRANT UPDATE ({RESULT_COLUMNS}) ON document_extractions TO rebate_ai_writer")
     op.execute("GRANT INSERT ON ai_invocations TO rebate_ai_writer")
+    op.execute(
+        "GRANT UPDATE (status, error_code, error_detail, completed_at) ON document_extractions TO rebate_app"
+    )

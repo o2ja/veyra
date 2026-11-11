@@ -124,7 +124,9 @@ def start(
         raise ValidationFailed(
             details=[{"field": "kind", "code": "invalid_choice", "message": "Only agreement is supported."}]
         )
-    row, created = service.request_extraction(db, _who(request, principal), body.file_id, body.rerun)
+    row, created = service.request_extraction(
+        db, _who(request, principal), body.file_id, body.rerun, request.app.state.settings
+    )
     response.status_code = 202 if created else 200
     return _out(db, row)
 

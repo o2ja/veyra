@@ -82,9 +82,13 @@ class Action(StrEnum):
     EXTRACTION_REQUESTED = "extraction.requested"
     EXTRACTION_FINISHED = "extraction.finished"
     IMPORT_MAPPING_SUGGESTED = "import.mapping_suggested"
+    AI_INVOCATION = "ai.invocation"
 
 
 AUDITED_FIELDS: dict[str, frozenset[str]] = {
+    "ai_invocation": frozenset(
+        {"extraction_id", "purpose", "model", "status", "cost_usd", "usage_in", "usage_out", "failure"}
+    ),
     "document_extraction": frozenset(
         {"file_id", "kind", "status", "failure", "model", "prompt_version", "draft_id", "text_method"}
     ),
