@@ -1717,6 +1717,225 @@
         "title": "ExtractionDetail",
         "type": "object"
       },
+      "ExtractionEvidence": {
+        "additionalProperties": false,
+        "properties": {
+          "boxes": {
+            "items": {
+              "items": {
+                "type": "number"
+              },
+              "type": "array"
+            },
+            "title": "Boxes",
+            "type": "array"
+          },
+          "cell": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Cell"
+          },
+          "end": {
+            "title": "End",
+            "type": "integer"
+          },
+          "page": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Page"
+          },
+          "quote": {
+            "title": "Quote",
+            "type": "string"
+          },
+          "sheet": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Sheet"
+          },
+          "start": {
+            "title": "Start",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "page",
+          "sheet",
+          "cell",
+          "quote",
+          "start",
+          "end",
+          "boxes"
+        ],
+        "title": "ExtractionEvidence",
+        "type": "object"
+      },
+      "ExtractionFieldView": {
+        "additionalProperties": false,
+        "properties": {
+          "confidence": {
+            "title": "Confidence",
+            "type": "string"
+          },
+          "critical": {
+            "title": "Critical",
+            "type": "boolean"
+          },
+          "evidence": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ExtractionEvidence"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "key": {
+            "title": "Key",
+            "type": "string"
+          },
+          "pass_a": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ExtractionPassView"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "pass_b": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ExtractionPassView"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "reasons": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Reasons",
+            "type": "array"
+          },
+          "value": {
+            "title": "Value"
+          }
+        },
+        "required": [
+          "key",
+          "critical",
+          "value",
+          "confidence",
+          "reasons",
+          "evidence",
+          "pass_a",
+          "pass_b"
+        ],
+        "title": "ExtractionFieldView",
+        "type": "object"
+      },
+      "ExtractionIndicator": {
+        "additionalProperties": false,
+        "properties": {
+          "cell": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Cell"
+          },
+          "end": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "End"
+          },
+          "excerpt": {
+            "title": "Excerpt",
+            "type": "string"
+          },
+          "kind": {
+            "title": "Kind",
+            "type": "string"
+          },
+          "page": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Page"
+          },
+          "sheet": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Sheet"
+          },
+          "start": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Start"
+          }
+        },
+        "required": [
+          "kind",
+          "excerpt",
+          "page",
+          "sheet",
+          "cell",
+          "start",
+          "end"
+        ],
+        "title": "ExtractionIndicator",
+        "type": "object"
+      },
       "ExtractionList": {
         "properties": {
           "data": {
@@ -1870,6 +2089,129 @@
           "completed_at"
         ],
         "title": "ExtractionOut",
+        "type": "object"
+      },
+      "ExtractionPassView": {
+        "additionalProperties": false,
+        "properties": {
+          "evidence": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ExtractionEvidence"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "reasons": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Reasons",
+            "type": "array"
+          },
+          "status": {
+            "title": "Status",
+            "type": "string"
+          },
+          "value": {
+            "title": "Value"
+          }
+        },
+        "required": [
+          "status",
+          "value",
+          "reasons",
+          "evidence"
+        ],
+        "title": "ExtractionPassView",
+        "type": "object"
+      },
+      "ExtractionResult": {
+        "additionalProperties": false,
+        "properties": {
+          "agreement_type": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Agreement Type"
+          },
+          "blocking": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Blocking",
+            "type": "array"
+          },
+          "draft_id": {
+            "title": "Draft Id",
+            "type": "string"
+          },
+          "fields": {
+            "items": {
+              "$ref": "#/components/schemas/ExtractionFieldView"
+            },
+            "title": "Fields",
+            "type": "array"
+          },
+          "indicators": {
+            "items": {
+              "$ref": "#/components/schemas/ExtractionIndicator"
+            },
+            "title": "Indicators",
+            "type": "array"
+          },
+          "needs_acknowledgement": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Needs Acknowledgement",
+            "type": "array"
+          },
+          "notes": {
+            "additionalProperties": {
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            "title": "Notes",
+            "type": "object"
+          },
+          "payload": {
+            "additionalProperties": true,
+            "title": "Payload",
+            "type": "object"
+          },
+          "schema_version": {
+            "title": "Schema Version",
+            "type": "integer"
+          },
+          "unresolved": {
+            "additionalProperties": true,
+            "title": "Unresolved",
+            "type": "object"
+          }
+        },
+        "required": [
+          "schema_version",
+          "agreement_type",
+          "payload",
+          "fields",
+          "blocking",
+          "needs_acknowledgement",
+          "indicators",
+          "draft_id",
+          "notes",
+          "unresolved"
+        ],
+        "title": "ExtractionResult",
         "type": "object"
       },
       "ExtractionStart": {

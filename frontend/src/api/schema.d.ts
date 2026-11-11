@@ -1948,6 +1948,56 @@ export interface components {
                 [key: string]: unknown;
             } | null;
         };
+        /** ExtractionEvidence */
+        ExtractionEvidence: {
+            /** Boxes */
+            boxes: number[][];
+            /** Cell */
+            cell: string | null;
+            /** End */
+            end: number;
+            /** Page */
+            page: number | null;
+            /** Quote */
+            quote: string;
+            /** Sheet */
+            sheet: string | null;
+            /** Start */
+            start: number;
+        };
+        /** ExtractionFieldView */
+        ExtractionFieldView: {
+            /** Confidence */
+            confidence: string;
+            /** Critical */
+            critical: boolean;
+            evidence: components["schemas"]["ExtractionEvidence"] | null;
+            /** Key */
+            key: string;
+            pass_a: components["schemas"]["ExtractionPassView"] | null;
+            pass_b: components["schemas"]["ExtractionPassView"] | null;
+            /** Reasons */
+            reasons: string[];
+            /** Value */
+            value: unknown;
+        };
+        /** ExtractionIndicator */
+        ExtractionIndicator: {
+            /** Cell */
+            cell: string | null;
+            /** End */
+            end: number | null;
+            /** Excerpt */
+            excerpt: string;
+            /** Kind */
+            kind: string;
+            /** Page */
+            page: number | null;
+            /** Sheet */
+            sheet: string | null;
+            /** Start */
+            start: number | null;
+        };
         /** ExtractionList */
         ExtractionList: {
             /** Data */
@@ -1995,6 +2045,45 @@ export interface components {
             status: string;
             /** Text Method */
             text_method: string | null;
+        };
+        /** ExtractionPassView */
+        ExtractionPassView: {
+            evidence: components["schemas"]["ExtractionEvidence"] | null;
+            /** Reasons */
+            reasons: string[];
+            /** Status */
+            status: string;
+            /** Value */
+            value: unknown;
+        };
+        /** ExtractionResult */
+        ExtractionResult: {
+            /** Agreement Type */
+            agreement_type: string | null;
+            /** Blocking */
+            blocking: string[];
+            /** Draft Id */
+            draft_id: string;
+            /** Fields */
+            fields: components["schemas"]["ExtractionFieldView"][];
+            /** Indicators */
+            indicators: components["schemas"]["ExtractionIndicator"][];
+            /** Needs Acknowledgement */
+            needs_acknowledgement: string[];
+            /** Notes */
+            notes: {
+                [key: string]: string[];
+            };
+            /** Payload */
+            payload: {
+                [key: string]: unknown;
+            };
+            /** Schema Version */
+            schema_version: number;
+            /** Unresolved */
+            unresolved: {
+                [key: string]: unknown;
+            };
         };
         /** ExtractionStart */
         ExtractionStart: {

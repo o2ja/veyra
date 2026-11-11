@@ -259,5 +259,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.include_router(health.router, prefix=API_PREFIX)
     for router in MODULE_ROUTERS:
         app.include_router(router, prefix=API_PREFIX, dependencies=[RequestContextDep])
-    _publish_schemas(app, (agreements.Payload,))  # the draft payload (DraftOut.payload, DraftUpdate.payload)
+    _publish_schemas(
+        app, (agreements.Payload, extraction.ExtractionResult)
+    )  # the draft payload (DraftOut.payload, DraftUpdate.payload)
     return app
