@@ -7,7 +7,7 @@ import { ApiError, unwrap } from "../../lib/api/errors";
 import { useSession } from "../../lib/session";
 import { DataTable, PagerControls, SelectField, usePager, utc } from "../masterdata/common";
 import { AgreementsNav } from "./common";
-import { DRAFT_STATUSES, DRAFT_STATUS_LABELS } from "./logic";
+import { DRAFT_STATUSES, DRAFT_STATUS_LABELS, emptyPayload } from "./logic";
 
 type DraftStatus = (typeof DRAFT_STATUSES)[number];
 type FilterStatus = DraftStatus | "all";
@@ -49,7 +49,8 @@ export function DraftsPage() {
     mutationFn: () =>
       unwrap(
         api.POST("/api/v1/agreement-drafts", {
-          body: { source: "manual", payload: null },
+          // the form starts from these visible defaults, so the server holds exactly what the user sees
+          body: { source: "manual", payload: emptyPayload() as unknown as Record<string, unknown> },
         }),
       ),
     onSuccess: (draft) => {

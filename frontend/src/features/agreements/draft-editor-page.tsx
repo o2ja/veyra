@@ -33,6 +33,7 @@ import {
   switchPayloadType,
   applyEdit,
   viewPayload,
+  intOrRaw,
 } from "./logic";
 
 /** Disabled controls cannot take focus; focus their label/row wrapper instead so read-only reviewers still land on the field. */
@@ -109,7 +110,7 @@ function HeaderSection({
             type="number"
             value={h.priority}
             error={fieldError(error, "payload.header.priority") ?? fieldError(error, "header.priority")}
-            onChange={(e) => setHeader({ priority: e.target.value as never })}
+            onChange={(e) => setHeader({ priority: intOrRaw(e.target.value) as never })}
           />
           <Field
             id="field-header-valid_from"
@@ -415,7 +416,7 @@ function RulesSection({
             type="number"
             min={0}
             value={rules.rounding.scale}
-            onChange={(e) => setRounding({ scale: e.target.value as never })}
+            onChange={(e) => setRounding({ scale: intOrRaw(e.target.value) as never })}
           />
           <SelectField
             id="field-rules-rounding-timing"
@@ -761,7 +762,9 @@ function TiersSection({
                 value={t.tier_number}
                 onChange={(e) =>
                   onChange(
-                    tiers.map((row, j) => (j === i ? { ...row, tier_number: e.target.value as never } : row)),
+                    tiers.map((row, j) =>
+                      j === i ? { ...row, tier_number: intOrRaw(e.target.value) as never } : row,
+                    ),
                   )
                 }
               />

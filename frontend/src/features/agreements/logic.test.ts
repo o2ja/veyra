@@ -1,6 +1,7 @@
 import { expect, test } from "vitest";
 
 import {
+  intOrRaw,
   buildAmendmentPayload,
   emptyPayload,
   flattenRulesEntries,
@@ -186,4 +187,12 @@ test("buildAmendmentPayload copies rules as returned", () => {
     [],
   );
   expect(p.rules).toBe(rules);
+});
+
+test("intOrRaw converts whole numbers and passes anything else through unchanged", () => {
+  expect(intOrRaw("7")).toBe(7);
+  expect(intOrRaw(" -3 ")).toBe(-3);
+  expect(intOrRaw("")).toBe("");
+  expect(intOrRaw("2.5")).toBe("2.5");
+  expect(intOrRaw("abc")).toBe("abc");
 });

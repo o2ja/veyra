@@ -321,3 +321,9 @@ export function flattenRulesEntries(
   }
   return out;
 }
+
+/** Integer inputs: a whole-number string becomes that integer; anything else is sent as typed, so the
+ * server's validation (not the UI) rejects it. Never substitutes a default. */
+export function intOrRaw(value: string): number | string {
+  return /^-?\d+$/.test(value.trim()) ? Number(value.trim()) : value;
+}
