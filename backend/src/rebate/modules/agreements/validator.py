@@ -322,6 +322,7 @@ def _relation(
         ("payload.header.agreement_type", h.agreement_type, agreement.agreement_type),
         ("payload.header.external_number", h.external_number, agreement.external_number),
         ("payload.header.manufacturer_code", manufacturer_id, agreement.manufacturer_id),
+        ("payload.header.name", h.name, agreement.name),  # the name lives on the agreement, not the version
     ):
         if value != expected:
             result.error(path, "mismatch", "Must match the agreement being amended.")
