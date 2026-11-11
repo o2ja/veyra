@@ -79,9 +79,19 @@ class Action(StrEnum):
     AGREEMENT_VERSION_EXPIRED = "agreement_version.expired"
     AGREEMENT_VERSION_CANCELLED = "agreement_version.cancelled"
     AGREEMENT_VERSION_EXPIRY_ALERT = "agreement_version.expiry_alert"
+    EXTRACTION_REQUESTED = "extraction.requested"
+    EXTRACTION_FINISHED = "extraction.finished"
+    IMPORT_MAPPING_SUGGESTED = "import.mapping_suggested"
+    AI_INVOCATION = "ai.invocation"
 
 
 AUDITED_FIELDS: dict[str, frozenset[str]] = {
+    "ai_invocation": frozenset(
+        {"extraction_id", "purpose", "model", "status", "cost_usd", "usage_in", "usage_out", "failure"}
+    ),
+    "document_extraction": frozenset(
+        {"file_id", "kind", "status", "failure", "model", "prompt_version", "draft_id", "text_method"}
+    ),
     "user": frozenset({"email", "full_name", "mfa_enabled"}),
     "tenant": frozenset({"name", "slug", "status"}),
     "settings": frozenset(
@@ -181,6 +191,7 @@ AUDITED_FIELDS: dict[str, frozenset[str]] = {
             "agreement_id",
             "amends_version_id",
             "source_file_id",
+            "extraction_id",
             "change_summary",
             "item_count",
             "error_count",

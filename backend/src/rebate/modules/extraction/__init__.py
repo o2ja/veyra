@@ -1,8 +1,8 @@
-"""extraction module (S6): document text extraction and deterministic verification of AI output.
-
-Pure parts so far (S6.1 without OCR execution, S6.3): no models, router or provider calls. Public API.
+"""extraction module (S6): document text extraction/OCR, the AI gateway, deterministic verification of AI
+output, the ``extract_agreement`` job, extraction/usage/mapping APIs. Public API.
 """
 
+from rebate.modules.extraction import jobs as _jobs  # noqa: F401  (registers job handlers)
 from rebate.modules.extraction.documents import (
     Cell,
     ExtractionFailure,
@@ -15,6 +15,7 @@ from rebate.modules.extraction.documents import (
     extract_xlsx,
 )
 from rebate.modules.extraction.injection import Indicator, IndicatorKind, detect
+from rebate.modules.extraction.router import router
 from rebate.modules.extraction.verification import (
     CandidateField,
     CandidateFormatError,
@@ -46,5 +47,6 @@ __all__ = [
     "extract_pdf",
     "extract_xlsx",
     "flatten",
+    "router",
     "run_verification",
 ]

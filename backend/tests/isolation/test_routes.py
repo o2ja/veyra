@@ -19,7 +19,7 @@ from tests.conftest import DbUrls
 from tests.integration.agreements_support import activate, payload
 from tests.integration.conftest import Workspace, clean_file, import_file, put, run_import, seed_master, walk
 from tests.security.flows import full_admin
-from tests.support import Api, api_client, fake_clock, latest_token, make_app, unique_email
+from tests.support import Api, api_client, drain, fake_clock, latest_token, make_app, unique_email
 from tests.testdata import data
 
 
@@ -34,6 +34,7 @@ class Side:
     job_id: str
     s3: dict[str, str] = field(default_factory=dict)  # S3 path parameter -> one id of this tenant
     s4: dict[str, str] = field(default_factory=dict)  # S4 path parameter -> one id of this tenant
+    s6: dict[str, str] = field(default_factory=dict)  # S6 path parameter -> one id of this tenant
 
 
 @pytest.fixture(scope="module")
@@ -62,6 +63,7 @@ def sides(migrated_db: DbUrls) -> Iterator[tuple[Side, Side]]:
             )
             side.s3 = _seed_s3(Workspace(api, app, side.tenant_id, side.user_id, {}))
             side.s4 = _seed_s4(api)
+            side.s6 = _seed_s6(api)
             out.append(side)
         yield out[0], out[1]
 
@@ -104,6 +106,34 @@ def _seed_s4(api: Api) -> dict[str, str]:
             "other_version_id": v2["id"]}  # fmt: skip
 
 
+def _seed_s6(api: Api) -> dict[str, str]:
+    """AI on, one queued extraction of an agreement file (the job is never run here: no gateway configured)."""
+    etag = api.get("/settings").headers["ETag"]
+    assert (
+        api.patch("/settings", json={"ai_processing_enabled": True}, headers={"If-Match": etag}).status_code
+        == 200
+    )
+    csrf = api.csrf()
+    up = api.client.post(
+        "/api/v1/files",
+        files={
+            "file": (
+                "agr.pdf",
+                data("agreements/SYNTHETIC_spa_voltara_SPA-VOLT-2026-884.pdf"),
+                "application/pdf",
+            )
+        },
+        data={"kind": "agreement"},
+        headers={"Origin": "https://testserver", "X-CSRF-Token": csrf},
+    )
+    assert up.status_code == 201, up.text
+    drain()
+    r = api.post("/document-extractions", json={"file_id": up.json()["id"]})
+    assert r.status_code == 202, r.text
+    return {"extraction_id": r.json()["id"]}
+
+
+S6_PARAMS = ("extraction_id",)
 S4_PARAMS = ("agreement_id", "draft_id", "version_id", "other_version_id")
 S3_PARAMS = ("manufacturer_id", "customer_id", "product_id", "conversion_id", "entry_id", "import_id",
              "template_id", "line_id")  # fmt: skip
@@ -116,6 +146,7 @@ PARAM_SOURCES = {
     "job_id": "job_id",
     **{p: f"s3.{p}" for p in S3_PARAMS},
     **{p: f"s4.{p}" for p in S4_PARAMS},
+    **{p: f"s6.{p}" for p in S6_PARAMS},
 }
 
 
@@ -123,6 +154,8 @@ def _attack_value(side: Side, param: str) -> str:
     source = PARAM_SOURCES[param]
     if source.startswith("s3."):
         return side.s3[param]
+    if source.startswith("s6."):
+        return side.s6[param]
     return side.s4[param] if source.startswith("s4.") else str(getattr(side, source))
 
 
@@ -278,6 +311,15 @@ def test_r2_s3_lists_never_contain_the_other_tenant(sides: tuple[Side, Side], pa
     own, other = set(walk(_ws(a), path, {"limit": 200})), set(walk(_ws(b), path, {"limit": 200}))
     assert own and other, f"{path}: both tenants need rows, otherwise this proves nothing"
     assert not own & other, f"{path}: A sees {len(own & other)} of B's rows"
+
+
+def test_r2_extraction_list_and_usage_never_contain_the_other_tenant(sides: tuple[Side, Side]) -> None:
+    a, b = sides
+    own = {x["id"] for x in a.api.get("/document-extractions").json()["data"]}
+    other = {x["id"] for x in b.api.get("/document-extractions").json()["data"]}
+    assert own == {a.s6["extraction_id"]} and other == {b.s6["extraction_id"]}, (own, other)
+    assert a.api.get("/document-extractions", params={"file_id": b.file_id}).json()["data"] == []
+    assert a.api.get("/ai/usage").json()["daily"] == [] and b.api.get("/ai/usage").json()["daily"] == []
 
 
 @pytest.mark.parametrize(

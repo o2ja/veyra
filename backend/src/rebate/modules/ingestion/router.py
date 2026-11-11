@@ -11,7 +11,7 @@ from fastapi import APIRouter, Depends, Header, Query, Request, Response
 from fastapi.responses import JSONResponse, StreamingResponse
 
 from rebate.core.access import require, tenant_of
-from rebate.core.errors import Conflict, PreconditionFailed
+from rebate.core.errors import PreconditionFailed
 from rebate.core.query import only_query_params
 from rebate.core.request import Principal, ctx
 from rebate.modules.ingestion import idempotency, lines, service
@@ -25,15 +25,6 @@ READ = "data.read"
 RUN = "import.run"
 Limit = Annotated[int, Query(ge=1, le=200)]
 PAGED = ("limit", "cursor")
-
-
-class AiNotEnabled(Conflict):
-    code = "ai_not_enabled"
-    message = (
-        "AI mapping suggestions are not available: the AI gateway arrives with a later release stage and "
-        "AI processing is opt-in per workspace. Map the columns manually (the preview suggests matches by "
-        "column name)."
-    )
 
 
 def _out(b: ImportBatch) -> s.ImportOut:
@@ -168,18 +159,6 @@ def set_mapping(
         meta=c.audit_meta(),
     )
     return _accepted(batch, job_id)
-
-
-@router.post(
-    "/imports/{import_id}/suggest-mapping",
-    operation_id="import_suggest_mapping",
-    responses={409: {"description": "AI not enabled"}},
-)
-def suggest_mapping(
-    request: Request, import_id: UUID, principal: Annotated[Principal, Depends(require("ai.use"))]
-) -> None:
-    service.get_batch(ctx(request).db, tenant_of(principal), import_id)  # 404 for unknown / foreign ids
-    raise AiNotEnabled()
 
 
 @router.post(

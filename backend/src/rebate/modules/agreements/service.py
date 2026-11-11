@@ -256,6 +256,52 @@ def create_draft(
     return draft
 
 
+def create_ai_draft(
+    db: Session,
+    who: Who,
+    *,
+    payload: dict[str, Any],
+    source_file_id: UUID,
+    extraction_id: UUID,
+    needs_manual_entry: bool,
+) -> AgreementDraft:
+    """The draft of an AI extraction (S6): the same pipeline as ``create_draft`` (revision 1, validator, audit),
+    source ``ai_extraction`` and, when nothing usable was extracted, status ``needs_manual_entry``. Called by
+    the extraction job only; ``POST /agreement-drafts`` still refuses ``ai_extraction`` (the user starts an
+    extraction through ``POST /document-extractions``). ``who.user_id`` is the user who requested it."""
+    _check_size(payload)
+    now = clock.now()
+    draft = AgreementDraft(
+        tenant_id=who.tenant_id,
+        id=new_id(),
+        source="ai_extraction",
+        status="needs_manual_entry" if needs_manual_entry else "draft",
+        payload=payload,
+        payload_schema_version=_schema_version(payload),
+        revision=1,
+        source_file_id=source_file_id,
+        extraction_id=extraction_id,
+        created_by=who.user_id,
+        created_at=now,
+        updated_at=now,
+    )
+    db.add(draft)
+    db.flush()
+    db.add(_revision_row(draft, who, "Created from AI extraction"))
+    _run_validator(db, draft)
+    db.flush()
+    audit_event(
+        db,
+        who,
+        Action.AGREEMENT_DRAFT_CREATED,
+        "agreement_draft",
+        draft.id,
+        system=True,
+        after=_draft_audit(draft, source_file_id=source_file_id, extraction_id=extraction_id),
+    )
+    return draft
+
+
 def _revision_row(draft: AgreementDraft, who: Who, summary: str | None) -> AgreementDraftRevision:
     return AgreementDraftRevision(
         tenant_id=draft.tenant_id,

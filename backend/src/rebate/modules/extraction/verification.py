@@ -67,7 +67,7 @@ def _enum(
 
 
 # Critical = AI_PROCESSING.md §4.5: dates, rates, thresholds, costs, customer scope, exclusions,
-# rounding/date basis, claim UoM.
+# rounding/date basis, claim UoM; plus (owner-approved, S6) calculation_basis, tier_mode, volume_basis.
 SPECS: dict[str, FieldSpec] = {
     "header.agreement_type": _enum("agreement_type", {"spa", "rebate"}, False),
     "header.external_number": FieldSpec(Kind.identifier, False),
@@ -78,7 +78,7 @@ SPECS: dict[str, FieldSpec] = {
     "rules.calculation_basis": _enum(
         "calculation_basis",
         {"price_difference", "percent_of_sell", "percent_of_cost", "flat_per_unit", "guaranteed_margin"},
-        False,
+        True,
         _SPA,
     ),
     "rules.cost_source": _enum(
@@ -87,8 +87,8 @@ SPECS: dict[str, FieldSpec] = {
     "rules.claim_uom": FieldSpec(Kind.uom, True, _SPA),
     "rules.rounding": FieldSpec(Kind.rounding, True),
     "rules.spa_reference_required": _enum("spa_reference_required", {True, False}, False, _SPA),
-    "rules.tier_mode": _enum("tier_mode", {"retroactive", "incremental"}, False, _REBATE),
-    "rules.volume_basis": _enum("volume_basis", {"purchases", "sales"}, False, _REBATE),
+    "rules.tier_mode": _enum("tier_mode", {"retroactive", "incremental"}, True, _REBATE),
+    "rules.volume_basis": _enum("volume_basis", {"purchases", "sales"}, True, _REBATE),
     "rules.spa_lines_policy": _enum(
         "spa_lines_policy", {"include", "qualify_only", "exclude"}, True, _REBATE
     ),
@@ -357,6 +357,9 @@ def _canonical(spec: FieldSpec, value: Any) -> Any:
                 "start": p.parse_iso_date(value["start"]),
                 "end": p.parse_iso_date(value["end"]),
             }
+
+
+canonical = _canonical  # public alias: the comparable form of a verified value (payload building)
 
 
 def _check_value(spec: FieldSpec, value: Any, source: str) -> tuple[bool, tuple[str, ...]]:
@@ -644,6 +647,7 @@ __all__ = [
     "Span",
     "Status",
     "VerificationReport",
+    "canonical",
     "compare_passes",
     "find_quote",
     "flatten",

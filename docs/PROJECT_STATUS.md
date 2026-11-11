@@ -37,9 +37,11 @@ Multi-agent waves (worktree branches, orchestrator merges). Resume point:
 - S4 frontend handed to an external agent (Antigravity/Gemini) on branch `ui/s4` (worktree `D:eyraeyra-ui-s4`):
   brief `docs/reports/notes/ui-brief-s4.md`, prompt `antigravity-prompt-s4.md`, report expected at
   `ui-report-s4.md`. Orchestrator verifies + reviews before merge. (S3 frontend was already merged in #5.)
-- **Resume point:** S6 extraction backend (`s6-backend`, brief C2) → S5 orchestration (`s5-runs`, C1; owner
-  approval at S5) → integration. Old `s4-frontend` branch (C3 WIP, only logic.ts) superseded by `ui/s4`.
-- `period_end` defined by orchestrator: last day of the calendar month of the line's claim date (flag to owner).
+- **Resume point (2026-11-11 night):** done: S4 merged; `ui/s4` WIP pushed. Running: S6 backend (`s6-backend`) and
+  S5 runs (`s5-runs`) builder agents in parallel → reviews → merge S6, then S5 (re-chain its migration). Log:
+  `docs/reports/notes/overnight-log.md`. Old `s4-frontend` branch (C3 WIP) superseded by `ui/s4`.
+- Claim window (owner 2026-11-11): `month_end` for SPA lines (last day of the claim-date month), `period_end` for
+  rebates only (measurement period end); replaces the earlier orchestrator definition.
 - Open engine rules (raise instead of guessing): `cap_scope=per_agreement`, `tier_metric=quantity`,
   `claim_window_basis=period_end`.
 
