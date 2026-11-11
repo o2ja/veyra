@@ -1,0 +1,147 @@
+{
+  "content": [
+    {
+      "id": "toolu_a",
+      "input": {
+        "header": {
+          "agreement_type": {
+            "evidence": {
+              "page": 1,
+              "quote": "GROWTH REBATE"
+            },
+            "value": "rebate"
+          },
+          "external_number": {
+            "evidence": {
+              "page": 1,
+              "quote": "Program REB-NWND-2026, calendar year 2026."
+            },
+            "value": "REB-NWND-2026"
+          },
+          "manufacturer_name": {
+            "evidence": {
+              "page": 1,
+              "quote": "NORTHWIND HVAC (SYNTHETIC)"
+            },
+            "value": "Northwind HVAC (SYNTHETIC)"
+          },
+          "valid_from": {
+            "evidence": {
+              "page": 1,
+              "quote": "Program REB-NWND-2026, calendar year 2026."
+            },
+            "value": "2026-01-01"
+          },
+          "valid_to": {
+            "evidence": {
+              "page": 1,
+              "quote": "Program REB-NWND-2026, calendar year 2026."
+            },
+            "value": "2026-12-31"
+          }
+        },
+        "rules": {
+          "measurement_period": {
+            "evidence": {
+              "page": 1,
+              "quote": "Program REB-NWND-2026, calendar year 2026."
+            },
+            "value": {
+              "end": "2026-12-31",
+              "kind": "calendar_year",
+              "start": "2026-01-01"
+            }
+          },
+          "rounding": {
+            "evidence": null,
+            "value": null
+          },
+          "spa_lines_policy": {
+            "evidence": {
+              "page": 1,
+              "quote": "Product sold under a Special Pricing Agreement counts toward the qualifying sales used to determine the tier, but does not itself earn rebate."
+            },
+            "value": "qualify_only"
+          },
+          "tier_mode": {
+            "evidence": {
+              "page": 1,
+              "quote": "The tier reached applies to all rebate-eligible sales from the first dollar."
+            },
+            "value": "retroactive"
+          },
+          "volume_basis": {
+            "evidence": {
+              "page": 1,
+              "quote": "Rebate is earned on Distributor's qualifying sales of Northwind products"
+            },
+            "value": "sales"
+          }
+        },
+        "schema_version": 1,
+        "tiers": [
+          {
+            "lower_bound": {
+              "evidence": {
+                "page": 1,
+                "quote": "A $0 1.5%"
+              },
+              "value": "0"
+            },
+            "rate": {
+              "evidence": {
+                "page": 1,
+                "quote": "A $0 1.5%"
+              },
+              "value": "0.015"
+            }
+          },
+          {
+            "lower_bound": {
+              "evidence": {
+                "page": 1,
+                "quote": "B $1,000,000 2.5%"
+              },
+              "value": "1000000"
+            },
+            "rate": {
+              "evidence": {
+                "page": 1,
+                "quote": "B $1,000,000 2.5%"
+              },
+              "value": "0.025"
+            }
+          },
+          {
+            "lower_bound": {
+              "evidence": {
+                "page": 1,
+                "quote": "C $2,000,000 3.5%"
+              },
+              "value": "2000000"
+            },
+            "rate": {
+              "evidence": {
+                "page": 1,
+                "quote": "C $2,000,000 3.5%"
+              },
+              "value": "0.035"
+            }
+          }
+        ]
+      },
+      "name": "record_extraction",
+      "type": "tool_use"
+    }
+  ],
+  "id": "msg_recorded_a",
+  "model": "claude-sonnet-5-5",
+  "role": "assistant",
+  "stop_reason": "tool_use",
+  "stop_sequence": null,
+  "type": "message",
+  "usage": {
+    "input_tokens": 4200,
+    "output_tokens": 1100
+  }
+}

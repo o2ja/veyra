@@ -1,0 +1,151 @@
+{
+  "content": [
+    {
+      "id": "toolu_b",
+      "input": {
+        "header": {
+          "agreement_type": {
+            "evidence": {
+              "page": 1,
+              "quote": "ANNUAL VOLUME INCENTIVE PROGRAM"
+            },
+            "value": "rebate"
+          },
+          "external_number": {
+            "evidence": {
+              "page": 1,
+              "quote": "Program No. REB-VOLT-2026"
+            },
+            "value": "REB-VOLT-2026"
+          },
+          "manufacturer_name": {
+            "evidence": {
+              "page": 1,
+              "quote": "VOLTARA ELECTRIC (SYNTHETIC)"
+            },
+            "value": "Voltara Electric (SYNTHETIC)"
+          },
+          "valid_from": {
+            "evidence": {
+              "page": 1,
+              "quote": "Program year: calendar year 2026"
+            },
+            "value": "2026-01-01"
+          },
+          "valid_to": {
+            "evidence": {
+              "page": 1,
+              "quote": "Program year: calendar year 2026"
+            },
+            "value": "2026-12-31"
+          }
+        },
+        "rules": {
+          "measurement_period": {
+            "evidence": {
+              "page": 1,
+              "quote": "Program year: calendar year 2026"
+            },
+            "value": {
+              "end": "2026-12-31",
+              "kind": "calendar_year",
+              "start": "2026-01-01"
+            }
+          },
+          "rounding": {
+            "evidence": {
+              "page": 1,
+              "quote": "Rebates are rounded to the nearest cent."
+            },
+            "value": {
+              "mode": "half_up",
+              "scale": 2,
+              "timing": "per_line"
+            }
+          },
+          "spa_lines_policy": {
+            "evidence": null,
+            "value": null
+          },
+          "tier_mode": {
+            "evidence": {
+              "page": 1,
+              "quote": "the higher rate applies retroactively to the first dollar of Net Purchases"
+            },
+            "value": "retroactive"
+          },
+          "volume_basis": {
+            "evidence": {
+              "page": 1,
+              "quote": "Distributor earns a rebate on Net Purchases of all Voltara products"
+            },
+            "value": "purchases"
+          }
+        },
+        "schema_version": 1,
+        "tiers": [
+          {
+            "lower_bound": {
+              "evidence": {
+                "page": 1,
+                "quote": "1 $0 - $999,999.99 1.5%"
+              },
+              "value": "0"
+            },
+            "rate": {
+              "evidence": {
+                "page": 1,
+                "quote": "1 $0 - $999,999.99 1.5%"
+              },
+              "value": "1.5%"
+            }
+          },
+          {
+            "lower_bound": {
+              "evidence": {
+                "page": 1,
+                "quote": "2 $1,000,000 - $1,999,999.99 2.5%"
+              },
+              "value": "1000000"
+            },
+            "rate": {
+              "evidence": {
+                "page": 1,
+                "quote": "2 $1,000,000 - $1,999,999.99 2.5%"
+              },
+              "value": "2.5%"
+            }
+          },
+          {
+            "lower_bound": {
+              "evidence": {
+                "page": 1,
+                "quote": "3 $2,000,000 and above 3.5%"
+              },
+              "value": "2000000"
+            },
+            "rate": {
+              "evidence": {
+                "page": 1,
+                "quote": "3 $2,000,000 and above 3.5%"
+              },
+              "value": "3.5%"
+            }
+          }
+        ]
+      },
+      "name": "record_extraction",
+      "type": "tool_use"
+    }
+  ],
+  "id": "msg_recorded_b",
+  "model": "claude-sonnet-5-5",
+  "role": "assistant",
+  "stop_reason": "tool_use",
+  "stop_sequence": null,
+  "type": "message",
+  "usage": {
+    "input_tokens": 4300,
+    "output_tokens": 1150
+  }
+}

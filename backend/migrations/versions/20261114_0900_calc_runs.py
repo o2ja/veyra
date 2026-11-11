@@ -15,7 +15,7 @@ FORCE via the shared helper.
 Forward-only like the rest of the chain (no downgrade functions).
 
 Revision ID: 20261114_0900_calc_runs
-Revises: 20261112_0900_agreements
+Revises: 20261113_0900_extraction
 """
 
 from alembic import op
@@ -24,13 +24,20 @@ from migrations._immutable import make_append_only
 from migrations._rls import enable_tenant_rls
 
 revision = "20261114_0900_calc_runs"
-down_revision = "20261112_0900_agreements"
+down_revision = "20261113_0900_extraction"
 branch_labels = None
 depends_on = None
 
 PERIOD_END_TO_MONTH_END = (
     "UPDATE manufacturer_settings SET claim_window_basis = 'month_end', revision = revision + 1, "
     "updated_at = now() WHERE claim_window_basis = 'period_end'"
+)
+# manufacturer_settings has FORCE ROW LEVEL SECURITY: the owner role is subject to the tenant policy too (no tenant
+# is set in a migration, so a plain UPDATE would match no row). The owner bypasses only while FORCE is off.
+PERIOD_END_STEPS = (
+    "ALTER TABLE manufacturer_settings NO FORCE ROW LEVEL SECURITY",
+    PERIOD_END_TO_MONTH_END,
+    "ALTER TABLE manufacturer_settings FORCE ROW LEVEL SECURITY",
 )
 TENANT_TABLES = ("calculation_runs", "calculation_results", "rebate_accrual_entries", "claim_adjustments")
 RUN_BOOKKEEPING = "'status' - 'agreement_version_ids' - 'input_checksum' - 'totals' - 'error' - 'started_at' - 'completed_at'"
@@ -330,4 +337,7 @@ def upgrade() -> None:
     )
     # the old 'period_end' meant the month end of the line's claim date (SPA lines): keep the meaning, new name;
     # the revision moves on so open settings forms see the change
-    op.execute(PERIOD_END_TO_MONTH_END)
+    # Not audited: a migration has no actor or tenant context (audit_log is tenant-scoped, written by the app);
+    # the change is recorded here, in the revision's docstring and in docs/reports/notes/c1-s5-runs.md.
+    for statement in PERIOD_END_STEPS:
+        op.execute(statement)

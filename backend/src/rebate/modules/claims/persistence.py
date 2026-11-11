@@ -98,10 +98,7 @@ def insert_accrual(
                 manufacturer_id=UUID(entry.version.manufacturer_id),
                 external_number=entry.version.external_number,
                 agreement_name=entry.agreement_name,
-                tiers=[
-                    {"tier_number": t.tier_number, "lower_bound": str(t.lower_bound), "rate": str(t.rate)}
-                    for t in entry.version.tiers
-                ],
+                tiers=list(entry.tiers_snapshot),
                 agreement_version_id=UUID(r.agreement_version_id),
                 period_start=r.period_start,
                 period_end=r.period_end,

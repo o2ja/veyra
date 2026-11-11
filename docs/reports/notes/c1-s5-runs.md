@@ -116,8 +116,13 @@
   `(tenant_id, run_id, status, id)`, duplicate runs index dropped. F6: DATABASE_SCHEMA / API_SPECIFICATION updated. F7:
   the migration turns `period_end` settings into `month_end` (old meaning) and bumps their revision. F10: adjustment
   approval columns move only with a status change; the tracker disjointness is in the isolation route tests.
-- Re-chain: S6 (PR #8) had not merged when this was written; when `20261113_0900_extraction` is on main, set
-  `down_revision` of `20261114_0900_calc_runs` to it.
+- Re-chained: `down_revision` of `20261114_0900_calc_runs` is now `20261113_0900_extraction` (S6 merged).
+- F7 second pass: `manufacturer_settings` has FORCE RLS, so the owner role matched no rows in the data update; the migration
+  now runs it between `NO FORCE` / `FORCE ROW LEVEL SECURITY` (tested through `owner_engine`, including that the bare
+  statement matches 0 rows). The change is not audited: a migration has no actor or tenant context and `audit_log` is
+  written by the app per tenant; it is documented here and in the revision.
+- Minor: a waiting job whose run already finished ends quietly (no lease-lost noise); a tier stored without a rate keeps
+  `null` in the ledger snapshot and the tracker.
 
 ## G. Performance baseline (1M lines)
 

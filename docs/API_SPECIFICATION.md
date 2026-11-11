@@ -132,7 +132,7 @@ Legend: **R** = roles allowed (A admin, P approver, N analyst, V viewer). Writes
 | `GET /imports`, `GET /imports/{id}` | History and status/counts | all |
 | `GET /imports/{id}/preview` | Header detection, suggested/saved mapping, first rows, errors | A P N |
 | `PUT /imports/{id}/mapping` | Set mapping (optionally save as template) | A P N |
-| `POST /imports/{id}/suggest-mapping` | AI suggestion (if enabled) → 202 job | A P N |
+| `POST /imports/{id}/suggest-mapping` | AI suggestion (needs `ai_processing_enabled`, else 409 `ai_not_enabled`): headers + at most 5 masked sample rows go to the model; synchronous **200** `{mapping, source, model, prompt_version}` with a bounded time budget (503 `ai_unavailable` on any provider failure, 429 `rate_limited` per workspace) | A P N |
 | `POST /imports/{id}/confirm` | Load valid rows `{accept_partial: bool}` → 202 | A P N |
 | `GET /imports/{id}/errors` (+`?format=csv`) | Row errors | all |
 | `GET /imports/{id}/changes` | Changed source rows report | all |
@@ -146,8 +146,11 @@ Legend: **R** = roles allowed (A admin, P approver, N analyst, V viewer). Writes
 | `GET /agreements`, `GET /agreements/{id}` | List with current active version | all |
 | `GET /agreements/{id}/versions`, `GET /agreement-versions/{id}` | Version history and detail (items paginated: `GET /agreement-versions/{id}/items`) | all |
 | `GET /agreement-versions/{a}/diff/{b}` | Field-level diff | all |
-| `POST /agreement-drafts` | Create draft: `{source: "manual"|"spreadsheet_template"|"ai_extraction", agreement_id?, amends_version_id?, payload?, source_file_id?}`. For `ai_extraction` → 202 job (needs `ai_processing_enabled`) | A P N |
-| `GET /agreement-drafts`, `GET /agreement-drafts/{id}` | Includes `payload`, `validation`, extraction evidence | all |
+| `POST /agreement-drafts` | Create draft: `{source: "manual"|"spreadsheet_template"|"ai_extraction", agreement_id?, amends_version_id?, payload?, source_file_id?}`. `ai_extraction` is refused here (409 `ai_not_enabled`): start it with `POST /document-extractions` (the job creates the draft with `source = ai_extraction`) | A P N |
+| `GET /agreement-drafts`, `GET /agreement-drafts/{id}` | Includes `payload`, `validation`, `extraction_id` (evidence: `GET /document-extractions/{id}`) | all |
+| `POST /document-extractions` | `{file_id, kind: "agreement", rerun?}` → 202 (queued) or 200 (existing active/completed extraction reused). 409 `ai_not_enabled`; 429 `rate_limited` / `too_many_extractions` | A P N |
+| `GET /document-extractions`, `GET /document-extractions/{id}` | Status, `draft_id`, per-field value/confidence/reasons/evidence (page, quote, word boxes), both passes, injection indicators, validation | all |
+| `GET /ai/usage` | AI usage per workspace: today against the caps, per-day calls/tokens/cost, `enabled` (opt-in is `PATCH /settings`) | all |
 | `PUT /agreement-drafts/{id}` | Replace payload (new revision; `If-Match: <revision>` required) | A P N |
 | `POST /agreement-drafts/{id}/validate` | Run validator, returns errors/warnings | A P N |
 | `POST /agreement-drafts/{id}/items:import` | Bulk SPA items from a mapped file | A P N |

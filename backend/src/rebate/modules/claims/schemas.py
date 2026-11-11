@@ -142,7 +142,7 @@ class AccrualList(BaseModel):
 class AccrualTierOut(BaseModel):
     tier_number: int
     lower_bound: Money
-    rate: Money
+    rate: Money | None
 
 
 class TrackerRow(BaseModel):

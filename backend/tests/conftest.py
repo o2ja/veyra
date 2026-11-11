@@ -28,16 +28,19 @@ ROLES = ("rebate_owner", "rebate_app", "rebate_ai_writer", "rebate_readonly", "r
 
 def pytest_configure(config: pytest.Config) -> None:
     config.addinivalue_line("markers", "performance: slow baseline runs; only with -m performance")
+    config.addinivalue_line("markers", "live_llm: calls a real LLM provider (OD-2); only with -m live_llm")
 
 
 def pytest_collection_modifyitems(config: pytest.Config, items: list[pytest.Item]) -> None:
-    """Performance tests are deselected unless selected explicitly with ``-m performance``."""
-    if "performance" in (config.getoption("markexpr") or ""):
-        return
-    skipped = [i for i in items if i.get_closest_marker("performance")]
-    if skipped:
-        config.hook.pytest_deselected(items=skipped)
-        items[:] = [i for i in items if not i.get_closest_marker("performance")]
+    """Performance and live-LLM tests are deselected unless selected explicitly with ``-m <marker>``."""
+    expr = config.getoption("markexpr") or ""
+    for marker in ("performance", "live_llm"):
+        if marker in expr:
+            continue
+        skipped = [i for i in items if i.get_closest_marker(marker)]
+        if skipped:
+            config.hook.pytest_deselected(items=skipped)
+            items[:] = [i for i in items if not i.get_closest_marker(marker)]
 
 
 @dataclass(frozen=True)

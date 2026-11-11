@@ -69,6 +69,26 @@ def _general_limits(c: RequestContext) -> None:
         ratelimit.hit(c.db, f"req:ip:{c.ip}", limit=GENERAL_IP_LIMIT, window_seconds=60)
 
 
+AI_ROUTES = frozenset({"/api/v1/document-extractions", "/api/v1/imports/{import_id}/suggest-mapping"})
+
+
+def _ai_limits(request: Request, c: RequestContext) -> None:
+    """Per-workspace rate limit on the routes that can spend money at the AI provider (AI_PROCESSING.md §9)."""
+    p = c.principal
+    if (
+        request.method == "POST"
+        and p is not None
+        and p.tenant_id is not None
+        and route_template(request) in AI_ROUTES
+    ):
+        ratelimit.hit(
+            c.db,
+            f"ai:tenant:{p.tenant_id}:{route_template(request)}",
+            limit=c.settings.ai_requests_per_minute,
+            window_seconds=60,
+        )
+
+
 def _audit_denial(engine: Engine, c: RequestContext, request: Request, exc: PermissionDenied) -> None:
     """Separate transaction (the request's was rolled back). At most one entry per user x permission
     per minute (SECURITY.md §7: permission denials, rate-limited)."""
@@ -100,7 +120,7 @@ def request_context(request: Request) -> Iterator[RequestContext]:
     settings: Settings = request.app.state.settings
     engine: Engine = request.app.state.engine
     session = Session(engine)
-    tx = session.begin()
+    session.begin()
     peer = request.client.host if request.client else None
     c = RequestContext(
         db=session,
@@ -118,20 +138,21 @@ def request_context(request: Request) -> Iterator[RequestContext]:
             structlog.contextvars.bind_contextvars(tenant_id=str(c.principal.tenant_id or ""))
         _check_csrf(request, c)
         _general_limits(c)
+        _ai_limits(request, c)
         yield c
     except DomainError as exc:
         if exc.commit:
-            tx.commit()
+            session.commit()
         else:
-            tx.rollback()
+            session.rollback()
             if isinstance(exc, PermissionDenied):
                 _audit_denial(engine, c, request, exc)
         raise
     except BaseException:
-        tx.rollback()
+        session.rollback()
         raise
     else:
-        tx.commit()
+        session.commit()  # session-level: a handler may have committed early (suggest-mapping)
     finally:
         session.close()
 

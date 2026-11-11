@@ -278,6 +278,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/ai/usage": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Ai Usage */
+        get: operations["ai_usage"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/audit-log": {
         parameters: {
             query?: never;
@@ -756,6 +773,41 @@ export interface paths {
         put?: never;
         /** Add Customer Alias */
         post: operations["customer_alias_add"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/document-extractions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List Extractions */
+        get: operations["extraction_list"];
+        put?: never;
+        /** Start */
+        post: operations["extraction_start"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/document-extractions/{extraction_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Extraction */
+        get: operations["extraction_get"];
+        put?: never;
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -1560,7 +1612,7 @@ export interface components {
             /** Lower Bound */
             lower_bound: string;
             /** Rate */
-            rate: string;
+            rate: string | null;
             /** Tier Number */
             tier_number: number;
         };
@@ -2195,6 +2247,126 @@ export interface components {
             new_email: string;
             /** Password */
             password: string;
+        };
+        /**
+         * ExtractionDetail
+         * @description ``result.fields[]`` carry value, confidence, reasons and evidence (page, quote, word boxes) per pass.
+         */
+        ExtractionDetail: {
+            /** Completed At */
+            completed_at: string | null;
+            /** Confidence */
+            confidence: string | null;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /**
+             * Created By
+             * Format: uuid
+             */
+            created_by: string;
+            /** Draft Id */
+            draft_id?: string | null;
+            /** Error Code */
+            error_code: string | null;
+            /** Error Detail */
+            error_detail: string | null;
+            /**
+             * File Id
+             * Format: uuid
+             */
+            file_id: string;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Kind */
+            kind: string;
+            /** Model */
+            model: string | null;
+            /** Prompt Version */
+            prompt_version: string | null;
+            /** Result */
+            result: {
+                [key: string]: unknown;
+            } | null;
+            /** Status */
+            status: string;
+            /** Text Method */
+            text_method: string | null;
+            /** Validation */
+            validation: {
+                [key: string]: unknown;
+            } | null;
+        };
+        /** ExtractionList */
+        ExtractionList: {
+            /** Data */
+            data: components["schemas"]["ExtractionOut"][];
+        };
+        /** ExtractionOut */
+        ExtractionOut: {
+            /** Completed At */
+            completed_at: string | null;
+            /** Confidence */
+            confidence: string | null;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /**
+             * Created By
+             * Format: uuid
+             */
+            created_by: string;
+            /** Draft Id */
+            draft_id?: string | null;
+            /** Error Code */
+            error_code: string | null;
+            /** Error Detail */
+            error_detail: string | null;
+            /**
+             * File Id
+             * Format: uuid
+             */
+            file_id: string;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Kind */
+            kind: string;
+            /** Model */
+            model: string | null;
+            /** Prompt Version */
+            prompt_version: string | null;
+            /** Status */
+            status: string;
+            /** Text Method */
+            text_method: string | null;
+        };
+        /** ExtractionStart */
+        ExtractionStart: {
+            /**
+             * File Id
+             * Format: uuid
+             */
+            file_id: string;
+            /**
+             * Kind
+             * @default agreement
+             */
+            kind: string;
+            /**
+             * Rerun
+             * @default false
+             */
+            rerun: boolean;
         };
         /** FieldOut */
         FieldOut: {
@@ -2838,6 +3010,19 @@ export interface components {
             defaults: {
                 [key: string]: string;
             };
+        };
+        /** MappingOut */
+        MappingOut: {
+            /** Mapping */
+            mapping: {
+                [key: string]: string | null;
+            };
+            /** Model */
+            model: string;
+            /** Prompt Version */
+            prompt_version: string;
+            /** Source */
+            source: string;
         };
         /** MeOut */
         MeOut: {
@@ -4123,6 +4308,40 @@ export interface components {
             /** Factor */
             factor: number | string;
         };
+        /** UsageDay */
+        UsageDay: {
+            /** Calls */
+            calls: number;
+            /** Cost Usd */
+            cost_usd: string;
+            /** Date */
+            date: string;
+            /** Input Tokens */
+            input_tokens: number;
+            /** Output Tokens */
+            output_tokens: number;
+        };
+        /** UsageOut */
+        UsageOut: {
+            /** Daily */
+            daily: components["schemas"]["UsageDay"][];
+            /** Enabled */
+            enabled: boolean;
+            /** Model */
+            model: string;
+            today: components["schemas"]["UsageToday"];
+        };
+        /** UsageToday */
+        UsageToday: {
+            /** Cost Cap Usd */
+            cost_cap_usd: string;
+            /** Cost Usd */
+            cost_usd: string;
+            /** Token Cap */
+            token_cap: number;
+            /** Tokens */
+            tokens: number;
+        };
         /** UserOut */
         UserOut: {
             /** Email */
@@ -5023,6 +5242,26 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    ai_usage: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["UsageOut"];
                 };
             };
         };
@@ -6009,6 +6248,116 @@ export interface operations {
             };
         };
     };
+    extraction_list: {
+        parameters: {
+            query?: {
+                file_id?: string | null;
+                limit?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ExtractionList"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    extraction_start: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ExtractionStart"];
+            };
+        };
+        responses: {
+            /** @description An extraction of this file already exists */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Successful Response */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ExtractionOut"];
+                };
+            };
+            /** @description AI not enabled */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    extraction_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                extraction_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ExtractionDetail"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     file_list: {
         parameters: {
             query?: {
@@ -6471,7 +6820,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": unknown;
+                    "application/json": components["schemas"]["MappingOut"];
                 };
             };
             /** @description AI not enabled */
@@ -6489,6 +6838,13 @@ export interface operations {
                 content: {
                     "application/json": components["schemas"]["HTTPValidationError"];
                 };
+            };
+            /** @description AI unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
         };
     };

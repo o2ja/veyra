@@ -63,6 +63,7 @@ class RebateEntry:
     valid_from: date
     valid_to: date
     content_hash: str
+    tiers_snapshot: tuple[dict[str, Any], ...] = ()  # stored terms; a tier without a rate keeps null
 
 
 @dataclass(frozen=True)
@@ -169,6 +170,14 @@ def load_versions(db: Session, tenant_id: UUID, as_of: datetime, manufacturer_id
                     valid_from=r.valid_from,
                     valid_to=r.valid_to,
                     content_hash=r.content_hash,
+                    tiers_snapshot=tuple(
+                        {
+                            "tier_number": t.tier_number,
+                            "lower_bound": str(t.lower_bound),
+                            "rate": None if t.rate is None else str(t.rate),
+                        }
+                        for t in found.tiers.get(r.id, [])
+                    ),
                 )
             )
     return Versions(tuple(spa), hashes, tuple(rebates))

@@ -59,6 +59,9 @@ def calculation_run(db: Session, ctx: JobContext) -> None:
     if ctx.tenant_id is None or ctx.engine is None:  # unreachable: tenant-scoped, worker supplies the engine
         raise PermanentError("calculation runs need a tenant context and the worker engine")
     run_id = _run_id(ctx)
+    current = db.get(CalculationRun, run_id)
+    if current is None or current.status in ("completed", "failed", "cancelled"):
+        return  # a waiting job that outlived its run (finished by another attempt): nothing to do, quietly
     try:
         runs.execute(ctx.engine, ctx.tenant_id, run_id, db, heartbeat=ctx.renew_lease)
     except runs.RunInProgress:

@@ -268,7 +268,7 @@ def tracker(db: Session, tenant_id: UUID) -> list[dict[str, Any]]:
             {
                 "tier_number": t["tier_number"],
                 "lower_bound": Decimal(t["lower_bound"]),
-                "rate": Decimal(t["rate"]),
+                "rate": None if t["rate"] is None else Decimal(t["rate"]),
             }
             for t in sorted(r.tiers, key=lambda t: t["tier_number"])
         ]

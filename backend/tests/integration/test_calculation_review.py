@@ -220,12 +220,15 @@ def test_run_abandoned_by_a_dead_worker_is_failed_by_the_next_attempt(env: Env, 
     drain(ws.app)
 
 
-def test_migration_turns_period_end_settings_into_month_end(env: Env, admin_engine: Engine) -> None:
-    """F7: the old `period_end` meant the month end of the claim date; the migration keeps that meaning."""
+def test_migration_turns_period_end_settings_into_month_end(
+    env: Env, admin_engine: Engine, owner_engine: Engine
+) -> None:
+    """F7: the old `period_end` meant the month end of the claim date; the migration keeps that meaning. It runs as the
+    owner role, which is subject to FORCE RLS: the statement sequence of the migration must still reach the rows."""
     migration = importlib.import_module("migrations.versions.20261114_0900_calc_runs")
     ws = open_workspace(env.app, env.stack)
     volt = ws.manufacturers["VOLT"]
-    with admin_engine.connect() as conn, conn.begin() as tx:
+    with admin_engine.begin() as conn:
         conn.execute(
             text(
                 "UPDATE manufacturer_settings SET claim_window_basis = 'period_end', claim_window_days = 60 "
@@ -233,13 +236,20 @@ def test_migration_turns_period_end_settings_into_month_end(env: Env, admin_engi
             ),
             {"m": volt},
         )
-        before = conn.execute(
-            text("SELECT revision FROM manufacturer_settings WHERE manufacturer_id = :m"), {"m": volt}
+    read = text("SELECT claim_window_basis, revision FROM manufacturer_settings WHERE manufacturer_id = :m")
+    with admin_engine.connect() as conn:
+        before_basis, before_revision = conn.execute(read, {"m": volt}).one()
+    assert before_basis == "period_end"
+    with (
+        owner_engine.begin() as conn
+    ):  # the bare statement matches nothing (no tenant context, FORCE RLS) ...
+        assert conn.execute(text(migration.PERIOD_END_TO_MONTH_END)).rowcount == 0
+    with owner_engine.begin() as conn:  # ... the migration's sequence matches the rows
+        for statement in migration.PERIOD_END_STEPS:
+            conn.execute(text(statement))
+    with admin_engine.connect() as conn:
+        assert tuple(conn.execute(read, {"m": volt}).one()) == ("month_end", before_revision + 1)
+        forced = conn.execute(
+            text("SELECT relforcerowsecurity FROM pg_class WHERE relname = 'manufacturer_settings'")
         ).scalar_one()
-        conn.execute(text(migration.PERIOD_END_TO_MONTH_END))
-        basis, revision = conn.execute(
-            text("SELECT claim_window_basis, revision FROM manufacturer_settings WHERE manufacturer_id = :m"),
-            {"m": volt},
-        ).one()
-        tx.rollback()
-    assert (basis, revision) == ("month_end", before + 1)
+    assert forced is True  # FORCE is back on
