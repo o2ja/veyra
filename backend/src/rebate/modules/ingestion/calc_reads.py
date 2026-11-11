@@ -34,7 +34,7 @@ def sales_rows(
     base_uom, quantity, uom, unit_price, unit_cost, replacement_cost, spa_reference, original_line_id, row_hash.
     ``manufacturer_id`` None = lines without a known manufacturer."""
     sql = (
-        "SELECT l.id, l.document_number, l.line_number, l.invoice_date, l.ship_date, l.customer_id, l.product_id, "
+        "SELECT l.id, l.document_number, l.line_number, l.invoice_date, l.ship_date, l.customer_id, l.product_id, "  # nosec B608 (module constants only; values are bound)
         "l.manufacturer_id, p.base_uom, l.quantity, l.uom, l.unit_price, l.unit_cost, l.replacement_cost, "
         "l.spa_reference, l.original_line_id, l.row_hash FROM sales_document_lines l "
         + _BATCH
@@ -65,7 +65,7 @@ def returned_quantities(
     """Original line id -> sum of |quantity| of its linked current return lines dated on or before the cutoff."""
     rows = db.execute(
         text(
-            "SELECT l.original_line_id, sum(-l.quantity) AS returned FROM sales_document_lines l "
+            "SELECT l.original_line_id, sum(-l.quantity) AS returned FROM sales_document_lines l "  # nosec B608 (module constants only; values are bound)
             + _BATCH
             + "WHERE l.tenant_id = :t AND l.is_current AND l.quantity < 0 AND l.original_line_id IS NOT NULL "
             "AND l.invoice_date <= :cutoff_date " + _MFR + "GROUP BY l.original_line_id"
@@ -99,7 +99,7 @@ def sales_line_windows(
     """Consecutive invoice-date windows of at most ``max_lines`` lines; one date is never split."""
     rows = db.execute(
         text(
-            "SELECT l.invoice_date AS d, count(*) AS n FROM sales_document_lines l "
+            "SELECT l.invoice_date AS d, count(*) AS n FROM sales_document_lines l "  # nosec B608 (module constants only; values are bound)
             + _BATCH
             + "WHERE l.tenant_id = :t AND l.is_current "
             + _MFR
@@ -134,7 +134,7 @@ def sales_line_ids(
     return list(
         db.scalars(
             text(
-                "SELECT l.id FROM sales_document_lines l "
+                "SELECT l.id FROM sales_document_lines l "  # nosec B608 (module constants only; values are bound)
                 + _BATCH
                 + "WHERE l.tenant_id = :t AND l.is_current "
                 + _MFR
@@ -152,7 +152,7 @@ def sales_volume_rows(
     return list(
         db.execute(
             text(
-                "SELECT l.id, l.invoice_date, l.product_id, l.quantity, l.extended_amount, l.spa_reference, l.row_hash "
+                "SELECT l.id, l.invoice_date, l.product_id, l.quantity, l.extended_amount, l.spa_reference, l.row_hash "  # nosec B608 (module constants only; values are bound)
                 "FROM sales_document_lines l "
                 + _BATCH
                 + "WHERE l.tenant_id = :t AND l.is_current "
@@ -171,7 +171,7 @@ def purchase_volume_rows(
     return list(
         db.execute(
             text(
-                "SELECT l.id, l.document_date, l.product_id, l.quantity, l.extended_amount, l.row_hash "
+                "SELECT l.id, l.document_date, l.product_id, l.quantity, l.extended_amount, l.row_hash "  # nosec B608 (module constants only; values are bound)
                 "FROM purchase_document_lines l "
                 + _BATCH
                 + "WHERE l.tenant_id = :t AND l.is_current AND l.manufacturer_id = :m "
