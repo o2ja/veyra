@@ -3,7 +3,10 @@
 ## MORNING SUMMARY
 1. Completed and merged: S4 backend (#6, 99dc074, before tonight); #9 amendment-rename guard + CI retry (6f01b02).
 2. In progress: S4 UI on `ui/s4` (Antigravity; WIP 85b3a19, draft editor unfinished). S6 backend PR #8 (`s6-backend`, review round 2 fixes); S5 runs PR #7 (`s5-runs`, builder). S4 UI `ui/s4` verified by me (e2e green), awaiting independent UI review.
-3. Blocked / needs decision: none yet.
+3. Blocked / needs decision (rule 4 — not decided by me):
+   - D1 rebate tiers/rates when an amendment splits a measurement period with different terms (BUSINESS_LOGIC §9.2 says pre-amendment lines stay under v1a; how tier volume combines is undefined). Interim: run refused (422 `split_period_terms_need_decision`).
+   - D2 an SPA line that becomes outside_claim_window/cap_exhausted drops out of the rebate SPA-line count (literal §5.4) — intended?
+   - D3 one manufacturer `claim_window_basis` serves SPA; rebates always use period end + days. OK?
 4. Failures/findings: main CI c0dfeae backend job failed on flaky `test_register_timing` (34% > 25%, docs-only commit; same code green at 99dc074) → rerun.
 5. Resume: see PROJECT_STATUS.md §3.
 
@@ -20,3 +23,5 @@
 - PR #9 MERGED (6f01b02): amendment rename refused + CI Playwright-install retry. CI green after mirror outage ended.
 - S6 fixes round 1 (ffe115d): 2nd-pass review PASS on S1–S4 + most minors; M5 now serious (advisory lock held across provider call, unbounded wait on sync mapping) + 4 minor races → round 2 sent to builder. PR #8 e2e files.spec timeout was a flake (rerun green).
 - S5 runs built (PR #7, c18df7a): 23 GT scenarios, VOLT ledger, NWND, D3, windowed=single-window, 1M perf 630 s / 1,586 lines/s / 1.25 GB peak (replicated volume file; all lines outside claim window, so not a correctness figure). Builder reports no financial discrepancy. Claim-window rule implemented (month_end SPA, period_end rebates). Independent financial + DB review (stronger model) running. Limits noted: claw-back only flagged until S7; sales-basis rebates with spa_lines≠include starting before date_from refused (422 scope_too_narrow).
+- S6 round 2 (9dcba2d, merged main → 13dc737): my run: full 1497 passed (93%), isolation 303, negctl OK, all gates clean (a first full run had 10 failed/101 errors while the S5 builder hammered the shared Postgres; reruns clean — interference, not code). 3rd-pass review running.
+- S5 review round 1: no computed-value discrepancy (reviewer re-derived R1–R4, SC-03/07/08/09r/12/14, D3/D4). F1 = owner decision (rebate tiers when an amendment splits the measurement period): builder had written a new money rule into BUSINESS_LOGIC → reverted; runs now fail closed with 422 `split_period_terms_need_decision`. Fixes F2–F10 done (3e62a07, CI green). 2nd-pass financial review running.
