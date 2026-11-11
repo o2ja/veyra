@@ -4,6 +4,7 @@ Expected values come from the SYNTHETIC payload files (testdata/generated/agreem
 BUSINESS_LOGIC.md §3.3/§9.2 and hand derivation (split dates), never from the code under test.
 """
 
+import base64
 import threading
 import time
 import uuid
@@ -113,6 +114,11 @@ def test_manual_payload_is_accepted_and_activated(org: Org, name: str, admin_eng
             break
         cursor = r.json()["page"]["next_cursor"]
     assert paged == [i["sku"] for i in body["items"]]
+    past_end = (
+        base64.urlsafe_b64encode(b"999999").decode().rstrip("=")
+    )  # an empty page (also: a rebate version)
+    r = org.p1.get(f"/agreement-versions/{v['id']}/items", params={"cursor": past_end})
+    assert r.status_code == 200 and r.json()["data"] == [] and r.json()["page"]["has_more"] is False
     assert set(stored) == {i["sku"] for i in body["items"]}
     for item in body["items"]:
         for f in ("reference_cost", "deviated_cost", "sell_price", "rate", "flat_amount", "max_quantity"):

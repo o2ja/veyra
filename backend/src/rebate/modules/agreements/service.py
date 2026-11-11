@@ -984,11 +984,11 @@ def list_items(
     )
     more = len(rows) > limit
     rows = rows[:limit]
-    token = base64.urlsafe_b64encode(str(rows[-1].line_number).encode()).decode().rstrip("=")
-    skus = _skus(db, tenant_id)
-    return [(i, skus.get(i.product_id, "")) for i in rows], Page(
-        next_cursor=token if more and rows else None, has_more=more
+    token = (
+        base64.urlsafe_b64encode(str(rows[-1].line_number).encode()).decode().rstrip("=") if more else None
     )
+    skus = _skus(db, tenant_id)
+    return [(i, skus.get(i.product_id, "")) for i in rows], Page(next_cursor=token, has_more=more)
 
 
 def version_payload(db: Session, v: AgreementVersion) -> dict[str, Any]:

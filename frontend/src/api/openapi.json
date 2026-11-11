@@ -6525,6 +6525,22 @@
               ],
               "title": "Idempotency-Key"
             }
+          },
+          {
+            "in": "header",
+            "name": "if-match",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "If-Match"
+            }
           }
         ],
         "responses": {
@@ -6540,6 +6556,9 @@
           },
           "409": {
             "description": "Invalid state or idempotency conflict"
+          },
+          "412": {
+            "description": "Revision mismatch"
           },
           "422": {
             "content": {

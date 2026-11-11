@@ -3611,6 +3611,7 @@ export interface operations {
             query?: never;
             header?: {
                 "idempotency-key"?: string | null;
+                "if-match"?: string | null;
             };
             path: {
                 draft_id: string;
@@ -3630,6 +3631,13 @@ export interface operations {
             };
             /** @description Invalid state or idempotency conflict */
             409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Revision mismatch */
+            412: {
                 headers: {
                     [name: string]: unknown;
                 };
