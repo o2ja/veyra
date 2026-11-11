@@ -578,7 +578,8 @@ def process(db: Session, ctx: JobContext) -> None:
 
 def _run(db: Session, ctx: JobContext, ex: DocumentExtraction, ai: Engine) -> None:
     settings, tenant = ctx.settings, ex.tenant_id
-    assert ctx.engine is not None  # noqa: S101  (checked in process)
+    if ctx.engine is None:  # checked in process; narrows the type
+        raise PermanentError("the extraction job needs the worker engine")
     enabled = tenancy.get_settings(db, tenant).ai_processing_enabled
     if not enabled:
         raise _Stop("needs_manual_entry", "ai_disabled", "AI processing is not enabled for this workspace.")
