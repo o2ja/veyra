@@ -17,6 +17,7 @@ from tests.extraction.conftest import ai_url
 from tests.extraction.support import golden_file, set_ai, start
 from tests.extraction.test_golden import SPA_884
 from tests.integration.conftest import Workspace, clean_file
+from tests.support import drain
 
 RESULT_COLUMNS = {
     "status", "text_method", "pass_results", "result", "evidence_check", "validation", "confidence",
@@ -115,12 +116,13 @@ def test_the_app_role_can_queue_a_request_but_never_write_a_result(admin: Engine
 
 
 @pytest.fixture
-def queued(ws: Workspace) -> tuple[UUID, UUID]:
+def queued(ws: Workspace) -> Iterator[tuple[UUID, UUID]]:
     """A queued extraction (job not run) of a tenant, through the API."""
     set_ai(ws, True)
     r = start(ws, golden_file(ws, SPA_884))
     assert r.status_code == 202, r.text
-    return UUID(ws.tenant_id), UUID(r.json()["id"])
+    yield UUID(ws.tenant_id), UUID(r.json()["id"])
+    drain(ws.app)  # leave no queued job behind for the next test's worker loop
 
 
 def _run(engine: Engine, tenant: UUID, sql: str, **params: object) -> int:

@@ -86,7 +86,7 @@ class Action(StrEnum):
 
 AUDITED_FIELDS: dict[str, frozenset[str]] = {
     "document_extraction": frozenset(
-        {"file_id", "kind", "status", "error_code", "model", "prompt_version", "draft_id", "text_method"}
+        {"file_id", "kind", "status", "failure", "model", "prompt_version", "draft_id", "text_method"}
     ),
     "user": frozenset({"email", "full_name", "mfa_enabled"}),
     "tenant": frozenset({"name", "slug", "status"}),

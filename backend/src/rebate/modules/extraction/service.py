@@ -400,7 +400,7 @@ def _finish_audit(
             "file_id": ex.file_id,
             "kind": ex.kind,
             "status": status,
-            "error_code": code,
+            "failure": code,
             "draft_id": draft_id,
             **extra,
         },

@@ -13,6 +13,7 @@ from tests.extraction.test_golden import SPA_884
 from tests.integration.agreements_support import activate, member, payload
 from tests.integration.conftest import Workspace, clean_file, import_file
 from tests.integration.conftest import start as start_import
+from tests.support import drain
 
 
 def _no_ai_rows(ws: Workspace) -> None:
@@ -68,6 +69,7 @@ def test_the_extraction_reads_are_available_to_a_viewer_but_starting_one_is_not(
         assert viewer.get(f"/document-extractions/{started.json()['id']}").status_code == 200
         assert viewer.get("/ai/usage").status_code == 200
         assert viewer.post("/imports/00000000-0000-4000-8000-000000000000/suggest-mapping").status_code == 403
+    drain(ws.app)  # leave no queued job behind for the next test's worker loop
 
 
 def test_unknown_ids_and_bad_bodies(ws: Workspace) -> None:
