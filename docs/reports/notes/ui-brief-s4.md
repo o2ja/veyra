@@ -112,10 +112,11 @@ rejection_reason, resulting_version_id). Editable only when `status=draft` and u
 Accept: unsaved-changes guard; 412/409/403/422 each have a visible message; read-only view for other states.
 
 ## Verify (run as you go and all at the end; from `frontend/`)
+- once: `npm ci`
 - `npm run lint` · `npm run typecheck` · `npx vitest run src/features/agreements` (then `npm test`)
-- E2E against the real stack (owner keeps Docker running: API on `localhost:8000`, Mailpit `localhost:8025`):
-  `docker compose --env-file .env -f infra/docker/compose.dev.yml stop frontend` (from the repo root, frees
-  port 5173), then in `frontend/`: `npm run dev` (separate terminal) and
+- E2E against the real stack (Docker is running: API on `localhost:8000` with S4 migrated, Mailpit
+  `localhost:8025`): `docker stop veyra-recover-frontend-1` (frees port 5173; the orchestrator restarts it),
+  then in `frontend/`: `npm run dev` (separate terminal) and
   `$env:PW_CHANNEL="chrome"; npx playwright test e2e/agreements.spec.ts` (then `npx playwright test`).
 - E2E required: W5/W7 manual path — admin registers + MFA (copy masterdata.spec), creates manufacturer VOLT
   and the needed customers/products via the UI, invites an approver (copy invite steps from

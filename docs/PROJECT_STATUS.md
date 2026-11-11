@@ -1,6 +1,6 @@
 # Project Status
 
-> Living document. Updated at the end of every stage and whenever a decision, risk or known issue changes. Last updated: 2026-11-10.
+> Living document. Updated at the end of every stage and whenever a decision, risk or known issue changes. Last updated: 2026-11-11.
 
 ## 1. Current position
 
@@ -30,7 +30,15 @@ Multi-agent waves (worktree branches, orchestrator merges). Resume point:
 - Wave A merged: `s6-pure` (#3), `s5-engine` (#2), `s3-backend` (#4, 2026-11-11: security + DB reviews 2nd pass PASS;
   1M-row perf 1077 s total / 929 rows/s, peak RSS 1.18 GB, no Postgres crash). S3 frontend (#5) merged.
   Main after S3: full suite 1168 passed; isolation + schema lint + negative control OK (121 RLS-dependent).
-- Wave B: `s4-backend` (B1) in progress. Then Wave C (C1/C2/C3 briefs) → Wave D (S5/S6 frontend, browser QA).
+- Wave B: `s4-backend` MERGED (#6, 2026-11-11): security + DB reviews, 2nd pass PASS (fixes: lock+refresh before
+  validating approve, set-based expiry sweep, line_number keyset, global JSON body cap incl. CL+TE refusal,
+  approve If-Match, draft `Payload` schema published in OpenAPI). Main after S4: full suite 1373 passed; isolation
+  290 + negative control OK (147 RLS-dependent).
+- S4 frontend handed to an external agent (Antigravity/Gemini) on branch `ui/s4` (worktree `D:eyraeyra-ui-s4`):
+  brief `docs/reports/notes/ui-brief-s4.md`, prompt `antigravity-prompt-s4.md`, report expected at
+  `ui-report-s4.md`. Orchestrator verifies + reviews before merge. (S3 frontend was already merged in #5.)
+- **Resume point:** S6 extraction backend (`s6-backend`, brief C2) → S5 orchestration (`s5-runs`, C1; owner
+  approval at S5) → integration. Old `s4-frontend` branch (C3 WIP, only logic.ts) superseded by `ui/s4`.
 - `period_end` defined by orchestrator: last day of the calendar month of the line's claim date (flag to owner).
 - Open engine rules (raise instead of guessing): `cap_scope=per_agreement`, `tier_metric=quantity`,
   `claim_window_basis=period_end`.
