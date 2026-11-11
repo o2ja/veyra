@@ -34,6 +34,7 @@ class Side:
     job_id: str
     s3: dict[str, str] = field(default_factory=dict)  # S3 path parameter -> one id of this tenant
     s4: dict[str, str] = field(default_factory=dict)  # S4 path parameter -> one id of this tenant
+    s5: dict[str, str] = field(default_factory=dict)  # S5 path parameter -> one id of this tenant
     s6: dict[str, str] = field(default_factory=dict)  # S6 path parameter -> one id of this tenant
 
 
@@ -63,6 +64,7 @@ def sides(migrated_db: DbUrls) -> Iterator[tuple[Side, Side]]:
             )
             side.s3 = _seed_s3(Workspace(api, app, side.tenant_id, side.user_id, {}))
             side.s4 = _seed_s4(api)
+            side.s5 = _seed_s5(app, api, side.s3)
             side.s6 = _seed_s6(api)
             out.append(side)
         yield out[0], out[1]
@@ -106,6 +108,25 @@ def _seed_s4(api: Api) -> dict[str, str]:
             "other_version_id": v2["id"]}  # fmt: skip
 
 
+def _seed_s5(app: Any, api: Api, s3: dict[str, str]) -> dict[str, str]:
+    """A completed calculation run over the tenant's lines (through the real job), and one of its results."""
+    r = api.post(
+        "/calculation-runs",
+        json={"date_from": "2000-01-01", "date_to": "2030-12-31"},
+        headers={"Idempotency-Key": str(uuid.uuid4())},
+    )
+    assert r.status_code == 202, r.text
+    drain(app)
+    run = api.get(f"/calculation-runs/{r.json()['run']['id']}").json()
+    assert run["status"] == "completed", run
+    results = api.get(f"/calculation-runs/{run['id']}/results").json()["data"]
+    assert results, "the isolation fixture needs a calculation result"
+    return {"run_id": run["id"], "result_id": results[0]["id"]}
+
+
+S5_PARAMS = ("run_id", "result_id")
+
+
 def _seed_s6(api: Api) -> dict[str, str]:
     """AI on, one queued extraction of an agreement file (the job is never run here: no gateway configured)."""
     etag = api.get("/settings").headers["ETag"]
@@ -146,6 +167,7 @@ PARAM_SOURCES = {
     "job_id": "job_id",
     **{p: f"s3.{p}" for p in S3_PARAMS},
     **{p: f"s4.{p}" for p in S4_PARAMS},
+    **{p: f"s5.{p}" for p in S5_PARAMS},
     **{p: f"s6.{p}" for p in S6_PARAMS},
 }
 
@@ -154,6 +176,8 @@ def _attack_value(side: Side, param: str) -> str:
     source = PARAM_SOURCES[param]
     if source.startswith("s3."):
         return side.s3[param]
+    if source.startswith("s5."):
+        return side.s5[param]
     if source.startswith("s6."):
         return side.s6[param]
     return side.s4[param] if source.startswith("s4.") else str(getattr(side, source))
@@ -298,6 +322,7 @@ def test_settings_are_the_callers_own(sides: tuple[Side, Side]) -> None:
 S3_LISTS = (
     "/manufacturers", "/customers", "/products", "/branches", "/uom-conversions", "/unmapped-entities",
     "/imports", "/mapping-templates", "/sales-lines", "/purchase-lines", "/agreements", "/agreement-drafts",
+    "/calculation-runs", "/rebate-accruals",
 )  # fmt: skip
 
 
@@ -373,3 +398,37 @@ def test_r3_s4_foreign_mutations_leave_the_other_tenant_unchanged(sides: tuple[S
     assert b.api.get(f"/agreements/{agreement}").json()["cancelled_at"] is None
     r = a.api.get(f"/agreement-versions/{a.s4['version_id']}/diff/{version}")
     assert r.status_code == 404, r.text  # one own and one foreign version
+
+
+def test_s5_tracker_and_run_filters_never_show_the_other_tenant(sides: tuple[Side, Side]) -> None:
+    a, b = sides
+    own = {row["agreement_id"] for row in a.api.get("/rebate-tracker").json()["data"]}
+    other = {row["agreement_id"] for row in b.api.get("/rebate-tracker").json()["data"]}
+    assert own and other and not own & other
+    # a foreign manufacturer/agreement filter on the caller's own run matches nothing
+    path = f"/calculation-runs/{a.s5['run_id']}/results"
+    for param, value in (("manufacturer_id", b.s3["manufacturer_id"]), ("agreement_id", next(iter(other)))):
+        r = a.api.get(path, params={param: value})
+        assert r.status_code == 200 and r.json()["data"] == [], (param, r.text[:200])
+    # a foreign manufacturer cannot be put in a run scope; the error does not reveal whether it exists
+    r = a.api.post(
+        "/calculation-runs",
+        json={
+            "manufacturer_ids": [b.s3["manufacturer_id"]],
+            "date_from": "2026-01-01",
+            "date_to": "2026-12-31",
+        },
+        headers={"Idempotency-Key": str(uuid.uuid4())},
+    )
+    missing = a.api.post(
+        "/calculation-runs",
+        json={
+            "manufacturer_ids": ["00000000-0000-7000-8000-000000000000"],
+            "date_from": "2026-01-01",
+            "date_to": "2026-12-31",
+        },
+        headers={"Idempotency-Key": str(uuid.uuid4())},
+    )
+    assert r.status_code == missing.status_code == 422
+    assert r.json()["error"]["code"] == missing.json()["error"]["code"]
+    assert r.json()["error"]["details"] == missing.json()["error"]["details"]

@@ -56,6 +56,11 @@ TENANT_TABLES: dict[str, str] = {
     "agreement_version_items": "tenant_id",
     "agreement_version_customers": "tenant_id",
     "agreement_version_tiers": "tenant_id",
+    # S5 calculation runs
+    "calculation_runs": "tenant_id",
+    "calculation_results": "tenant_id",
+    "rebate_accrual_entries": "tenant_id",
+    "claim_adjustments": "tenant_id",
     # S6 AI extraction
     "document_extractions": "tenant_id",
     "ai_invocations": "tenant_id",
@@ -75,6 +80,7 @@ class TenantData:
     file_ids: list[UUID] = field(default_factory=list)
     s3: dict[str, UUID] = field(default_factory=dict)  # one row id per S3 tenant table
     s4: dict[str, UUID] = field(default_factory=dict)  # one row id per S4 tenant table
+    s5: dict[str, UUID] = field(default_factory=dict)  # one row id per S5 tenant table
     s6: dict[str, UUID] = field(default_factory=dict)  # one row id per S6 tenant table
 
 
@@ -134,6 +140,7 @@ def _tenant(conn: Connection, name: str, admin_email: str) -> TenantData:
     data.file_ids.append(fid)
     data.s3 = _s3_rows(conn, tid, admin, fid)
     data.s4 = _s4_rows(conn, tid, admin, data.s3)
+    data.s5 = _s5_rows(conn, tid, admin, data.s3, data.s4)
     data.s6 = _s6_rows(conn, tid, admin, fid)
     conn.execute(
         text(
@@ -220,6 +227,31 @@ def _s4_rows(conn: Connection, t: UUID, user: UUID, s3: dict[str, UUID]) -> dict
         "VALUES (:t, :ver, :cust, 'include')",
         "INSERT INTO agreement_version_tiers (tenant_id, id, version_id, tier_number, lower_bound, rate) "
         "VALUES (:t, :tier, :ver, 1, 0, 0.01)",
+    ):
+        conn.execute(text(sql), p)
+    return ids
+
+
+def _s5_rows(
+    conn: Connection, t: UUID, user: UUID, s3: dict[str, UUID], s4: dict[str, UUID]
+) -> dict[str, UUID]:
+    """One row in every S5 tenant table (a completed run with one result, one ledger entry, one proposal)."""
+    ids = {k: new_id() for k in ("run", "res", "acc", "adj")}
+    p = {"t": t, "u": user, "mfr": s3["mfr"], "sline": s3["sline"], "ver": s4["ver"], "agr": s4["agr"], **ids}
+    for sql in (
+        "INSERT INTO calculation_runs (tenant_id, id, scope, scope_hash, as_of, data_cutoff, run_date, "
+        "engine_version, config_hash, input_checksum, status, totals, created_by, completed_at) VALUES (:t, :run, "
+        "'{}', 'iso-scope', now(), now(), '2026-06-01', '1.0.0', 'h', 'c', 'completed', '{}', :u, now())",
+        "INSERT INTO calculation_results (tenant_id, id, run_id, sales_document_line_id, document_number, "
+        "line_number, invoice_date, manufacturer_id, agreement_id, agreement_version_id, status, claim_amount, trace, "
+        "inputs_hash) VALUES (:t, :res, :run, :sline, 'INV-ISO', 1, '2026-06-01', :mfr, :agr, :ver, 'eligible', 1, "
+        "'{}', 'h')",
+        "INSERT INTO rebate_accrual_entries (tenant_id, id, run_id, agreement_id, agreement_version_id, "
+        "manufacturer_id, external_number, agreement_name, tiers, period_start, period_end, as_of_date, cumulative_qualifying, cumulative_payout_base, cumulative_earned, "
+        "prior_cumulative_accrued, delta, trace, inputs_hash) VALUES (:t, :acc, :run, :agr, :ver, :mfr, "
+        "'SPA-ISO', 'Iso SPA', '[]', '2026-01-01', '2026-12-31', '2026-06-01', 1, 1, 1, 0, 1, '{}', 'h')",
+        "INSERT INTO claim_adjustments (tenant_id, id, manufacturer_id, adjustment_type, calculation_result_id, "
+        "run_id, amount, reason) VALUES (:t, :adj, :mfr, 'agreement_change', :res, :run, -1, 'iso')",
     ):
         conn.execute(text(sql), p)
     return ids
