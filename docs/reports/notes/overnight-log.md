@@ -8,7 +8,7 @@
    - D2 an SPA line that becomes outside_claim_window/cap_exhausted drops out of the rebate SPA-line count (literal §5.4) — intended?
    - D3 one manufacturer `claim_window_basis` serves SPA; rebates always use period end + days. OK?
 4. Failures/findings: main CI c0dfeae backend job failed on flaky `test_register_timing` (34% > 25%, docs-only commit; same code green at 99dc074) → rerun.
-5. Resume: see PROJECT_STATUS.md §3.
+5. Resume (usage ~97%): (a) PR #11 ui/s4 — review pass 2 serious fixed by me (row add/remove keeps raw rows); needs CI green + a short 3rd look, then merge; minors left: missing keys show defaults but are not stored, read-only focus lands on the fieldset. (b) PR #10 ExtractionResult schema: CI then merge. (c) S5/S6 UI hand-off ready: docs/reports/notes/ui-brief-s5-s6.md + antigravity-prompt-s5-s6.md; create worktree `git worktree add D:/veyra/veyra-ui-s5s6 -b ui/s5-s6 main` after #10/#11 merge. (d) then integration, perf, docs, QA pass, final batch report. Follow-ups: S6 3 minors, sweep re-seed, ManufacturerSettingsIn.variance_tolerance accepts a JSON number (float at a money boundary, S3).
 
 ## Log
 - Step 0: ui/s4 WIP committed+pushed (85b3a19). No other worktree had uncommitted work. S4 merged on main (99dc074, CI green); c0dfeae timing flake rerun.
