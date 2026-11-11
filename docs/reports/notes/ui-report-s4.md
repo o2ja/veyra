@@ -30,4 +30,3 @@
 - Branch: `ui/s4`
 - Last commit SHA: `85b3a19a961ca4faa93484b6d5454ea2cf3e552e`
 
-READY TO COMMIT: frontend/e2e/agreements.spec.ts docs/reports/notes/ui-report-s4.md — S4 UI: W5/W7 Playwright E2E spec and S4 completion report

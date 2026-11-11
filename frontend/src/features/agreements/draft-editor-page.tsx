@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Link, useBlocker, useParams } from "react-router-dom";
 
 import { Alert, Button, Card, Empty, ErrorAlert, Field, Loading, fieldError } from "../../components/ui";
@@ -31,7 +31,17 @@ import {
   paginateItems,
   payloadFromDraft,
   switchPayloadType,
+  applyEdit,
+  viewPayload,
 } from "./logic";
+
+/** Disabled controls cannot take focus; focus their label/row wrapper instead so read-only reviewers still land on the field. */
+function focusEl(el: HTMLElement) {
+  const t = el.matches(":disabled") ? ((el.closest("label, fieldset, tr") as HTMLElement | null) ?? el) : el;
+  if (t !== el) t.tabIndex = -1;
+  t.focus();
+  t.scrollIntoView({ block: "center" });
+}
 
 function HeaderSection({
   payload,
@@ -99,7 +109,7 @@ function HeaderSection({
             type="number"
             value={h.priority}
             error={fieldError(error, "payload.header.priority") ?? fieldError(error, "header.priority")}
-            onChange={(e) => setHeader({ priority: Number(e.target.value) || 0 })}
+            onChange={(e) => setHeader({ priority: e.target.value as never })}
           />
           <Field
             id="field-header-valid_from"
@@ -405,7 +415,7 @@ function RulesSection({
             type="number"
             min={0}
             value={rules.rounding.scale}
-            onChange={(e) => setRounding({ scale: Number(e.target.value) || 0 })}
+            onChange={(e) => setRounding({ scale: e.target.value as never })}
           />
           <SelectField
             id="field-rules-rounding-timing"
@@ -751,9 +761,7 @@ function TiersSection({
                 value={t.tier_number}
                 onChange={(e) =>
                   onChange(
-                    tiers.map((row, j) =>
-                      j === i ? { ...row, tier_number: Number(e.target.value) || i + 1 } : row,
-                    ),
+                    tiers.map((row, j) => (j === i ? { ...row, tier_number: e.target.value as never } : row)),
                   )
                 }
               />
@@ -1155,6 +1163,7 @@ function DraftEditorForm({ initial }: { initial: DraftOut }) {
   const approveKeyRef = useRef<{ revision: number; key: string } | null>(null);
 
   const editable = draft.status === "draft" && can("agreement.draft");
+  const view = useMemo(() => viewPayload(payload), [payload]);
 
   useEffect(() => {
     if (!dirty || !editable) return;
@@ -1176,8 +1185,7 @@ function DraftEditorForm({ initial }: { initial: DraftOut }) {
     if (!id) return;
     const el = document.getElementById(id);
     if (el) {
-      el.focus();
-      el.scrollIntoView({ block: "center" });
+      focusEl(el);
       pendingFocusRef.current = null;
     }
   }, [itemsPage]);
@@ -1202,7 +1210,7 @@ function DraftEditorForm({ initial }: { initial: DraftOut }) {
   }
 
   function updatePayload(next: Payload) {
-    setPayload(next);
+    setPayload(applyEdit(payload, view, next) as Payload);
     setDirty(true);
     setActionMsg(null);
   }
@@ -1334,10 +1342,7 @@ function DraftEditorForm({ initial }: { initial: DraftOut }) {
       return;
     }
     const el = document.getElementById(id);
-    if (el) {
-      el.focus();
-      el.scrollIntoView({ block: "center" });
-    }
+    if (el) focusEl(el);
   }
 
   const saveErr = save.error as ApiError | null;
@@ -1417,34 +1422,34 @@ function DraftEditorForm({ initial }: { initial: DraftOut }) {
           </div>
         </Card>
 
-        <HeaderSection payload={payload} editable={editable} error={saveErr} onChange={updatePayload} />
+        <HeaderSection payload={view} editable={editable} error={saveErr} onChange={updatePayload} />
 
         <RulesSection
-          rules={payload.rules}
+          rules={view.rules}
           editable={editable}
           error={saveErr}
-          onChange={(rules) => updatePayload({ ...payload, rules })}
+          onChange={(rules) => updatePayload({ ...view, rules })}
         />
 
         <CustomersSection
-          customers={payload.customers}
+          customers={view.customers}
           editable={editable}
-          onChange={(customers) => updatePayload({ ...payload, customers })}
+          onChange={(customers) => updatePayload({ ...view, customers })}
         />
 
         <ItemsSection
-          items={payload.items}
+          items={view.items}
           page={itemsPage}
           editable={editable}
           onPageChange={setItemsPage}
-          onChange={(items) => updatePayload({ ...payload, items })}
+          onChange={(items) => updatePayload({ ...view, items })}
         />
 
-        {payload.rules.type === "rebate" && (
+        {view.rules.type === "rebate" && (
           <TiersSection
-            tiers={payload.tiers}
+            tiers={view.tiers}
             editable={editable}
-            onChange={(tiers) => updatePayload({ ...payload, tiers })}
+            onChange={(tiers) => updatePayload({ ...view, tiers })}
           />
         )}
 

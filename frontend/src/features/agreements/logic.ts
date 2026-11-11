@@ -134,146 +134,59 @@ function asRecord(v: unknown): Record<string, unknown> {
   return v && typeof v === "object" && !Array.isArray(v) ? (v as Record<string, unknown>) : {};
 }
 
-function asStr(v: unknown, fallback = ""): string {
-  return typeof v === "string" ? v : fallback;
+function isObj(v: unknown): v is Record<string, unknown> {
+  return v !== null && typeof v === "object" && !Array.isArray(v);
 }
 
-function asNullableStr(v: unknown): string | null {
-  if (v === null || v === undefined) return null;
-  return typeof v === "string" ? v : String(v);
-}
-
-function asNum(v: unknown, fallback = 0): number {
-  return typeof v === "number" && Number.isFinite(v) ? v : fallback;
-}
-
-function normalizeRounding(raw: unknown): Rounding {
-  const r = asRecord(raw);
-  const mode = r.mode === "half_even" || r.mode === "down" ? r.mode : "half_up";
-  const timing = r.timing === "per_document" ? "per_document" : "per_line";
-  return { mode, scale: asNum(r.scale, 2), timing };
-}
-
-export function normalizeRules(raw: unknown, agreementType: "spa" | "rebate"): SpaRules | RebateRules {
-  const r = asRecord(raw);
-  const type = r.type === "rebate" || r.type === "spa" ? r.type : agreementType;
-  if (type === "rebate") {
-    const def = defaultRebateRules();
-    const mp = asRecord(r.measurement_period);
-    const ps = asRecord(r.product_scope);
-    return {
-      ...def,
-      measurement_period: {
-        kind: asStr(mp.kind, def.measurement_period.kind),
-        start: asStr(mp.start, def.measurement_period.start),
-        end: asStr(mp.end, def.measurement_period.end),
-      },
-      product_scope: { mode: ps.mode === "listed" ? "listed" : "all" },
-      returns: "reduce_volume",
-      rounding: normalizeRounding(r.rounding),
-      spa_lines: r.spa_lines === "qualify_only" || r.spa_lines === "exclude" ? r.spa_lines : "include",
-      tier_metric: r.tier_metric === "quantity" ? "quantity" : "amount",
-      tier_mode: r.tier_mode === "incremental" ? "incremental" : "retroactive",
-      volume_basis: r.volume_basis === "sales" ? "sales" : "purchases",
-    };
-  }
-  const def = defaultSpaRules();
-  const calc = asRecord(r.calculation);
-  const cs = asRecord(r.customer_scope);
-  const pc = asRecord(r.price_check);
-  const qty = asRecord(r.quantity);
-  const sr = asRecord(r.spa_reference);
-  const basis =
-    calc.basis === "percent_of_sell" ||
-    calc.basis === "percent_of_cost" ||
-    calc.basis === "flat_per_unit" ||
-    calc.basis === "guaranteed_margin"
-      ? calc.basis
-      : "price_difference";
-  const costSource =
-    calc.cost_source === "line_cost" || calc.cost_source === "replacement_cost"
-      ? calc.cost_source
-      : "agreement_reference";
-  return {
-    ...def,
-    adapter: asNullableStr(r.adapter),
-    claim_uom: asNullableStr(r.claim_uom),
-    date_basis: r.date_basis === "invoice_date" ? "invoice_date" : "ship_date",
-    calculation: { basis, cost_source: costSource },
-    customer_scope: { mode: cs.mode === "all" ? "all" : "listed" },
-    product_scope: { mode: "listed" },
-    price_check: {
-      mode: pc.mode === "ignore" ? "ignore" : "flag",
-      tolerance: asStr(pc.tolerance, def.price_check.tolerance),
-    },
-    quantity: {
-      cap_scope: qty.cap_scope === "none" || qty.cap_scope === "per_agreement" ? qty.cap_scope : "per_item",
-    },
-    rounding: normalizeRounding(r.rounding),
-    spa_reference: { required: typeof sr.required === "boolean" ? sr.required : true },
-  };
-}
-
+/** Server payload exactly as received (cloned); defaults only for a brand-new empty draft. */
 export function payloadFromDraft(raw: Record<string, unknown> | null | undefined): Payload {
-  const root = asRecord(raw);
-  const h = asRecord(root.header);
-  const rulesRaw = asRecord(root.rules);
-  const agreementType: "spa" | "rebate" =
-    h.agreement_type === "rebate" || rulesRaw.type === "rebate" ? "rebate" : "spa";
+  if (!isObj(raw) || Object.keys(raw).length === 0) return emptyPayload();
+  return structuredClone(raw) as unknown as Payload;
+}
 
-  const customers = Array.isArray(root.customers)
-    ? root.customers.map((c) => {
-        const cr = asRecord(c);
-        return {
-          customer_code: asStr(cr.customer_code),
-          scope: cr.scope === "exclude" ? ("exclude" as const) : ("include" as const),
-        };
-      })
-    : [];
+function fill(def: unknown, raw: unknown): unknown {
+  if (raw === undefined || (raw === null && isObj(def))) return def;
+  if (isObj(def) && isObj(raw)) {
+    const out: Record<string, unknown> = { ...raw };
+    for (const k of Object.keys(def)) out[k] = fill(def[k], raw[k]);
+    return out;
+  }
+  return raw;
+}
 
-  const items = Array.isArray(root.items)
-    ? root.items.map((it) => {
-        const ir = asRecord(it);
-        return {
-          sku: asStr(ir.sku),
-          reference_cost: asNullableStr(ir.reference_cost),
-          deviated_cost: asNullableStr(ir.deviated_cost),
-          sell_price: asNullableStr(ir.sell_price),
-          rate: asNullableStr(ir.rate),
-          flat_amount: asNullableStr(ir.flat_amount),
-          max_quantity: asNullableStr(ir.max_quantity),
-          claim_uom: asNullableStr(ir.claim_uom),
-        };
-      })
-    : [];
-
-  const tiers = Array.isArray(root.tiers)
-    ? root.tiers.map((t, idx) => {
-        const tr = asRecord(t);
-        return {
-          tier_number: asNum(tr.tier_number, idx + 1),
-          lower_bound: asStr(tr.lower_bound),
-          rate: asStr(tr.rate),
-        };
-      })
-    : [];
-
+/** Read-only view for form binding: raw values win, missing keys fall back to defaults. */
+export function viewPayload(raw: Payload): Payload {
+  const r = asRecord(raw);
+  const h = asRecord(r.header);
+  const rules = asRecord(r.rules);
+  const type: "spa" | "rebate" = h.agreement_type === "rebate" || rules.type === "rebate" ? "rebate" : "spa";
+  const def = emptyPayload(type);
+  const defRules = type === "rebate" ? defaultRebateRules() : defaultSpaRules();
+  const list = (v: unknown, d: unknown) =>
+    Array.isArray(v) ? v.map((e) => (isObj(e) ? fill(d, e) : e)) : [];
   return {
-    payload_schema_version: 1,
-    header: {
-      agreement_type: agreementType,
-      external_number: asStr(h.external_number),
-      manufacturer_code: asStr(h.manufacturer_code),
-      name: asStr(h.name),
-      priority: asNum(h.priority, 0),
-      valid_from: asStr(h.valid_from),
-      valid_to: asStr(h.valid_to),
-    },
-    rules: normalizeRules(rulesRaw, agreementType),
-    customers,
-    items,
-    tiers,
-  };
+    ...r,
+    payload_schema_version: r.payload_schema_version ?? 1,
+    header: fill(def.header, h),
+    rules: fill(defRules, rules),
+    customers: list(r.customers, emptyCustomer()),
+    items: list(r.items, emptyItem()),
+    tiers: list(r.tiers, emptyTier(1)),
+  } as unknown as Payload;
+}
+
+/** Apply only the user's edits (prev view -> next view) onto the raw payload; untouched values and unknown keys survive. */
+export function applyEdit(raw: unknown, prev: unknown, next: unknown): unknown {
+  if (JSON.stringify(prev) === JSON.stringify(next)) return raw;
+  if (isObj(next) && isObj(prev)) {
+    const out: Record<string, unknown> = isObj(raw) ? { ...raw } : {};
+    for (const k of Object.keys(next)) out[k] = applyEdit(out[k], prev[k], next[k]);
+    return Object.fromEntries(Object.entries(out).filter(([k]) => k in next || !(k in prev)));
+  }
+  if (Array.isArray(next) && Array.isArray(prev) && Array.isArray(raw) && next.length === prev.length) {
+    return next.map((n, i) => applyEdit(raw[i], prev[i], n));
+  }
+  return next;
 }
 
 export function switchPayloadType(current: Payload, nextType: "spa" | "rebate"): Payload {
@@ -310,7 +223,7 @@ export function buildAmendmentPayload(
       valid_from: version.valid_from,
       valid_to: version.valid_to,
     },
-    rules: normalizeRules(version.rules, agreementType),
+    rules: version.rules as unknown as Payload["rules"],
     customers: version.customers.map((c) => ({
       customer_code: c.customer_code ?? "",
       scope: c.scope === "exclude" ? "exclude" : "include",

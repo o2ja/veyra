@@ -8,7 +8,9 @@ import {
   itemIndexFromIssuePath,
   pageForItemIndex,
   paginateItems,
+  applyEdit,
   payloadFromDraft,
+  viewPayload,
   switchPayloadType,
   type ItemOut,
   type VersionOut,
@@ -152,4 +154,36 @@ test("flattenRulesEntries flattens nested rules for read-only display", () => {
     { key: "rounding.scale", value: "2" },
     { key: "adapter", value: "—" },
   ]);
+});
+
+test("payloadFromDraft keeps server values verbatim; edits apply only the user's change", () => {
+  const raw = {
+    header: { agreement_type: "spa", priority: "7", extra: 1 },
+    rules: {
+      type: "spa",
+      price_check: { mode: "flag", tolerance: 0.005 },
+      rounding: { scale: "x" },
+      unknown: { a: 1 },
+    },
+    tiers: [{ tier_number: "a", lower_bound: "1", rate: "2" }],
+  };
+  const p = payloadFromDraft(raw);
+  expect(p).toEqual(raw);
+  const v = viewPayload(p);
+  expect(v.header.name).toBe("");
+  const next = { ...v, header: { ...v.header, name: "N" } };
+  const out = applyEdit(p, v, next) as typeof raw & { header: { name: string } };
+  expect(out.header).toEqual({ agreement_type: "spa", priority: "7", extra: 1, name: "N" });
+  expect(out.rules).toEqual(raw.rules);
+  expect(out.tiers).toEqual(raw.tiers);
+});
+
+test("buildAmendmentPayload copies rules as returned", () => {
+  const rules = { type: "spa", weird: [1], price_check: { tolerance: 3 } };
+  const p = buildAmendmentPayload(
+    { agreement_type: "spa", rules, customers: [], tiers: [] } as unknown as VersionOut,
+    "M",
+    [],
+  );
+  expect(p.rules).toBe(rules);
 });

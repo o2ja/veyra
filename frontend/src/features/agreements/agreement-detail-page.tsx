@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 
 import type { components } from "../../api/schema";
@@ -36,6 +36,12 @@ export function AgreementDetailPage() {
   const manufacturers = useManufacturerMap();
 
   const [cancelOpen, setCancelOpen] = useState(false);
+  const wasOpen = useRef(false);
+  useEffect(() => {
+    if (cancelOpen) document.getElementById("cancel-effective-date")?.focus();
+    else if (wasOpen.current) document.getElementById("cancel-toggle")?.focus();
+    wasOpen.current = cancelOpen;
+  }, [cancelOpen]);
   const [effectiveDate, setEffectiveDate] = useState("");
   const [cancelReason, setCancelReason] = useState("");
   const [compareFrom, setCompareFrom] = useState("");
@@ -137,7 +143,13 @@ export function AgreementDetailPage() {
               }
               actions={
                 can("agreement.approve") && agreement.data && !agreement.data.cancelled_at ? (
-                  <Button variant="danger" onClick={() => setCancelOpen((v) => !v)}>
+                  <Button
+                    id="cancel-toggle"
+                    variant="danger"
+                    aria-expanded={cancelOpen}
+                    aria-controls="cancel-form"
+                    onClick={() => setCancelOpen((v) => !v)}
+                  >
                     Cancel agreement
                   </Button>
                 ) : undefined
@@ -185,6 +197,7 @@ export function AgreementDetailPage() {
 
               {cancelOpen && (
                 <form
+                  id="cancel-form"
                   className="mt-6 flex max-w-lg flex-col gap-3 rounded-md border border-line p-4"
                   onSubmit={(e) => {
                     e.preventDefault();
@@ -193,6 +206,7 @@ export function AgreementDetailPage() {
                 >
                   <h2 className="text-base font-semibold">Cancel agreement</h2>
                   <Field
+                    id="cancel-effective-date"
                     label="Effective date"
                     type="date"
                     required
