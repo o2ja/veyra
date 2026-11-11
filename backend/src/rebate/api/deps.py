@@ -82,7 +82,10 @@ def _ai_limits(request: Request, c: RequestContext) -> None:
         and route_template(request) in AI_ROUTES
     ):
         ratelimit.hit(
-            c.db, f"ai:tenant:{p.tenant_id}", limit=c.settings.ai_requests_per_minute, window_seconds=60
+            c.db,
+            f"ai:tenant:{p.tenant_id}:{route_template(request)}",
+            limit=c.settings.ai_requests_per_minute,
+            window_seconds=60,
         )
 
 

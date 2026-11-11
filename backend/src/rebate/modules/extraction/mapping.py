@@ -8,6 +8,7 @@ transaction is committed *before* the provider call, so no pooled connection wai
 from typing import Any, cast
 from uuid import UUID
 
+import structlog
 from sqlalchemy import Engine
 from sqlalchemy.orm import Session
 
@@ -20,6 +21,7 @@ from rebate.modules.extraction import gateway, prompts
 from rebate.modules.extraction.service import AiNotEnabled, ai_engine, audit_invocations
 from rebate.modules.masterdata import Who
 
+log = structlog.get_logger("rebate.extraction")
 SAMPLE_ROWS = 5
 MAX_COLUMNS = 50
 CELL_CHARS = 80
@@ -84,6 +86,7 @@ def suggest_mapping(db: Session, who: Who, settings: Settings, import_id: UUID) 
             timeout=settings.ai_mapping_timeout_seconds,
         )
     except gateway.GatewayError as exc:  # every provider/SDK/limit failure is a 503, never a 500
+        log.warning("mapping.failed", code=exc.code, error=str(exc)[:200])
         raise AiUnavailable() from exc
     finally:
         if gw is not None:

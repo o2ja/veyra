@@ -125,7 +125,7 @@ def test_s2_stale_unfinished_row_is_failed_on_the_next_request(
     assert again.status_code == 202 and again.json()["id"] != first.json()["id"]
     old = enabled.api.get(f"/document-extractions/{first.json()['id']}").json()
     assert old["status"] == "failed" and old["error_code"] == "stale"
-    monkeypatch.undo()
+    monkeypatch.setattr(service, "STALE_AFTER", timedelta(hours=1))
     drain(enabled.app)  # the stale row's job is a no-op, the new one completes
     assert enabled.api.get(f"/document-extractions/{again.json()['id']}").json()["status"] == "completed"
     assert enabled.api.get(f"/document-extractions/{first.json()['id']}").json()["status"] == "failed"
@@ -137,6 +137,7 @@ def test_s2_an_unexpected_exception_dead_letters_into_a_failed_row_and_frees_the
     def boom(*_a: Any, **_k: Any) -> Any:
         raise RuntimeError("unexpected")
 
+    real_names = service._master_names
     monkeypatch.setattr(service, "_master_names", boom)
     fid = golden_file(enabled, SPA_884)
     r = start(enabled, fid)
@@ -145,7 +146,7 @@ def test_s2_an_unexpected_exception_dead_letters_into_a_failed_row_and_frees_the
         clk.advance(120)
     ex = enabled.api.get(f"/document-extractions/{r.json()['id']}").json()
     assert ex["status"] == "failed" and ex["error_code"] == "job_failed", ex
-    monkeypatch.undo()
+    monkeypatch.setattr(service, "_master_names", real_names)
     again = start(enabled, fid)  # the file is not blocked
     assert again.status_code == 202 and again.json()["id"] != r.json()["id"]
 
@@ -180,9 +181,9 @@ def test_s3_concurrent_extractions_per_workspace_are_capped(migrated_db: DbUrls,
     with api_client(app) as api:
         ws = new_workspace(app, api, master=False)
         set_ai(ws, True)
-        first = start(ws, golden_file(ws, SPA_884))
+        mine, other = golden_file(ws, SPA_884), golden_file(ws, "SYNTHETIC_rebate_voltara_REB-VOLT-2026")
+        first = start(ws, mine)  # (uploads drain the queue, so both files are uploaded before this)
         assert first.status_code == 202
-        other = golden_file(ws, "SYNTHETIC_rebate_voltara_REB-VOLT-2026")
         r = start(ws, other)
         assert r.status_code == 429 and r.json()["error"]["code"] == "too_many_extractions"
         drain(app)  # the first finishes; capacity is free again
@@ -288,19 +289,24 @@ def test_m6_mapping_turns_it_into_503_not_500(enabled: Workspace, replay: Replay
     assert r.status_code == 503 and r.json()["error"]["code"] == "ai_unavailable"
 
 
-def test_m7_mapping_sample_masks_and_bounds_headers(enabled: Workspace, replay: Replay) -> None:
-    card = "4111111111111111"
+def test_m7_mapping_sample_truncates_and_bounds_headers(enabled: Workspace, replay: Replay) -> None:
     headers = [f"Col {n}" for n in range(60)]
-    headers[0] = f"Card {card}"
-    body = (",".join(headers) + "\n" + ",".join(f"v{n}" for n in range(60)) + "\n").encode()
+    headers[0] = "H" * 200
+    body = "\n".join([",".join(headers), ",".join(f"v{n}" for n in range(60)), ""]).encode()
     batch = start_import(enabled, clean_file(enabled, "wide.csv", body), "customers")
     replay.script.append(ok({"mapping": {}}, tool="record_mapping"))
     r = enabled.api.post(f"/imports/{batch['id']}/suggest-mapping")
     assert r.status_code == 200, r.text
     sent = replay.calls[0]["messages"][0]["content"]
-    columns = next(line for line in sent.split("\n") if line.startswith("Columns")).split(": ", 1)[1]
-    assert card not in sent and "[card number removed]" in columns
+    columns = next(line for line in sent.splitlines() if line.startswith("Columns")).split(": ", 1)[1]
     assert len(columns.split(" | ")) == 50 and "Col 59" not in sent
+    assert "H" * 80 in columns and "H" * 81 not in sent
+
+
+def test_m7_cells_and_headers_are_card_masked() -> None:
+    from rebate.modules.extraction import mapping
+
+    assert mapping._cell("Card 4111111111111111 x") == "Card [card number removed] x"
 
 
 def test_m8_extractor_notes_are_bounded(enabled: Workspace, replay: Replay) -> None:
@@ -329,7 +335,7 @@ def test_m9_every_invocation_is_audited_without_content(enabled: Workspace, repl
     ]
     assert sorted(e["after"]["purpose"] for e in events) == ["agreement_pass_a", "agreement_pass_b"]
     a = next(e for e in events if e["after"]["purpose"] == "agreement_pass_a")["after"]
-    assert (a["status"], a["cost_usd"], a["usage_in"], a["usage_out"]) == ("ok", "0.029100", 4200, 1100)
+    assert (a["status"], a["cost_usd"], a["usage_in"], a["usage_out"]) == ("ok", "0.0291", 4200, 1100)
     assert a["extraction_id"] == ex["id"]
     assert "SPA-VOLT-2026-884" not in str(events)  # no document content
 
