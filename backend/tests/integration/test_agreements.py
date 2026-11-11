@@ -398,6 +398,18 @@ def _versions(api: Api, agreement_id: str) -> dict[int, dict[str, Any]]:
     return {v["version_number"]: v for v in rows}
 
 
+def test_amendment_cannot_rename_the_agreement(org: Org) -> None:
+    """The name is stored on the agreement, not the version: a renamed amendment would be dropped silently."""
+    v1 = activate(org.maker, org.p1, fresh("SPA-VOLT-2026-884"))
+    d = create(org.maker, amends_version_id=v1["id"])
+    p = d["payload"]
+    p["header"]["name"] = p["header"]["name"] + " Rev 2"
+    d = update(org.maker, d, p).json()
+    assert {(e["field"], e["code"]) for e in d["validation"]["errors"]} == {
+        ("payload.header.name", "mismatch")
+    }
+
+
 def test_mid_period_amendment_splits_v1_into_v1a_and_v2(org: Org) -> None:
     """BUSINESS_LOGIC.md §9.2: v1 Jan-Dec; amendment from Jul 1 with new terms."""
     v1 = activate(org.maker, org.p1, fresh("SPA-VOLT-2026-884"))
