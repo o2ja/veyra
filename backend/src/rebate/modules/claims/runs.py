@@ -31,14 +31,20 @@ from rebate.modules.claims.models import CalculationRun
 from rebate_engine.deadlines import rebate_deadline
 from rebate_engine.models import (
     EngineRuleError,
+    LineResult,
     ManufacturerSettings,
+    SalesLine,
     SpaRunInput,
     Status,
+    UomConversion,
 )
 from rebate_engine.rebate import calculate_accrual
 from rebate_engine.spa import calculate_spa
 from rebate_engine.trace import ENGINE_VERSION
+from rebate_engine.uom import find_factor
 
+MOD = 2**256
+WINDOW_LINES = 50_000  # lines per engine call: bounds memory; the cap state is carried between windows
 LOCK_KEY = "calc_run:{tenant}"
 
 
@@ -147,16 +153,25 @@ class Totals:
     adjustment_amount: Decimal = Decimal(0)
     accrual_entries: int = 0
     accrual_delta: Decimal = Decimal(0)
-    result_hashes: list[tuple[str, str]] = field(default_factory=list)
+    result_acc: int = 0  # order-independent digest of (line, inputs_hash): independent of the window size
+    input_acc: int = 0  # same for the source rows (lines, volume lines)
     checksum: Any = field(default_factory=hashlib.sha256)
 
     def feed(self, *parts: str) -> None:
         self.checksum.update("|".join(parts).encode() + b"\n")
 
+    def add_input(self, *parts: str) -> None:
+        self.input_acc = (self.input_acc + int(sha256("|".join(parts)), 16)) % MOD
+
+    def add_result(self, line_id: str, inputs_hash: str) -> None:
+        self.result_acc = (self.result_acc + int(sha256(f"{line_id}:{inputs_hash}"), 16)) % MOD
+
+    def input_checksum(self) -> str:
+        digest = hashlib.sha256(self.checksum.digest())
+        digest.update(self.input_acc.to_bytes(32, "big"))
+        return digest.hexdigest()
+
     def as_json(self) -> dict[str, Any]:
-        results_hash = hashlib.sha256()
-        for pair in sorted(self.result_hashes):
-            results_hash.update(":".join(pair).encode() + b"\n")
         return {
             "lines": self.lines,
             "by_status": dict(sorted(self.by_status.items())),
@@ -166,7 +181,7 @@ class Totals:
             "adjustment_amount": persistence.money(self.adjustment_amount),
             "accrual_entries": self.accrual_entries,
             "accrual_delta": persistence.money(self.accrual_delta),
-            "results_hash": results_hash.hexdigest(),
+            "results_hash": format(self.result_acc, "064x"),
             "engine_version": ENGINE_VERSION,
         }
 
@@ -251,7 +266,7 @@ def execute(
             .values(
                 status="completed",
                 totals=totals.as_json(),
-                input_checksum=totals.checksum.hexdigest(),
+                input_checksum=totals.input_checksum(),
                 agreement_version_ids=version_ids,
                 completed_at=clock.now(),
             )
@@ -312,44 +327,90 @@ def _calculate(
     if not scope.manufacturer_ids:
         groups.append(None)  # lines whose product is unknown have no manufacturer: unknown_product results
     eligible_ids: set[str] = set()
+    agreement_of = {v.version_id: v.agreement_id for v in versions.spa}
     for group in groups:
-        with transaction(engine, tenant_id) as db:
-            batch = loaders.load_sales_lines(
-                db, tenant_id, group, scope.date_from, scope.date_to, cutoff, ancestors, source
-            )
-            consumption = source.consumption(db, tenant_id, [UUID(ln.line_id) for ln in batch.lines])
-        if not batch.lines:
-            continue
-        for line_id, row_hash in batch.checksum_rows:
-            totals.feed("sales", line_id, row_hash)
         mine = str(group) if group else None
-        results = calculate_spa(
-            SpaRunInput(
-                run_date=run_date,
-                lines=batch.lines,
-                versions=tuple(v for v in versions.spa if v.manufacturer_id == mine),
-                manufacturers=settings,
-                conversions=conversions,
-                prior_consumption=dict(consumption),
+        group_versions = tuple(v for v in versions.spa if v.manufacturer_id == mine)
+        with transaction(engine, tenant_id) as db:
+            windows = loaders.sales_line_windows(
+                db, tenant_id, group, scope.date_from, scope.date_to, cutoff, WINDOW_LINES
             )
-        )
-        persistence.insert_results(engine, tenant_id, run_id, results, heartbeat)
-        for r in results:
-            totals.lines += 1
-            totals.by_status[r.status.value] += 1
-            if r.exception_code is not None:
-                totals.by_exception[r.exception_code.value] += 1
-            if r.status is Status.ELIGIBLE:
-                totals.eligible_amount += r.claim_amount
-                eligible_ids.add(r.line_id)
-            elif r.exception_code is not None and r.exception_code.value == "outside_claim_window":
-                totals.at_risk_amount += r.claim_amount
-            elif r.status is Status.ADJUSTMENT:
-                totals.adjustment_amount += r.claim_amount
-            totals.result_hashes.append((r.line_id, r.inputs_hash))
+            # claims frozen before this run, except the source lines of the run itself (their own consumption is
+            # re-derived below, window by window, in the engine's processing order)
+            consumed: dict[tuple[str, str], Decimal] = dict(
+                source.consumption(
+                    db,
+                    tenant_id,
+                    loaders.sales_line_ids(db, tenant_id, group, scope.date_from, scope.date_to, cutoff),
+                )
+            )
+        for d_from, d_to in windows:
+            with transaction(engine, tenant_id) as db:
+                batch = loaders.load_sales_lines(
+                    db, tenant_id, group, d_from, d_to, cutoff, ancestors, source
+                )
+            for line_id, row_hash in batch.checksum_rows:
+                totals.add_input("sales", line_id, row_hash)
+            results = calculate_spa(
+                SpaRunInput(
+                    run_date=run_date,
+                    lines=batch.lines,
+                    versions=group_versions,
+                    manufacturers=settings,
+                    conversions=conversions,
+                    prior_consumption=dict(consumed),
+                )
+            )
+            _carry(consumed, batch.lines, results, agreement_of, conversions)
+            persistence.insert_results(engine, tenant_id, run_id, results, heartbeat)
+            for r in results:
+                totals.lines += 1
+                totals.by_status[r.status.value] += 1
+                if r.exception_code is not None:
+                    totals.by_exception[r.exception_code.value] += 1
+                if r.status is Status.ELIGIBLE:
+                    totals.eligible_amount += r.claim_amount
+                    eligible_ids.add(r.line_id)
+                elif r.exception_code is not None and r.exception_code.value == "outside_claim_window":
+                    totals.at_risk_amount += r.claim_amount
+                elif r.status is Status.ADJUSTMENT:
+                    totals.adjustment_amount += r.claim_amount
+                totals.add_result(r.line_id, r.inputs_hash)
 
     _rebates(engine, tenant_id, run_id, scope, cutoff, versions, settings, frozenset(eligible_ids), totals)
     return totals, versions.ids
+
+
+def _carry(
+    consumed: dict[tuple[str, str], Decimal],
+    lines: tuple[SalesLine, ...],
+    results: tuple[LineResult, ...],
+    agreement_of: dict[str, str],
+    conversions: tuple[UomConversion, ...],
+) -> None:
+    """Quantity-cap state after a window, exactly as the engine accumulates it inside one call (BUSINESS_LOGIC §4.2):
+    unclaimed eligible lines consume their eligible quantity; claimed lines consume what they claimed less returns."""
+    by_id = {ln.line_id: ln for ln in lines}
+    claimed = {i: ln for i, ln in by_id.items() if ln.prior_claim is not None}
+    for r in results:
+        if (
+            r.status is Status.ELIGIBLE
+            and r.line_id not in claimed
+            and r.agreement_version_id
+            and r.eligible_quantity
+        ):
+            line = by_id[r.line_id]
+            if line.product_id is not None:
+                key = (agreement_of[r.agreement_version_id], line.product_id)
+                consumed[key] = consumed.get(key, Decimal(0)) + r.eligible_quantity
+    for ln in claimed.values():
+        pc = ln.prior_claim
+        if pc is None or ln.product_id is None:
+            continue
+        factor = find_factor(conversions, ln.product_id, ln.uom, pc.claim_uom)
+        returned = ln.returned_quantity * factor if factor is not None else Decimal(0)
+        key = (pc.agreement_id, ln.product_id)
+        consumed[key] = consumed.get(key, Decimal(0)) + max(pc.quantity - returned, Decimal(0))
 
 
 def _rebates(
@@ -393,7 +454,7 @@ def _rebates(
                 )
             prior = loaders.prior_accrued(db, tenant_id, agreement_id, period_start)
         for line_id, row_hash in rows:
-            totals.feed("volume", line_id, row_hash)
+            totals.add_input("volume", line_id, row_hash)
         result = calculate_accrual(version, lines, scope.date_to, prior)
         days = window_days.get(version.manufacturer_id)
         deadline = None if days is None else rebate_deadline(rules.period_end, days)

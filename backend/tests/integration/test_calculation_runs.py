@@ -185,6 +185,25 @@ def test_rerun_is_byte_identical(baseline: dict[str, Any], calc: Scenario, claim
     assert trace_a == trace_b
 
 
+def test_windowed_execution_is_identical_to_a_single_window(
+    baseline: dict[str, Any], calc: Scenario, claimed: FixtureClaims, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """One date per engine call (the memory bound for million-line runs): the cap state is carried between windows, so
+    results, trace hashes, totals and the input checksum equal the single-window run (SC-07a/b share a cap)."""
+    monkeypatch.setattr(runs, "WINDOW_LINES", 1)
+    windowed = run(calc.ws, **WINDOW)
+    assert windowed["status"] == "completed", windowed
+    assert windowed["totals"] == baseline["run"]["totals"]
+    assert windowed["input_checksum"] == baseline["run"]["input_checksum"]
+    second = results(calc.ws, windowed["id"])
+    assert {k: v["inputs_hash"] for k, v in second.items()} == {
+        k: v["inputs_hash"] for k, v in baseline["results"].items()
+    }
+    assert Decimal(second["INV-10011/1"]["claim_amount"]) == Decimal(
+        "2080.00"
+    )  # SC-07b: cap remainder 40 x 52.00
+
+
 # ---- reading results ----------------------------------------------------------------------------------------
 
 

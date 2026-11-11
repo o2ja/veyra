@@ -382,6 +382,66 @@ def load_sales_lines(
     return SalesBatch(tuple(lines), tuple((str(r.id), r.row_hash) for r in rows))
 
 
+def sales_line_windows(
+    db: Session,
+    tenant_id: UUID,
+    manufacturer_id: UUID | None,
+    date_from: date,
+    date_to: date,
+    data_cutoff: datetime,
+    max_lines: int,
+) -> list[tuple[date, date]]:
+    """Consecutive invoice-date windows of at most ``max_lines`` lines (a single date is never split: documents and
+    the engine's processing order stay inside one window)."""
+    rows = db.execute(
+        text(
+            "SELECT l.invoice_date AS d, count(*) AS n FROM sales_document_lines l "
+            "JOIN import_batches b ON b.tenant_id = l.tenant_id AND b.id = l.import_batch_id "
+            "WHERE l.tenant_id = :t AND l.is_current AND b.status IN ('completed', 'completed_with_errors') "
+            "AND b.completed_at <= :cutoff AND l.manufacturer_id IS NOT DISTINCT FROM CAST(:m AS uuid) "
+            "AND l.invoice_date BETWEEN :d1 AND :d2 GROUP BY l.invoice_date ORDER BY l.invoice_date"
+        ),
+        {"t": tenant_id, "m": manufacturer_id, "cutoff": data_cutoff, "d1": date_from, "d2": date_to},
+    ).all()
+    out: list[tuple[date, date]] = []
+    start: date | None = None
+    last: date | None = None
+    count = 0
+    for r in rows:
+        if start is not None and last is not None and count + r.n > max_lines:
+            out.append((start, last))
+            start, count = None, 0
+        if start is None:
+            start = r.d
+        last, count = r.d, count + r.n
+    if start is not None and last is not None:
+        out.append((start, last))
+    return out
+
+
+def sales_line_ids(
+    db: Session,
+    tenant_id: UUID,
+    manufacturer_id: UUID | None,
+    date_from: date,
+    date_to: date,
+    data_cutoff: datetime,
+) -> list[UUID]:
+    """Ids of the run's source lines of one manufacturer: the lines whose claims the cap state must not count twice."""
+    return list(
+        db.scalars(
+            text(
+                "SELECT l.id FROM sales_document_lines l "
+                "JOIN import_batches b ON b.tenant_id = l.tenant_id AND b.id = l.import_batch_id "
+                "WHERE l.tenant_id = :t AND l.is_current AND b.status IN ('completed', 'completed_with_errors') "
+                "AND b.completed_at <= :cutoff AND l.manufacturer_id IS NOT DISTINCT FROM CAST(:m AS uuid) "
+                "AND l.invoice_date BETWEEN :d1 AND :d2"
+            ),
+            {"t": tenant_id, "m": manufacturer_id, "cutoff": data_cutoff, "d1": date_from, "d2": date_to},
+        )
+    )
+
+
 def sales_volume_lines(
     db: Session,
     tenant_id: UUID,
