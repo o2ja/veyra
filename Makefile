@@ -13,7 +13,7 @@ PYTHON ?= python3
 endif
 
 COMPOSE := docker compose --env-file .env -f infra/docker/compose.dev.yml --profile s2
-API_RUN := $(COMPOSE) run --rm --no-deps -T -e POSTGRES_PASSWORD -e REBATE_OWNER_PASSWORD -e REBATE_APP_PASSWORD api
+API_RUN := $(COMPOSE) run --rm --no-deps -T -e POSTGRES_PASSWORD -e REBATE_OWNER_PASSWORD -e REBATE_APP_PASSWORD -e REBATE_AI_WRITER_PASSWORD api
 FE_RUN := $(COMPOSE) run --rm --no-deps -T frontend
 ADMIN_URL := postgresql+psycopg://postgres:$$POSTGRES_PASSWORD@postgres:5432/postgres
 OWNER_URL := postgresql+psycopg://rebate_owner:$$REBATE_OWNER_PASSWORD@postgres:5432/rebate

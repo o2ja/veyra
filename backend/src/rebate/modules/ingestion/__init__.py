@@ -17,6 +17,7 @@ from rebate.modules.ingestion.normalizers import (
 )
 from rebate.modules.ingestion.readers import ReadError, csv_source, records, xlsx_source
 from rebate.modules.ingestion.router import router
+from rebate.modules.ingestion.service import mapping_sample
 
 __all__ = [
     "CARD_REMOVED",
@@ -26,6 +27,7 @@ __all__ = [
     "canonical_uom",
     "csv_source",
     "find_card_number",
+    "mapping_sample",
     "normalise_header",
     "parse_decimal",
     "parse_key",
