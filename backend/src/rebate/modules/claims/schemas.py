@@ -64,7 +64,7 @@ class RunOut(BaseModel):
     completed_at: datetime | None
 
 
-class JobRef(BaseModel):
+class RunJobRef(BaseModel):
     id: UUID
     status: str
     progress: int
@@ -72,7 +72,7 @@ class JobRef(BaseModel):
 
 
 class RunAccepted(BaseModel):
-    job: JobRef
+    job: RunJobRef
     run: RunOut
 
 
@@ -139,7 +139,7 @@ class AccrualList(BaseModel):
     page: Page
 
 
-class TierOut(BaseModel):
+class AccrualTierOut(BaseModel):
     tier_number: int
     lower_bound: Money
     rate: Money
@@ -164,7 +164,7 @@ class TrackerRow(BaseModel):
     accrued_to_date: Money
     claim_deadline: date | None
     run_id: UUID
-    tiers: list[TierOut]
+    tiers: list[AccrualTierOut]
 
 
 class TrackerOut(BaseModel):
@@ -189,13 +189,13 @@ class ProposalsOut(BaseModel):
     proposed: list[AdjustmentOut]
 
 
-class PreviewIn(BaseModel):
+class DraftPreviewIn(BaseModel):
     model_config = STRICT
 
     limit: int = Field(default=200, ge=1, le=200)
 
 
-class PreviewLine(BaseModel):
+class DraftPreviewLine(BaseModel):
     line_id: UUID
     document_number: str
     line_number: int
@@ -209,7 +209,7 @@ class PreviewLine(BaseModel):
     trace: dict[str, Any]
 
 
-class PreviewAccrual(BaseModel):
+class DraftPreviewAccrual(BaseModel):
     period_start: date
     period_end: date
     as_of_date: date
@@ -224,11 +224,11 @@ class PreviewAccrual(BaseModel):
     note: str
 
 
-class PreviewOut(BaseModel):
+class DraftPreviewOut(BaseModel):
     kind: Literal["spa", "rebate"]
     persisted: Literal[False] = False
     run_date: date
     sample_size: int
     totals: dict[str, Any]
-    lines: list[PreviewLine]
-    accrual: PreviewAccrual | None
+    lines: list[DraftPreviewLine]
+    accrual: DraftPreviewAccrual | None

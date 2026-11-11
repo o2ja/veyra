@@ -11,6 +11,7 @@ for the 1M-line baseline are in ``docs/reports/notes/c1-s5-runs.md``.
 import hashlib
 import json
 from collections import Counter
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from datetime import date, datetime
 from decimal import Decimal
@@ -201,6 +202,7 @@ def execute(
     run_id: UUID,
     lock_db: Session,
     source: frozen.FrozenClaimSource | None = None,
+    heartbeat: Callable[[], None] | None = None,
 ) -> None:
     """Run ``run_id`` to completion. ``lock_db`` is a session whose open transaction holds the per-tenant lock
     for the whole run (the job's own session). Raises ``RunInProgress`` (retryable) when another run holds it,
@@ -226,7 +228,9 @@ def execute(
             .values(status="running", started_at=clock.now())
         )
     try:
-        totals, version_ids = _calculate(engine, tenant_id, run_id, scope, as_of, cutoff, run_date, source)
+        totals, version_ids = _calculate(
+            engine, tenant_id, run_id, scope, as_of, cutoff, run_date, source, heartbeat
+        )
     except RunRuleError as exc:
         _fail(engine, tenant_id, run_id, exc.details)
         raise PermanentError(
@@ -290,6 +294,7 @@ def _calculate(
     cutoff: datetime,
     run_date: date,
     source: frozen.FrozenClaimSource,
+    heartbeat: Callable[[], None] | None,
 ) -> tuple[Totals, list[UUID]]:
     totals = Totals()
     with transaction(engine, tenant_id) as db:
@@ -328,7 +333,7 @@ def _calculate(
                 prior_consumption=dict(consumption),
             )
         )
-        persistence.insert_results(engine, tenant_id, run_id, results)
+        persistence.insert_results(engine, tenant_id, run_id, results, heartbeat)
         for r in results:
             totals.lines += 1
             totals.by_status[r.status.value] += 1

@@ -5,7 +5,7 @@ then marked ``failed``. Readers only ever see ``completed`` runs (see ``service`
 the append-only triggers keep them as evidence.
 """
 
-from collections.abc import Sequence
+from collections.abc import Callable, Sequence
 from datetime import date
 from decimal import Decimal
 from typing import Any
@@ -43,11 +43,20 @@ def result_row(tenant_id: UUID, run_id: UUID, r: LineResult) -> dict[str, Any]:
     }
 
 
-def insert_results(engine: Engine, tenant_id: UUID, run_id: UUID, results: Sequence[LineResult]) -> None:
+def insert_results(
+    engine: Engine,
+    tenant_id: UUID,
+    run_id: UUID,
+    results: Sequence[LineResult],
+    heartbeat: Callable[[], None] | None = None,
+) -> None:
+    """Insert in chunks; ``heartbeat`` (the job's lease renewal) runs after every committed chunk."""
     for i in range(0, len(results), CHUNK):
         rows = [result_row(tenant_id, run_id, r) for r in results[i : i + CHUNK]]
         with transaction(engine, tenant_id) as db:
             db.execute(insert(CalculationResult), rows)
+        if heartbeat is not None:
+            heartbeat()
 
 
 def insert_accrual(

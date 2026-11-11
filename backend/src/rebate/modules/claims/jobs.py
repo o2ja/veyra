@@ -19,4 +19,4 @@ def calculation_run(db: Session, ctx: JobContext) -> None:
         run_id = UUID(ctx.payload["run_id"])
     except KeyError, ValueError:
         raise PermanentError("calculation job without a valid run_id") from None
-    runs.execute(ctx.engine, ctx.tenant_id, run_id, db)
+    runs.execute(ctx.engine, ctx.tenant_id, run_id, db, heartbeat=ctx.renew_lease)

@@ -159,7 +159,7 @@ Gate details:
 6. **Price check.** If item `sell_price` exists and mode is `flag`: `|unit_price − sell_price| > tolerance` → `price_mismatch`. (Rationale: a manufacturer will usually reject a claim where the invoice price differs from the approved SPA price.) Prices are compared per line UoM; if UoMs differ, the item `sell_price` is interpreted per `claim_uom` and the line price is converted per unit of claim UoM.
 7. **Returns netting and cap** (§7 and §4.2).
 8. **Amount** (§4.1) and **rounding** (§6).
-9. **Claim window.** Deadline = date per manufacturer `claim_window_basis` + `claim_window_days` (§12; `period_end` = last day of the month of the line's claim date). If `run_date > deadline` → `outside_claim_window` (status `exception`, but `claim_amount` is populated so the UI can show the money at risk). If settings are missing, the gate is skipped with a trace warning.
+9. **Claim window.** Deadline = date per manufacturer `claim_window_basis` + `claim_window_days` (§12; for SPA lines `month_end` = last day of the month of the line's claim date; `period_end` applies to rebates only and is rejected for SPA lines). If `run_date > deadline` → `outside_claim_window` (status `exception`, but `claim_amount` is populated so the UI can show the money at risk). If settings are missing, the gate is skipped with a trace warning.
 
 ### 4.1 Calculation bases
 
@@ -224,7 +224,7 @@ Rounding is applied to the **cumulative** figure only. **Entry delta = `earned_c
 
 ### 5.3 Accrual ledger
 
-`rebate_accrual_entries` is append-only. Each calculation run, per rebate agreement and measurement period, computes cumulative volumes from source lines dated `period_start … min(period_end, as_of_date)`, finds the tier, computes `earned_cum`, reads `prior_cumulative_accrued` = Σ prior deltas for the same agreement and period, and inserts a row with the delta (possibly 0 or negative). Re-running with the same data yields delta 0 (idempotent; tested).
+`rebate_accrual_entries` is append-only. Each calculation run, per rebate agreement and measurement period, computes cumulative volumes from source lines dated `period_start … min(period_end, as_of_date)`, finds the tier, computes `earned_cum`, reads `prior_cumulative_accrued` = Σ prior deltas for the same agreement and period, and inserts a row with the delta (possibly 0 or negative). Re-running with the same data yields delta 0 (idempotent; tested). `prior_cumulative_accrued` only counts entries of `completed` runs. A rebate's claim deadline (`period_end` + `claim_window_days`) is stored on the entry when the manufacturer has a window. Several versions of one agreement for the same period (after a split-supersede, §9.2): the version with the latest `valid_from` in force at the run's end date governs the cumulative figure.
 
 **Example R1 (retroactive catch-up; product plan/research figures).** Tiers: 0 → 1.5%; 1,000,000 → 2.5%; 2,000,000 → 3.5%, retroactive, purchases basis.
 - Cumulative 990,000 → tier 1 → earned 14,850.00 (accrued 14,850.00).
@@ -401,7 +401,7 @@ The assessment lists the checks run with their inputs. An LLM **may** draft a pr
 
 | Deadline | Formula |
 |---|---|
-| Claim deadline | `claim_window_basis` date + `claim_window_days` (calendar days). `invoice_date` / `ship_date`: that date of the line. `period_end`: the last calendar day of the month containing the line's claim date (the date-validity date of §4.3: invoice date, or ship date with invoice-date fallback). The trace records the basis and the period end |
+| Claim deadline | `claim_window_basis` date + `claim_window_days` (calendar days). SPA lines: `invoice_date` / `ship_date` = that date of the line; `month_end` = the last calendar day of the month containing the line's claim date (the date-validity date of §4.3: invoice date, or ship date with invoice-date fallback). The trace records the basis and the month end. `period_end` applies to **rebates only**: deadline = measurement period end + `claim_window_days` (stored on the accrual entry); a manufacturer whose basis is `period_end` cannot run SPA lines (the run is refused with `engine_rejected`). `agreement_end` is not a basis (rejected) |
 | Dispute/re-claim deadline | `remittance document date` (or `submission_date` per setting) + `dispute_window_days` |
 
 - Pure calendar-day addition; **no weekend or holiday rolling** (conservative: the earlier date is shown).
@@ -409,7 +409,8 @@ The assessment lists the checks run with their inputs. An LLM **may** draft a pr
 - A case without computable deadline gets `deadline_unknown` and sits at the top of the queue.
 
 **Example D1.** Invoice date 2026-03-01 + 60 days = **2026-04-30**; on 2026-05-02 the line is `outside_claim_window`.
-**Example D3 (period end).** Invoice date 2026-03-10, `claim_window_basis = period_end`, 60 days → period end 2026-03-31 → deadline **2026-05-30**; eligible on 2026-05-30 (inclusive), `outside_claim_window` on 2026-05-31. Leap year: 2028-02-10 → period end 2028-02-29.
+**Example D3 (month end, SPA).** Invoice date 2026-03-10, `claim_window_basis = month_end`, 60 days → month end 2026-03-31 → deadline **2026-05-30**; eligible on 2026-05-30 (inclusive), `outside_claim_window` on 2026-05-31. Leap year: 2028-02-10 → month end 2028-02-29 → deadline 2028-04-29.
+**Example D4 (period end, rebate).** Measurement period ending 2026-12-31, 60 days → deadline **2027-03-01** (31 + 28 + 1 days after the period end).
 **Example D2.** Remittance date 2026-05-15 + 60 days = **2026-07-14**. Notifications at 14, 7, and 3 days before: 2026-06-30, 2026-07-07, 2026-07-11.
 
 ## 12.1 Case lifecycle
@@ -472,7 +473,7 @@ Rules: all numbers are strings; step order is fixed; the trace is canonicalised 
 | GL-R3 | Qualify-only / exclude / boundary | 25,000.00; 25,000.00; 14,999.99 |
 | GL-R4 | Incremental | 27,500.00 |
 | GL-D1/D2 | Deadlines | 2026-04-30; 2026-07-14 |
-| GL-D3 | Claim deadline, `period_end` basis | 2026-05-30 eligible; 2026-05-31 `outside_claim_window` |
+| GL-D3 | Claim deadline, `month_end` basis (SPA) | 2026-05-30 eligible; 2026-05-31 `outside_claim_window` |
 | GL-V1 | Short-pay classification | `short_paid`, 150.00 |
 | GL-V2 | Lump payment | T5 suggestion, two allocations |
 | GL-A1 | Amendment recalculation | −1,000.00 adjustment; v1a unchanged |

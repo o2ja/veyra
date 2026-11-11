@@ -46,7 +46,9 @@ def create_run(
         c.db, who, list(body.manufacturer_ids), body.date_from, body.date_to, body.as_of
     )
     result = s.RunAccepted(
-        job=s.JobRef(id=job_id, status="queued", progress=0, result_url=f"/api/v1/calculation-runs/{run.id}"),
+        job=s.RunJobRef(
+            id=job_id, status="queued", progress=0, result_url=f"/api/v1/calculation-runs/{run.id}"
+        ),
         run=s.RunOut.model_validate(run),
     )
     ingestion.store(
@@ -173,7 +175,9 @@ def preview_calculation(
     request: Request,
     draft_id: UUID,
     principal: Annotated[Principal, Depends(require(RUN))],
-    body: s.PreviewIn | None = None,
-) -> s.PreviewOut:
-    out = service.preview(ctx(request).db, _who(request, principal), draft_id, (body or s.PreviewIn()).limit)
-    return s.PreviewOut(**out)
+    body: s.DraftPreviewIn | None = None,
+) -> s.DraftPreviewOut:
+    out = service.preview(
+        ctx(request).db, _who(request, principal), draft_id, (body or s.DraftPreviewIn()).limit
+    )
+    return s.DraftPreviewOut(**out)
