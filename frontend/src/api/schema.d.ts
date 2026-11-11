@@ -1467,6 +1467,19 @@ export interface components {
             /** Name */
             name: string;
         };
+        /** Calculation */
+        Calculation: {
+            /**
+             * Basis
+             * @enum {string}
+             */
+            basis: "price_difference" | "percent_of_sell" | "percent_of_cost" | "flat_per_unit" | "guaranteed_margin";
+            /**
+             * Cost Source
+             * @enum {string}
+             */
+            cost_source: "agreement_reference" | "line_cost" | "replacement_cost";
+        };
         /** CancelIn */
         CancelIn: {
             /**
@@ -1635,6 +1648,24 @@ export interface components {
             name?: string | null;
             /** Parent Customer Id */
             parent_customer_id?: string | null;
+        };
+        /** CustomerRef */
+        CustomerRef: {
+            /** Customer Code */
+            customer_code: string;
+            /**
+             * Scope
+             * @enum {string}
+             */
+            scope: "include" | "exclude";
+        };
+        /** CustomerScope */
+        CustomerScope: {
+            /**
+             * Mode
+             * @enum {string}
+             */
+            mode: "all" | "listed";
         };
         /** DiffOut */
         DiffOut: {
@@ -1871,6 +1902,29 @@ export interface components {
             /** Detail */
             detail?: components["schemas"]["ValidationError"][];
         };
+        /** Header */
+        Header: {
+            /**
+             * Agreement Type
+             * @enum {string}
+             */
+            agreement_type: "spa" | "rebate";
+            /** External Number */
+            external_number: string;
+            /** Manufacturer Code */
+            manufacturer_code: string;
+            /** Name */
+            name: string;
+            /**
+             * Priority
+             * @default 0
+             */
+            priority: number;
+            /** Valid From */
+            valid_from: string;
+            /** Valid To */
+            valid_to: string;
+        };
         /** HealthStatus */
         HealthStatus: {
             /**
@@ -2066,6 +2120,46 @@ export interface components {
             message: string;
             /** Severity */
             severity: string;
+        };
+        /** Item */
+        Item: {
+            /**
+             * Claim Uom
+             * @default null
+             */
+            claim_uom: string | null;
+            /**
+             * Deviated Cost
+             * @default null
+             */
+            deviated_cost: string | null;
+            /**
+             * Flat Amount
+             * @default null
+             */
+            flat_amount: string | null;
+            /**
+             * Max Quantity
+             * @default null
+             */
+            max_quantity: string | null;
+            /**
+             * Rate
+             * @default null
+             */
+            rate: string | null;
+            /**
+             * Reference Cost
+             * @default null
+             */
+            reference_cost: string | null;
+            /**
+             * Sell Price
+             * @default null
+             */
+            sell_price: string | null;
+            /** Sku */
+            sku: string;
         };
         /** ItemList */
         ItemList: {
@@ -2404,6 +2498,15 @@ export interface components {
             tenant: components["schemas"]["TenantOut"] | null;
             user: components["schemas"]["UserOut"];
         };
+        /** MeasurementPeriod */
+        MeasurementPeriod: {
+            /** End */
+            end: string;
+            /** Kind */
+            kind: string;
+            /** Start */
+            start: string;
+        };
         /** MemberList */
         MemberList: {
             /** Data */
@@ -2469,6 +2572,32 @@ export interface components {
             /** New Password */
             new_password: string;
         };
+        /** Payload */
+        Payload: {
+            /**
+             * Customers
+             * @default []
+             */
+            customers: components["schemas"]["CustomerRef"][];
+            header: components["schemas"]["Header"];
+            /**
+             * Items
+             * @default []
+             */
+            items: components["schemas"]["Item"][];
+            /**
+             * Payload Schema Version
+             * @constant
+             */
+            payload_schema_version: 1;
+            /** Rules */
+            rules: components["schemas"]["SpaRules"] | components["schemas"]["RebateRules"];
+            /**
+             * Tiers
+             * @default []
+             */
+            tiers: components["schemas"]["TierIn"][];
+        };
         /** PreviewOut */
         PreviewOut: {
             /** Fields */
@@ -2500,6 +2629,16 @@ export interface components {
             row_number: number;
             /** Status */
             status: string;
+        };
+        /** PriceCheck */
+        PriceCheck: {
+            /**
+             * Mode
+             * @enum {string}
+             */
+            mode: "flag" | "ignore";
+            /** Tolerance */
+            tolerance: string;
         };
         /** ProductAliasIn */
         ProductAliasIn: {
@@ -2709,6 +2848,14 @@ export interface components {
             /** Uom */
             uom: string;
         };
+        /** QuantityRule */
+        QuantityRule: {
+            /**
+             * Cap Scope
+             * @enum {string}
+             */
+            cap_scope: "per_item" | "none" | "per_agreement";
+        };
         /** ReasonCodeMappingIn */
         ReasonCodeMappingIn: {
             /** External Code */
@@ -2748,6 +2895,55 @@ export interface components {
             mfa_code?: string | null;
             /** Password */
             password: string;
+        };
+        /** RebateProductScope */
+        RebateProductScope: {
+            /**
+             * Mode
+             * @enum {string}
+             */
+            mode: "all" | "listed";
+        };
+        /** RebateRules */
+        RebateRules: {
+            measurement_period: components["schemas"]["MeasurementPeriod"];
+            product_scope: components["schemas"]["RebateProductScope"];
+            /**
+             * Returns
+             * @constant
+             */
+            returns: "reduce_volume";
+            rounding: components["schemas"]["Rounding"];
+            /**
+             * Schema Version
+             * @constant
+             */
+            schema_version: 1;
+            /**
+             * Spa Lines
+             * @enum {string}
+             */
+            spa_lines: "include" | "qualify_only" | "exclude";
+            /**
+             * Tier Metric
+             * @enum {string}
+             */
+            tier_metric: "amount" | "quantity";
+            /**
+             * Tier Mode
+             * @enum {string}
+             */
+            tier_mode: "retroactive" | "incremental";
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            type: "rebate";
+            /**
+             * Volume Basis
+             * @enum {string}
+             */
+            volume_basis: "purchases" | "sales";
         };
         /** RecoveryCodesOut */
         RecoveryCodesOut: {
@@ -2798,6 +2994,21 @@ export interface components {
         ReturnIn: {
             /** Comment */
             comment: string;
+        };
+        /** Rounding */
+        Rounding: {
+            /**
+             * Mode
+             * @enum {string}
+             */
+            mode: "half_up" | "half_even" | "down";
+            /** Scale */
+            scale: number;
+            /**
+             * Timing
+             * @enum {string}
+             */
+            timing: "per_line" | "per_document";
         };
         /** SalesLineDetail */
         SalesLineDetail: {
@@ -2961,6 +3172,54 @@ export interface components {
             /** Retention Years */
             retention_years?: number | null;
         };
+        /** SpaProductScope */
+        SpaProductScope: {
+            /**
+             * Mode
+             * @constant
+             */
+            mode: "listed";
+        };
+        /** SpaReference */
+        SpaReference: {
+            /** Required */
+            required: boolean;
+        };
+        /** SpaRules */
+        SpaRules: {
+            /**
+             * Adapter
+             * @default null
+             */
+            adapter: string | null;
+            calculation: components["schemas"]["Calculation"];
+            /**
+             * Claim Uom
+             * @default null
+             */
+            claim_uom: string | null;
+            customer_scope: components["schemas"]["CustomerScope"];
+            /**
+             * Date Basis
+             * @enum {string}
+             */
+            date_basis: "invoice_date" | "ship_date";
+            price_check: components["schemas"]["PriceCheck"];
+            product_scope: components["schemas"]["SpaProductScope"];
+            quantity: components["schemas"]["QuantityRule"];
+            rounding: components["schemas"]["Rounding"];
+            /**
+             * Schema Version
+             * @constant
+             */
+            schema_version: 1;
+            spa_reference: components["schemas"]["SpaReference"];
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            type: "spa";
+        };
         /** SubmitIn */
         SubmitIn: {
             /**
@@ -3091,6 +3350,15 @@ export interface components {
             id: string;
             /** Name */
             name: string;
+        };
+        /** TierIn */
+        TierIn: {
+            /** Lower Bound */
+            lower_bound: string;
+            /** Rate */
+            rate: string;
+            /** Tier Number */
+            tier_number: number;
         };
         /** TierOut */
         TierOut: {

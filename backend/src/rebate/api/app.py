@@ -10,6 +10,7 @@ import structlog
 from fastapi import FastAPI, Request, Response
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
+from pydantic import BaseModel
 from starlette.concurrency import run_in_threadpool
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
@@ -200,6 +201,27 @@ def _register_error_handlers(app: FastAPI) -> None:
         return JSONResponse(error_body(code, message, _request_id(request)), exc.status_code)
 
 
+def _publish_schemas(app: FastAPI, models: tuple[type[BaseModel], ...]) -> None:
+    """Add models that no route declares (a draft payload is stored unvalidated, so routes take a plain object)
+    to the OpenAPI components, so the generated client carries their types. A name clash fails loudly."""
+    base = app.openapi
+
+    def openapi() -> dict[str, Any]:
+        if app.openapi_schema:
+            return app.openapi_schema
+        doc = base()
+        components = doc.setdefault("components", {}).setdefault("schemas", {})
+        for model in models:
+            schema = model.model_json_schema(ref_template="#/components/schemas/{model}")
+            for name, definition in {**schema.pop("$defs", {}), model.__name__: schema}.items():
+                if components.get(name, definition) != definition:
+                    raise RuntimeError(f"OpenAPI schema name clash: {name}")
+                components[name] = definition
+        return doc
+
+    app.openapi = openapi  # type: ignore[method-assign]
+
+
 def create_app(settings: Settings | None = None) -> FastAPI:
     settings = settings or get_settings()
     configure_logging(settings.log_level)
@@ -229,4 +251,5 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.include_router(health.router, prefix=API_PREFIX)
     for router in MODULE_ROUTERS:
         app.include_router(router, prefix=API_PREFIX, dependencies=[RequestContextDep])
+    _publish_schemas(app, (agreements.Payload,))  # the draft payload (DraftOut.payload, DraftUpdate.payload)
     return app

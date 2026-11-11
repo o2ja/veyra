@@ -407,6 +407,37 @@
         "title": "BranchOut",
         "type": "object"
       },
+      "Calculation": {
+        "additionalProperties": false,
+        "properties": {
+          "basis": {
+            "enum": [
+              "price_difference",
+              "percent_of_sell",
+              "percent_of_cost",
+              "flat_per_unit",
+              "guaranteed_margin"
+            ],
+            "title": "Basis",
+            "type": "string"
+          },
+          "cost_source": {
+            "enum": [
+              "agreement_reference",
+              "line_cost",
+              "replacement_cost"
+            ],
+            "title": "Cost Source",
+            "type": "string"
+          }
+        },
+        "required": [
+          "basis",
+          "cost_source"
+        ],
+        "title": "Calculation",
+        "type": "object"
+      },
       "CancelIn": {
         "additionalProperties": false,
         "properties": {
@@ -883,6 +914,50 @@
           }
         },
         "title": "CustomerPatch",
+        "type": "object"
+      },
+      "CustomerRef": {
+        "additionalProperties": false,
+        "properties": {
+          "customer_code": {
+            "maxLength": 50,
+            "minLength": 1,
+            "pattern": "^[^\\x00-\\x1f\\x7f]+$",
+            "title": "Customer Code",
+            "type": "string"
+          },
+          "scope": {
+            "enum": [
+              "include",
+              "exclude"
+            ],
+            "title": "Scope",
+            "type": "string"
+          }
+        },
+        "required": [
+          "customer_code",
+          "scope"
+        ],
+        "title": "CustomerRef",
+        "type": "object"
+      },
+      "CustomerScope": {
+        "additionalProperties": false,
+        "properties": {
+          "mode": {
+            "enum": [
+              "all",
+              "listed"
+            ],
+            "title": "Mode",
+            "type": "string"
+          }
+        },
+        "required": [
+          "mode"
+        ],
+        "title": "CustomerScope",
         "type": "object"
       },
       "DiffOut": {
@@ -1636,6 +1711,65 @@
         "title": "HTTPValidationError",
         "type": "object"
       },
+      "Header": {
+        "additionalProperties": false,
+        "properties": {
+          "agreement_type": {
+            "enum": [
+              "spa",
+              "rebate"
+            ],
+            "title": "Agreement Type",
+            "type": "string"
+          },
+          "external_number": {
+            "maxLength": 100,
+            "minLength": 1,
+            "pattern": "^[^\\x00-\\x1f\\x7f]+$",
+            "title": "External Number",
+            "type": "string"
+          },
+          "manufacturer_code": {
+            "maxLength": 50,
+            "minLength": 1,
+            "pattern": "^[^\\x00-\\x1f\\x7f]+$",
+            "title": "Manufacturer Code",
+            "type": "string"
+          },
+          "name": {
+            "maxLength": 200,
+            "minLength": 1,
+            "pattern": "^[^\\x00-\\x1f\\x7f]+$",
+            "title": "Name",
+            "type": "string"
+          },
+          "priority": {
+            "default": 0,
+            "maximum": 1000,
+            "minimum": -1000,
+            "title": "Priority",
+            "type": "integer"
+          },
+          "valid_from": {
+            "title": "Valid From",
+            "type": "string"
+          },
+          "valid_to": {
+            "title": "Valid To",
+            "type": "string"
+          }
+        },
+        "required": [
+          "agreement_type",
+          "manufacturer_code",
+          "external_number",
+          "name",
+          "valid_from",
+          "valid_to"
+        ],
+        "title": "Header",
+        "type": "object"
+      },
       "HealthStatus": {
         "properties": {
           "status": {
@@ -2206,6 +2340,108 @@
           "severity"
         ],
         "title": "IssueOut",
+        "type": "object"
+      },
+      "Item": {
+        "additionalProperties": false,
+        "properties": {
+          "claim_uom": {
+            "anyOf": [
+              {
+                "pattern": "^[A-Z0-9]{1,10}$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Claim Uom"
+          },
+          "deviated_cost": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Deviated Cost"
+          },
+          "flat_amount": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Flat Amount"
+          },
+          "max_quantity": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Max Quantity"
+          },
+          "rate": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Rate"
+          },
+          "reference_cost": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Reference Cost"
+          },
+          "sell_price": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Sell Price"
+          },
+          "sku": {
+            "maxLength": 100,
+            "minLength": 1,
+            "pattern": "^[^\\x00-\\x1f\\x7f]+$",
+            "title": "Sku",
+            "type": "string"
+          }
+        },
+        "required": [
+          "sku"
+        ],
+        "title": "Item",
         "type": "object"
       },
       "ItemList": {
@@ -3205,6 +3441,33 @@
         "title": "MeOut",
         "type": "object"
       },
+      "MeasurementPeriod": {
+        "additionalProperties": false,
+        "properties": {
+          "end": {
+            "title": "End",
+            "type": "string"
+          },
+          "kind": {
+            "maxLength": 50,
+            "minLength": 1,
+            "pattern": "^[^\\x00-\\x1f\\x7f]+$",
+            "title": "Kind",
+            "type": "string"
+          },
+          "start": {
+            "title": "Start",
+            "type": "string"
+          }
+        },
+        "required": [
+          "kind",
+          "start",
+          "end"
+        ],
+        "title": "MeasurementPeriod",
+        "type": "object"
+      },
       "MemberList": {
         "properties": {
           "data": {
@@ -3392,6 +3655,71 @@
         "title": "PasswordChangeIn",
         "type": "object"
       },
+      "Payload": {
+        "additionalProperties": false,
+        "properties": {
+          "customers": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/CustomerRef"
+            },
+            "maxItems": 10000,
+            "title": "Customers",
+            "type": "array"
+          },
+          "header": {
+            "$ref": "#/components/schemas/Header"
+          },
+          "items": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/Item"
+            },
+            "maxItems": 20000,
+            "title": "Items",
+            "type": "array"
+          },
+          "payload_schema_version": {
+            "const": 1,
+            "title": "Payload Schema Version",
+            "type": "integer"
+          },
+          "rules": {
+            "discriminator": {
+              "mapping": {
+                "rebate": "#/components/schemas/RebateRules",
+                "spa": "#/components/schemas/SpaRules"
+              },
+              "propertyName": "type"
+            },
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/SpaRules"
+              },
+              {
+                "$ref": "#/components/schemas/RebateRules"
+              }
+            ],
+            "title": "Rules"
+          },
+          "tiers": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/TierIn"
+            },
+            "maxItems": 100,
+            "title": "Tiers",
+            "type": "array"
+          }
+        },
+        "required": [
+          "payload_schema_version",
+          "header",
+          "rules"
+        ],
+        "title": "Payload",
+        "type": "object"
+      },
       "PreviewOut": {
         "properties": {
           "fields": {
@@ -3499,6 +3827,29 @@
           "issues"
         ],
         "title": "PreviewRow",
+        "type": "object"
+      },
+      "PriceCheck": {
+        "additionalProperties": false,
+        "properties": {
+          "mode": {
+            "enum": [
+              "flag",
+              "ignore"
+            ],
+            "title": "Mode",
+            "type": "string"
+          },
+          "tolerance": {
+            "title": "Tolerance",
+            "type": "string"
+          }
+        },
+        "required": [
+          "mode",
+          "tolerance"
+        ],
+        "title": "PriceCheck",
         "type": "object"
       },
       "ProductAliasIn": {
@@ -4080,6 +4431,25 @@
         "title": "PurchaseLineOut",
         "type": "object"
       },
+      "QuantityRule": {
+        "additionalProperties": false,
+        "properties": {
+          "cap_scope": {
+            "enum": [
+              "per_item",
+              "none",
+              "per_agreement"
+            ],
+            "title": "Cap Scope",
+            "type": "string"
+          }
+        },
+        "required": [
+          "cap_scope"
+        ],
+        "title": "QuantityRule",
+        "type": "object"
+      },
       "ReasonCodeMappingIn": {
         "additionalProperties": false,
         "properties": {
@@ -4210,6 +4580,100 @@
           "password"
         ],
         "title": "ReauthIn",
+        "type": "object"
+      },
+      "RebateProductScope": {
+        "additionalProperties": false,
+        "properties": {
+          "mode": {
+            "enum": [
+              "all",
+              "listed"
+            ],
+            "title": "Mode",
+            "type": "string"
+          }
+        },
+        "required": [
+          "mode"
+        ],
+        "title": "RebateProductScope",
+        "type": "object"
+      },
+      "RebateRules": {
+        "additionalProperties": false,
+        "properties": {
+          "measurement_period": {
+            "$ref": "#/components/schemas/MeasurementPeriod"
+          },
+          "product_scope": {
+            "$ref": "#/components/schemas/RebateProductScope"
+          },
+          "returns": {
+            "const": "reduce_volume",
+            "title": "Returns",
+            "type": "string"
+          },
+          "rounding": {
+            "$ref": "#/components/schemas/Rounding"
+          },
+          "schema_version": {
+            "const": 1,
+            "title": "Schema Version",
+            "type": "integer"
+          },
+          "spa_lines": {
+            "enum": [
+              "include",
+              "qualify_only",
+              "exclude"
+            ],
+            "title": "Spa Lines",
+            "type": "string"
+          },
+          "tier_metric": {
+            "enum": [
+              "amount",
+              "quantity"
+            ],
+            "title": "Tier Metric",
+            "type": "string"
+          },
+          "tier_mode": {
+            "enum": [
+              "retroactive",
+              "incremental"
+            ],
+            "title": "Tier Mode",
+            "type": "string"
+          },
+          "type": {
+            "const": "rebate",
+            "title": "Type",
+            "type": "string"
+          },
+          "volume_basis": {
+            "enum": [
+              "purchases",
+              "sales"
+            ],
+            "title": "Volume Basis",
+            "type": "string"
+          }
+        },
+        "required": [
+          "schema_version",
+          "type",
+          "volume_basis",
+          "measurement_period",
+          "tier_mode",
+          "tier_metric",
+          "product_scope",
+          "spa_lines",
+          "returns",
+          "rounding"
+        ],
+        "title": "RebateRules",
         "type": "object"
       },
       "RecoveryCodesOut": {
@@ -4371,6 +4835,41 @@
           "comment"
         ],
         "title": "ReturnIn",
+        "type": "object"
+      },
+      "Rounding": {
+        "additionalProperties": false,
+        "properties": {
+          "mode": {
+            "enum": [
+              "half_up",
+              "half_even",
+              "down"
+            ],
+            "title": "Mode",
+            "type": "string"
+          },
+          "scale": {
+            "maximum": 6,
+            "minimum": 0,
+            "title": "Scale",
+            "type": "integer"
+          },
+          "timing": {
+            "enum": [
+              "per_line",
+              "per_document"
+            ],
+            "title": "Timing",
+            "type": "string"
+          }
+        },
+        "required": [
+          "mode",
+          "scale",
+          "timing"
+        ],
+        "title": "Rounding",
         "type": "object"
       },
       "SalesLineDetail": {
@@ -4911,6 +5410,121 @@
         "title": "SettingsPatch",
         "type": "object"
       },
+      "SpaProductScope": {
+        "additionalProperties": false,
+        "properties": {
+          "mode": {
+            "const": "listed",
+            "title": "Mode",
+            "type": "string"
+          }
+        },
+        "required": [
+          "mode"
+        ],
+        "title": "SpaProductScope",
+        "type": "object"
+      },
+      "SpaReference": {
+        "additionalProperties": false,
+        "properties": {
+          "required": {
+            "title": "Required",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "required"
+        ],
+        "title": "SpaReference",
+        "type": "object"
+      },
+      "SpaRules": {
+        "additionalProperties": false,
+        "properties": {
+          "adapter": {
+            "anyOf": [
+              {
+                "maxLength": 50,
+                "minLength": 1,
+                "pattern": "^[^\\x00-\\x1f\\x7f]+$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Adapter"
+          },
+          "calculation": {
+            "$ref": "#/components/schemas/Calculation"
+          },
+          "claim_uom": {
+            "anyOf": [
+              {
+                "pattern": "^[A-Z0-9]{1,10}$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Claim Uom"
+          },
+          "customer_scope": {
+            "$ref": "#/components/schemas/CustomerScope"
+          },
+          "date_basis": {
+            "enum": [
+              "invoice_date",
+              "ship_date"
+            ],
+            "title": "Date Basis",
+            "type": "string"
+          },
+          "price_check": {
+            "$ref": "#/components/schemas/PriceCheck"
+          },
+          "product_scope": {
+            "$ref": "#/components/schemas/SpaProductScope"
+          },
+          "quantity": {
+            "$ref": "#/components/schemas/QuantityRule"
+          },
+          "rounding": {
+            "$ref": "#/components/schemas/Rounding"
+          },
+          "schema_version": {
+            "const": 1,
+            "title": "Schema Version",
+            "type": "integer"
+          },
+          "spa_reference": {
+            "$ref": "#/components/schemas/SpaReference"
+          },
+          "type": {
+            "const": "spa",
+            "title": "Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "schema_version",
+          "type",
+          "date_basis",
+          "calculation",
+          "customer_scope",
+          "product_scope",
+          "spa_reference",
+          "price_check",
+          "quantity",
+          "rounding"
+        ],
+        "title": "SpaRules",
+        "type": "object"
+      },
       "SubmitIn": {
         "additionalProperties": false,
         "properties": {
@@ -5245,6 +5859,32 @@
           "name"
         ],
         "title": "TenantOut",
+        "type": "object"
+      },
+      "TierIn": {
+        "additionalProperties": false,
+        "properties": {
+          "lower_bound": {
+            "title": "Lower Bound",
+            "type": "string"
+          },
+          "rate": {
+            "title": "Rate",
+            "type": "string"
+          },
+          "tier_number": {
+            "maximum": 100,
+            "minimum": 1,
+            "title": "Tier Number",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "tier_number",
+          "lower_bound",
+          "rate"
+        ],
+        "title": "TierIn",
         "type": "object"
       },
       "TierOut": {
