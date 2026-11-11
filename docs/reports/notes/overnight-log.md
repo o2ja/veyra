@@ -1,8 +1,8 @@
 # Overnight log (2026-11-11/12, unattended)
 
 ## MORNING SUMMARY
-1. Completed and merged: S4 backend (#6, 99dc074, before tonight); #9 amendment-rename guard + CI retry (6f01b02).
-2. In progress: S4 UI on `ui/s4` (Antigravity; WIP 85b3a19, draft editor unfinished). S6 backend PR #8 (`s6-backend`, review round 2 fixes); S5 runs PR #7 (`s5-runs`, builder). S4 UI `ui/s4` verified by me (e2e green), awaiting independent UI review.
+1. Completed and merged: S4 backend (#6, before tonight); #9 amendment-rename guard + CI retry; S6 backend (#8); S5 runs (#7). Main 5fbce94: 1623 passed, isolation 332, negative control OK.
+2. In progress: S4 UI PR #11 (`ui/s4`, fixes after review FAIL, e2e green locally; re-review pending); PR #10 ExtractionResult schema (for the S6 UI).
 3. Blocked / needs decision (rule 4 — not decided by me):
    - D1 rebate tiers/rates when an amendment splits a measurement period with different terms (BUSINESS_LOGIC §9.2 says pre-amendment lines stay under v1a; how tier volume combines is undefined). Interim: run refused (422 `split_period_terms_need_decision`).
    - D2 an SPA line that becomes outside_claim_window/cap_exhausted drops out of the rebate SPA-line count (literal §5.4) — intended?
@@ -28,3 +28,6 @@
 - S6 MERGED (#8, d827b5b) after 3 review passes (final PASS; 3 minor follow-ups: reaper vs max settings >1h, ProviderBusy on last attempt lacks finished audit, settle-mismatch dead-letters). Main after S6: full 1497 passed, isolation 303; dev DB migrated to 20261113_0900_extraction.
 - S5 2nd-pass financial review: FINANCIAL DISCREPANCY none (R1, SC-07a/b, D3 re-derived); F7 serious (settings data migration ran under FORCE RLS → no-op) → builder fixing + re-chaining after S6.
 - S4 UI independent review FAIL: 1 serious (editor normalisation silently rewrites server payload values) + 4 minor (amend rules coerced, read-only focus, numeric coercion, cancel dialog focus) → UI fix builder launched on ui/s4.
+- S5 MERGED (#7, 5fbce94) after 2 financial reviews (no discrepancy) + F7 fix verified by me (NO FORCE/FORCE RLS inside the migration transaction). Migration chain: …agreements → extraction → calc_runs. Dev DB migrated. S5 stage sign-off is the owner's (CLAUDE.md §18.4).
+- S4 UI fix round: builder preserved payload verbatim; my e2e found 2 regressions (new drafts had no stored defaults; integers sent as strings) → fixed (drafts created with the visible defaults; `intOrRaw`). Full e2e green (W1-W2 needs dev rate-limit reset between back-to-back suites — dev-only). PR #11.
+- PR #10: typed `ExtractionResult` published in OpenAPI (golden test validates stored results).

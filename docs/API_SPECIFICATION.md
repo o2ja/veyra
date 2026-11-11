@@ -159,7 +159,7 @@ Legend: **R** = roles allowed (A admin, P approver, N analyst, V viewer). Writes
 | `POST /agreement-drafts/{id}/approve` | Creates immutable version (split-supersede if needed). Four-eyes enforced. Idempotent | A P |
 | `POST /agreement-drafts/{id}/reject` | `{reason}` | A P |
 | `POST /agreements/{id}/cancel` | Cancel active versions going forward `{effective_date, reason}` | A P |
-| `GET /agreement-drafts/{id}/preview-calculation` | Read-only sample calculation against up to 200 imported lines (calls engine, persists nothing) | A P N |
+| `POST /agreement-drafts/{id}/preview-calculation` | Body `{limit?}` (<= 200). Read-only sample calculation of the draft against imported lines (SPA: the newest lines of the draft's products; rebate: cumulative volume to date), calls the engine, persists nothing. 422 with the validator errors when the draft is invalid or uses a rule the engine refuses | A P N |
 
 **Implementation notes (S4).**
 - Permissions: reads `data.read`; create/edit/validate/`items:import`/submit `agreement.draft`; approve/reject/return/cancel `agreement.approve`.
@@ -173,18 +173,18 @@ Legend: **R** = roles allowed (A admin, P approver, N analyst, V viewer). Writes
 - `POST /agreements/{id}/cancel {effective_date, reason}`: versions starting on/after the date → `cancelled`; a version spanning it is superseded by a copy ending the day before; the agreement gets `cancelled_at` and accepts no further drafts.
 - `GET /agreement-versions/{a}/diff/{b}` → `{from_version_id, to_version_id, changes: [{path, before, after}]}` over header, rules, `customers[CODE].scope`, `items[SKU].<field>`, `tiers[n].<field>`. `GET /agreements` items carry `current_version` (active, covering the business date). Version lists and items are cursor-paginated.
 - Expiry sweep (job `agreements_expiry_sweep`, daily per tenant, first enqueued on approval): expires versions past `valid_to`; audit `agreement_version.expiry_alert` for versions entering the 30-day window (notification hook until S9).
-- `GET /agreement-drafts/{id}/preview-calculation` is built with the engine runs (S5).
+- `POST /agreement-drafts/{id}/preview-calculation` is built with the engine runs (S5).
 
 ### 2.6 Calculation and claims
 
 | Method & path | Purpose | R |
 |---|---|---|
-| `POST /calculation-runs` | `{manufacturer_ids[], date_from, date_to, as_of?}` → 202 | A P N |
+| `POST /calculation-runs` | `{manufacturer_ids[] (empty = all), date_from, date_to, as_of?}` → 202. `as_of` pins agreement-version visibility; the claim window uses today's business date. 409 `run_in_progress` (same scope queued/running); 422 `validation_error` with details `engine_rejected`, `not_supported_until_release_2`, `scope_too_narrow`, `split_period_terms_need_decision`, `in_future`, `not_found` | A P N |
 | `GET /calculation-runs`, `GET /calculation-runs/{id}` | Status, pinned inputs, totals | all |
-| `GET /calculation-runs/{id}/results` | Filters: `status`, `exception_code`, `manufacturer_id`, `agreement_id` | all |
+| `GET /calculation-runs/{id}/results` | Filters: `status`, `exception_code`, `manufacturer_id`, `agreement_id`; keyset paging. 409 `invalid_state` unless the run is `completed` (partial runs are invisible) | all |
 | `GET /calculation-results/{id}` | Includes `trace` | all |
 | `GET /missed-claims` | Eligible-unclaimed from latest runs: filters + `GET /missed-claims/summary`, `?format=csv|xlsx` → export job | all |
-| `GET /rebate-accruals` | Ledger entries; `GET /rebate-tracker` (YTD vs tiers) | all |
+| `GET /rebate-accruals` | Ledger entries of completed runs (filters `agreement_id`, `run_id`); `GET /rebate-tracker` returns `{data: [...]}`: latest entry per agreement and period with tiers, next tier and amount to go | all |
 | `GET /claim-adjustments`, `POST /claim-adjustments/{id}/approve|reject` | Proposed adjustments | read all; approve A P |
 | `POST /calculation-runs/{id}/propose-adjustments` | Compare vs frozen claims → proposals | A P N |
 | `GET/POST /claim-export-templates`, `PUT /claim-export-templates/{id}` | Column layouts | A P N |

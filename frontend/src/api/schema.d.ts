@@ -74,6 +74,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/agreement-drafts/{draft_id}/preview-calculation": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Preview Calculation */
+        post: operations["agreement_draft_preview_calculation"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/agreement-drafts/{draft_id}/reject": {
         parameters: {
             query?: never;
@@ -617,6 +634,92 @@ export interface paths {
         put?: never;
         /** Create Branch */
         post: operations["branch_create"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/calculation-results/{result_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Result */
+        get: operations["calculation_result_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/calculation-runs": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List Runs */
+        get: operations["calculation_run_list"];
+        put?: never;
+        /** Create Run */
+        post: operations["calculation_run_create"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/calculation-runs/{run_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Run */
+        get: operations["calculation_run_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/calculation-runs/{run_id}/propose-adjustments": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Propose Adjustments */
+        post: operations["calculation_run_propose_adjustments"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/calculation-runs/{run_id}/results": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List Results */
+        get: operations["calculation_result_list"];
+        put?: never;
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -1219,6 +1322,40 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/rebate-accruals": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List Accruals */
+        get: operations["rebate_accrual_list"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/rebate-tracker": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Tracker */
+        get: operations["rebate_tracker_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/sales-lines": {
         parameters: {
             query?: never;
@@ -1398,6 +1535,113 @@ export interface components {
              * @constant
              */
             status: "accepted";
+        };
+        /** AccrualList */
+        AccrualList: {
+            /** Data */
+            data: components["schemas"]["AccrualOut"][];
+            page: components["schemas"]["Page"];
+        };
+        /** AccrualOut */
+        AccrualOut: {
+            /**
+             * Agreement Id
+             * Format: uuid
+             */
+            agreement_id: string;
+            /** Agreement Name */
+            agreement_name: string;
+            /**
+             * Agreement Version Id
+             * Format: uuid
+             */
+            agreement_version_id: string;
+            /**
+             * As Of Date
+             * Format: date
+             */
+            as_of_date: string;
+            /** Claim Deadline */
+            claim_deadline: string | null;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /** Cumulative Earned */
+            cumulative_earned: string;
+            /** Cumulative Payout Base */
+            cumulative_payout_base: string;
+            /** Cumulative Qualifying */
+            cumulative_qualifying: string;
+            /** Delta */
+            delta: string;
+            /** External Number */
+            external_number: string;
+            /** Flags */
+            flags: string[];
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /**
+             * Period End
+             * Format: date
+             */
+            period_end: string;
+            /**
+             * Period Start
+             * Format: date
+             */
+            period_start: string;
+            /** Prior Cumulative Accrued */
+            prior_cumulative_accrued: string;
+            /**
+             * Run Id
+             * Format: uuid
+             */
+            run_id: string;
+            /** Tier Number */
+            tier_number: number | null;
+            /** Tier Rate */
+            tier_rate: string | null;
+        };
+        /** AccrualTierOut */
+        AccrualTierOut: {
+            /** Lower Bound */
+            lower_bound: string;
+            /** Rate */
+            rate: string | null;
+            /** Tier Number */
+            tier_number: number;
+        };
+        /** AdjustmentOut */
+        AdjustmentOut: {
+            /** Adjustment Type */
+            adjustment_type: string;
+            /** Amount */
+            amount: string;
+            /** Calculation Result Id */
+            calculation_result_id: string | null;
+            /** Claim Line Id */
+            claim_line_id: string | null;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /**
+             * Manufacturer Id
+             * Format: uuid
+             */
+            manufacturer_id: string;
+            /** Reason */
+            reason: string;
+            /** Run Id */
+            run_id: string | null;
+            /** Status */
+            status: string;
         };
         /** AgreementList */
         AgreementList: {
@@ -1822,6 +2066,116 @@ export interface components {
              */
             updated_at: string;
             validation: components["schemas"]["Validation"] | null;
+        };
+        /** DraftPreviewAccrual */
+        DraftPreviewAccrual: {
+            /**
+             * As Of Date
+             * Format: date
+             */
+            as_of_date: string;
+            /** Claim Deadline */
+            claim_deadline: string | null;
+            /** Cumulative Earned */
+            cumulative_earned: string;
+            /** Cumulative Payout Base */
+            cumulative_payout_base: string;
+            /** Cumulative Qualifying */
+            cumulative_qualifying: string;
+            /** Flags */
+            flags: string[];
+            /** Note */
+            note: string;
+            /**
+             * Period End
+             * Format: date
+             */
+            period_end: string;
+            /**
+             * Period Start
+             * Format: date
+             */
+            period_start: string;
+            /** Tier Number */
+            tier_number: number | null;
+            /** Tier Rate */
+            tier_rate: string | null;
+            /** Trace */
+            trace: {
+                [key: string]: unknown;
+            };
+        };
+        /** DraftPreviewIn */
+        DraftPreviewIn: {
+            /**
+             * Limit
+             * @default 200
+             */
+            limit: number;
+        };
+        /** DraftPreviewLine */
+        DraftPreviewLine: {
+            /** Claim Amount */
+            claim_amount: string;
+            /** Claim Unit Amount */
+            claim_unit_amount: string | null;
+            /** Document Number */
+            document_number: string;
+            /** Eligible Quantity */
+            eligible_quantity: string | null;
+            /** Exception Code */
+            exception_code: string | null;
+            /** Flags */
+            flags: string[];
+            /**
+             * Invoice Date
+             * Format: date
+             */
+            invoice_date: string;
+            /**
+             * Line Id
+             * Format: uuid
+             */
+            line_id: string;
+            /** Line Number */
+            line_number: number;
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "eligible" | "exception" | "netted" | "adjustment" | "not_applicable";
+            /** Trace */
+            trace: {
+                [key: string]: unknown;
+            };
+        };
+        /** DraftPreviewOut */
+        DraftPreviewOut: {
+            accrual: components["schemas"]["DraftPreviewAccrual"] | null;
+            /**
+             * Kind
+             * @enum {string}
+             */
+            kind: "spa" | "rebate";
+            /** Lines */
+            lines: components["schemas"]["DraftPreviewLine"][];
+            /**
+             * Persisted
+             * @default false
+             * @constant
+             */
+            persisted: false;
+            /**
+             * Run Date
+             * Format: date
+             */
+            run_date: string;
+            /** Sample Size */
+            sample_size: number;
+            /** Totals */
+            totals: {
+                [key: string]: unknown;
+            };
         };
         /** DraftSummary */
         DraftSummary: {
@@ -2652,7 +3006,7 @@ export interface components {
              */
             allow_negative_claims: boolean;
             /** Claim Window Basis */
-            claim_window_basis?: ("invoice_date" | "ship_date" | "period_end") | null;
+            claim_window_basis?: ("invoice_date" | "ship_date" | "month_end" | "period_end") | null;
             /** Claim Window Days */
             claim_window_days?: number | null;
             /**
@@ -3070,6 +3424,18 @@ export interface components {
             /** Manufacturer Part Number */
             manufacturer_part_number?: string | null;
         };
+        /** ProposalsOut */
+        ProposalsOut: {
+            /** Compared */
+            compared: number;
+            /** Proposed */
+            proposed: components["schemas"]["AdjustmentOut"][];
+            /**
+             * Run Id
+             * Format: uuid
+             */
+            run_id: string;
+        };
         /** PurchaseLineList */
         PurchaseLineList: {
             /** Data */
@@ -3264,6 +3630,128 @@ export interface components {
             /** Target Id */
             target_id?: string | null;
         };
+        /** ResultDetail */
+        ResultDetail: {
+            /** Agreement Id */
+            agreement_id: string | null;
+            /** Agreement Version Id */
+            agreement_version_id: string | null;
+            /** Claim Amount */
+            claim_amount: string;
+            /** Claim Unit Amount */
+            claim_unit_amount: string | null;
+            /** Claim Uom */
+            claim_uom: string | null;
+            /** Document Number */
+            document_number: string;
+            /** Eligible Quantity */
+            eligible_quantity: string | null;
+            /** Exception Code */
+            exception_code: string | null;
+            /** Excess Quantity */
+            excess_quantity: string | null;
+            /** Flags */
+            flags: string[];
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Inputs Hash */
+            inputs_hash: string;
+            /**
+             * Invoice Date
+             * Format: date
+             */
+            invoice_date: string;
+            /** Line Number */
+            line_number: number;
+            /** Manufacturer Id */
+            manufacturer_id: string | null;
+            /**
+             * Run Id
+             * Format: uuid
+             */
+            run_id: string;
+            /**
+             * Sales Document Line Id
+             * Format: uuid
+             */
+            sales_document_line_id: string;
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "eligible" | "exception" | "netted" | "adjustment" | "not_applicable";
+            /** Trace */
+            trace: {
+                [key: string]: unknown;
+            };
+            /** Trace Ref */
+            trace_ref: {
+                [key: string]: string;
+            };
+        };
+        /** ResultList */
+        ResultList: {
+            /** Data */
+            data: components["schemas"]["ResultOut"][];
+            page: components["schemas"]["Page"];
+        };
+        /** ResultOut */
+        ResultOut: {
+            /** Agreement Id */
+            agreement_id: string | null;
+            /** Agreement Version Id */
+            agreement_version_id: string | null;
+            /** Claim Amount */
+            claim_amount: string;
+            /** Claim Unit Amount */
+            claim_unit_amount: string | null;
+            /** Claim Uom */
+            claim_uom: string | null;
+            /** Document Number */
+            document_number: string;
+            /** Eligible Quantity */
+            eligible_quantity: string | null;
+            /** Exception Code */
+            exception_code: string | null;
+            /** Excess Quantity */
+            excess_quantity: string | null;
+            /** Flags */
+            flags: string[];
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Inputs Hash */
+            inputs_hash: string;
+            /**
+             * Invoice Date
+             * Format: date
+             */
+            invoice_date: string;
+            /** Line Number */
+            line_number: number;
+            /** Manufacturer Id */
+            manufacturer_id: string | null;
+            /**
+             * Run Id
+             * Format: uuid
+             */
+            run_id: string;
+            /**
+             * Sales Document Line Id
+             * Format: uuid
+             */
+            sales_document_line_id: string;
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "eligible" | "exception" | "netted" | "adjustment" | "not_applicable";
+        };
         /** ReturnIn */
         ReturnIn: {
             /** Comment */
@@ -3283,6 +3771,110 @@ export interface components {
              * @enum {string}
              */
             timing: "per_line" | "per_document";
+        };
+        /** RunAccepted */
+        RunAccepted: {
+            job: components["schemas"]["RunJobRef"];
+            run: components["schemas"]["RunOut"];
+        };
+        /** RunIn */
+        RunIn: {
+            /** As Of */
+            as_of?: string | null;
+            /**
+             * Date From
+             * Format: date
+             */
+            date_from: string;
+            /**
+             * Date To
+             * Format: date
+             */
+            date_to: string;
+            /** Manufacturer Ids */
+            manufacturer_ids?: string[];
+        };
+        /** RunJobRef */
+        RunJobRef: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Progress */
+            progress: number;
+            /** Result Url */
+            result_url: string;
+            /** Status */
+            status: string;
+        };
+        /** RunList */
+        RunList: {
+            /** Data */
+            data: components["schemas"]["RunOut"][];
+            page: components["schemas"]["Page"];
+        };
+        /** RunOut */
+        RunOut: {
+            /** Agreement Version Ids */
+            agreement_version_ids: string[];
+            /**
+             * As Of
+             * Format: date-time
+             */
+            as_of: string;
+            /** Completed At */
+            completed_at: string | null;
+            /** Config Hash */
+            config_hash: string;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /**
+             * Created By
+             * Format: uuid
+             */
+            created_by: string;
+            /**
+             * Data Cutoff
+             * Format: date-time
+             */
+            data_cutoff: string;
+            /** Engine Version */
+            engine_version: string;
+            /** Error */
+            error: {
+                [key: string]: unknown;
+            } | null;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Input Checksum */
+            input_checksum: string | null;
+            /**
+             * Run Date
+             * Format: date
+             */
+            run_date: string;
+            /** Scope */
+            scope: {
+                [key: string]: unknown;
+            };
+            /** Started At */
+            started_at: string | null;
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "queued" | "running" | "completed" | "failed" | "cancelled";
+            /** Totals */
+            totals: {
+                [key: string]: unknown;
+            } | null;
         };
         /** SalesLineDetail */
         SalesLineDetail: {
@@ -3647,6 +4239,73 @@ export interface components {
         TokenIn: {
             /** Token */
             token: string;
+        };
+        /** TrackerOut */
+        TrackerOut: {
+            /** Data */
+            data: components["schemas"]["TrackerRow"][];
+        };
+        /** TrackerRow */
+        TrackerRow: {
+            /** Accrued To Date */
+            accrued_to_date: string;
+            /**
+             * Agreement Id
+             * Format: uuid
+             */
+            agreement_id: string;
+            /** Agreement Name */
+            agreement_name: string;
+            /**
+             * Agreement Version Id
+             * Format: uuid
+             */
+            agreement_version_id: string;
+            /** Amount To Next Tier */
+            amount_to_next_tier: string | null;
+            /**
+             * As Of Date
+             * Format: date
+             */
+            as_of_date: string;
+            /** Claim Deadline */
+            claim_deadline: string | null;
+            /** Cumulative Earned */
+            cumulative_earned: string;
+            /** Cumulative Payout Base */
+            cumulative_payout_base: string;
+            /** Cumulative Qualifying */
+            cumulative_qualifying: string;
+            /** External Number */
+            external_number: string;
+            /**
+             * Manufacturer Id
+             * Format: uuid
+             */
+            manufacturer_id: string;
+            /** Next Tier Lower Bound */
+            next_tier_lower_bound: string | null;
+            /**
+             * Period End
+             * Format: date
+             */
+            period_end: string;
+            /**
+             * Period Start
+             * Format: date
+             */
+            period_start: string;
+            /**
+             * Run Id
+             * Format: uuid
+             */
+            run_id: string;
+            /** Tier Number */
+            tier_number: number | null;
+            /** Tier Rate */
+            tier_rate: string | null;
+            /** Tiers */
+            tiers: components["schemas"]["AccrualTierOut"][];
         };
         /** UnmappedList */
         UnmappedList: {
@@ -4262,6 +4921,41 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    agreement_draft_preview_calculation: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                draft_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["DraftPreviewIn"] | null;
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DraftPreviewOut"];
+                };
             };
             /** @description Validation Error */
             422: {
@@ -5263,6 +5957,205 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["BranchOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    calculation_result_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                result_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ResultDetail"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    calculation_run_list: {
+        parameters: {
+            query?: {
+                status?: ("queued" | "running" | "completed" | "failed" | "cancelled") | null;
+                limit?: number;
+                cursor?: string | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RunList"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    calculation_run_create: {
+        parameters: {
+            query?: never;
+            header?: {
+                "idempotency-key"?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RunIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RunAccepted"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    calculation_run_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                run_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RunOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    calculation_run_propose_adjustments: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                run_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProposalsOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    calculation_result_list: {
+        parameters: {
+            query?: {
+                status?: ("eligible" | "exception" | "netted" | "adjustment" | "not_applicable") | null;
+                exception_code?: string | null;
+                manufacturer_id?: string | null;
+                agreement_id?: string | null;
+                limit?: number;
+                cursor?: string | null;
+            };
+            header?: never;
+            path: {
+                run_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ResultList"];
                 };
             };
             /** @description Validation Error */
@@ -6901,6 +7794,60 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    rebate_accrual_list: {
+        parameters: {
+            query?: {
+                agreement_id?: string | null;
+                run_id?: string | null;
+                limit?: number;
+                cursor?: string | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AccrualList"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    rebate_tracker_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TrackerOut"];
                 };
             };
         };

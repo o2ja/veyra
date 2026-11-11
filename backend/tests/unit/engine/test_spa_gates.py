@@ -207,35 +207,35 @@ def test_claim_window_ship_date_basis() -> None:
     assert one(ln, manufacturers=ship).status is Status.ELIGIBLE  # 05-20 + 60 = 07-19 >= 07-10
 
 
-def test_claim_window_period_end_leap_february() -> None:
+def test_claim_window_month_end_leap_february() -> None:
     # 2028-02-10 -> period end 2028-02-29 (leap year) -> + 60 days = 2028-04-29
     v = version(valid_from=date(2028, 1, 1), valid_to=date(2028, 12, 31))
     ln = line(invoice_date=date(2028, 2, 10), ship_date=date(2028, 2, 10))
-    pe = (mfr(claim_window_basis="period_end"),)
+    pe = (mfr(claim_window_basis="month_end"),)
     r = one(ln, [v], manufacturers=pe, run_date=date(2028, 4, 29))
     assert r.status is Status.ELIGIBLE
     cw = step(r, "claim_window")
-    assert (cw["basis"], cw["period_end"], cw["deadline"]) == ("period_end", "2028-02-29", "2028-04-29")
+    assert (cw["basis"], cw["month_end"], cw["deadline"]) == ("month_end", "2028-02-29", "2028-04-29")
     late = one(ln, [v], manufacturers=pe, run_date=date(2028, 4, 30))
     assert late.exception_code is Code.OUTSIDE_CLAIM_WINDOW
 
 
-def test_claim_window_period_end_uses_date_validity_basis() -> None:
+def test_claim_window_month_end_uses_date_validity_basis() -> None:
     # date_basis ship_date: claim date 2026-04-02 (ship), not 2026-03-30 (invoice) -> period end 2026-04-30
     v = version(rules=spa_rules(date_basis="ship_date"))
     ln = line(invoice_date=date(2026, 3, 30), ship_date=date(2026, 4, 2))
-    r = one(ln, [v], manufacturers=(mfr(claim_window_basis="period_end"),), run_date=date(2026, 6, 29))
+    r = one(ln, [v], manufacturers=(mfr(claim_window_basis="month_end"),), run_date=date(2026, 6, 29))
     assert r.status is Status.ELIGIBLE  # 04-30 + 60 = 06-29
-    assert step(r, "claim_window")["period_end"] == "2026-04-30"
+    assert step(r, "claim_window")["month_end"] == "2026-04-30"
     # missing ship date -> invoice date fallback (2026-03-30 -> period end 2026-03-31), warned
     fb = one(
         replace(ln, ship_date=None),
         [v],
-        manufacturers=(mfr(claim_window_basis="period_end"),),
+        manufacturers=(mfr(claim_window_basis="month_end"),),
         run_date=date(2026, 6, 29),
     )
     assert fb.exception_code is Code.OUTSIDE_CLAIM_WINDOW  # 03-31 + 60 = 05-30 < 06-29
-    assert step(fb, "claim_window")["period_end"] == "2026-03-31"
+    assert step(fb, "claim_window")["month_end"] == "2026-03-31"
     assert "ship_date_fallback" in warnings(fb)
 
 
@@ -366,3 +366,18 @@ def test_outside_claim_window_keeps_amount_but_does_not_consume_cap() -> None:
         D("1320.00"),
         (),
     )
+
+
+def test_claim_window_period_end_is_rejected_for_spa_lines() -> None:
+    from rebate_engine.models import EngineRuleError
+
+    with pytest.raises(EngineRuleError, match="rebates only"):
+        one(line(), manufacturers=(mfr(claim_window_basis="period_end"),))
+
+
+def test_rebate_deadline_is_period_end_plus_days() -> None:
+    from rebate_engine.deadlines import rebate_deadline
+
+    # hand derivation: 2026-12-31 + 60 days = 2027-03-01 (Jan 31 + Feb 28 = 59 -> 2027-03-01)
+    assert rebate_deadline(date(2026, 12, 31), 60) == date(2027, 3, 1)
+    assert rebate_deadline(date(2027, 12, 31), 60) == date(2028, 2, 29)  # Jan 31 + 29 = 60 -> leap Feb 29
