@@ -821,7 +821,9 @@ def cancel_agreement(
             AgreementVersion.agreement_id == agreement.id,
             AgreementVersion.status.in_(("active", "expired")),
         )
-        .order_by(AgreementVersion.id)  # one lock order everywhere (no deadlocks with the sweep/approval)
+        .order_by(
+            AgreementVersion.id
+        )  # id order like approval; the sweep's UPDATE may still deadlock with it: Postgres aborts one side
         .with_for_update()
         .execution_options(populate_existing=True)
     ).all()

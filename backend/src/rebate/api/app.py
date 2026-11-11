@@ -120,11 +120,18 @@ async def _body_gate(request: Request) -> JSONResponse | None:
     settings: Settings = request.app.state.settings
     cap = settings.body_max_mb * 1024 * 1024
     length = request.headers.get("content-length")
+    chunked = "transfer-encoding" in request.headers
+    if (
+        chunked and length is not None
+    ):  # h11 frames such a body as chunked: a small CL would hide a large body
+        return _error(
+            DomainError("Send either Content-Length or Transfer-Encoding, not both."), _request_id(request)
+        )
     if length is not None:
         if not length.isdigit():
             return _error(DomainError("Invalid Content-Length."), _request_id(request))
         return _error(BodyTooLarge(), _request_id(request)) if int(length) > cap else None
-    if "transfer-encoding" not in request.headers:
+    if not chunked:
         return None
     body = bytearray()
     async for chunk in request.stream():

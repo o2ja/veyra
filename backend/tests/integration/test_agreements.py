@@ -119,6 +119,9 @@ def test_manual_payload_is_accepted_and_activated(org: Org, name: str, admin_eng
     )  # an empty page (also: a rebate version)
     r = org.p1.get(f"/agreement-versions/{v['id']}/items", params={"cursor": past_end})
     assert r.status_code == 200 and r.json()["data"] == [] and r.json()["page"]["has_more"] is False
+    for bad in ("!!", "bm90LWEtbnVtYmVy"):  # not base64; base64 of a non-number
+        r = org.p1.get(f"/agreement-versions/{v['id']}/items", params={"cursor": bad})
+        assert r.status_code == 422, (bad, r.text)
     assert set(stored) == {i["sku"] for i in body["items"]}
     for item in body["items"]:
         for f in ("reference_cost", "deviated_cost", "sell_price", "rate", "flat_amount", "max_quantity"):
