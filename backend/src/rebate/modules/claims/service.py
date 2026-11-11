@@ -68,13 +68,7 @@ def create_run(
         raise ValidationFailed(details=[runs.detail("as_of", "in_future", "as_of cannot be later than now.")])
     mfrs = sorted(set(manufacturer_ids))
     if mfrs:
-        known = set(
-            db.scalars(
-                text("SELECT id FROM manufacturers WHERE tenant_id = :t AND id = ANY(CAST(:ids AS uuid[]))"),
-                {"t": who.tenant_id, "ids": mfrs},
-            )
-        )
-        if known != set(mfrs):
+        if masterdata.existing_manufacturer_ids(db, who.tenant_id, mfrs) != set(mfrs):
             raise ValidationFailed(
                 details=[runs.detail("manufacturer_ids", "not_found", "Unknown manufacturer in the scope.")]
             )
@@ -96,7 +90,7 @@ def create_run(
         scope_hash=scope_hash,
         as_of=as_of,
         data_cutoff=now,
-        run_date=_business_date(db, who.tenant_id, as_of),
+        run_date=_business_date(db, who.tenant_id, now),  # today: as_of only pins version visibility
         engine_version=ENGINE_VERSION,
         config_hash=runs.config_hash(scope, as_of, settings, loaders.load_conversions(db, who.tenant_id)),
         agreement_version_ids=[],
@@ -160,26 +154,15 @@ def list_runs(
     return list(db.scalars(keyset(stmt, CalculationRun.id, cursor, limit)))
 
 
-def job_state(db: Session, run_id: UUID) -> tuple[UUID, str] | None:
-    row = db.execute(
-        text("SELECT id, status FROM jobs WHERE dedupe_key = :k"), {"k": f"{JOB_KIND}:{run_id}"}
-    ).first()
-    return None if row is None else (row.id, row.status)
-
-
 # ---- results ------------------------------------------------------------------------------------------------
 
 _RESULT_COLUMNS = (
-    "r.id, r.run_id, r.sales_document_line_id, l.document_number, l.line_number, l.invoice_date, "
-    "l.manufacturer_id, v.agreement_id, r.agreement_version_id, r.status, r.exception_code, "
+    "r.id, r.run_id, r.sales_document_line_id, r.document_number, r.line_number, r.invoice_date, "
+    "r.manufacturer_id, r.agreement_id, r.agreement_version_id, r.status, r.exception_code, "
     "r.eligible_quantity, r.excess_quantity, r.claim_uom, r.claim_unit_amount, r.claim_amount, r.flags, "
     "r.inputs_hash"
 )
-_RESULT_FROM = (
-    " FROM calculation_results r "
-    "JOIN sales_document_lines l ON l.tenant_id = r.tenant_id AND l.id = r.sales_document_line_id "
-    "LEFT JOIN agreement_versions v ON v.tenant_id = r.tenant_id AND v.id = r.agreement_version_id "
-)
+_RESULT_FROM = " FROM calculation_results r "
 
 
 def list_results(
@@ -200,8 +183,8 @@ def list_results(
     for column, name, value in (
         ("r.status", "status", status),
         ("r.exception_code", "code", exception_code),
-        ("l.manufacturer_id", "mfr", manufacturer_id),
-        ("v.agreement_id", "agr", agreement_id),
+        ("r.manufacturer_id", "mfr", manufacturer_id),
+        ("r.agreement_id", "agr", agreement_id),
     ):
         if value is not None:
             where.append(f"{column} = :{name}")
@@ -231,12 +214,11 @@ def get_result(db: Session, tenant_id: UUID, result_id: UUID) -> Row[Any]:
 # ---- ledger and tracker -------------------------------------------------------------------------------------
 
 _ACCRUAL = (
-    "SELECT e.id, e.run_id, e.agreement_id, e.agreement_version_id, a.external_number, a.name AS agreement_name, "
+    "SELECT e.id, e.run_id, e.agreement_id, e.agreement_version_id, e.external_number, e.agreement_name, "
     "e.period_start, e.period_end, e.as_of_date, e.cumulative_qualifying, e.cumulative_payout_base, e.tier_number, "
     "e.tier_rate, e.cumulative_earned, e.prior_cumulative_accrued, e.delta, e.claim_deadline, e.flags, e.created_at "
     "FROM rebate_accrual_entries e "
     "JOIN calculation_runs r ON r.tenant_id = e.tenant_id AND r.id = e.run_id AND r.status = 'completed' "
-    "JOIN agreements a ON a.tenant_id = e.tenant_id AND a.id = e.agreement_id "
 )
 
 
@@ -271,12 +253,11 @@ def tracker(db: Session, tenant_id: UUID) -> list[dict[str, Any]]:
     rows = db.execute(
         text(
             "SELECT DISTINCT ON (e.agreement_id, e.period_start) e.run_id, e.agreement_id, e.agreement_version_id, "
-            "a.external_number, a.name AS agreement_name, a.manufacturer_id, e.period_start, e.period_end, "
+            "e.external_number, e.agreement_name, e.manufacturer_id, e.tiers, e.period_start, e.period_end, "
             "e.as_of_date, e.cumulative_qualifying, e.cumulative_payout_base, e.tier_number, e.tier_rate, "
             "e.cumulative_earned, e.prior_cumulative_accrued + e.delta AS accrued_to_date, e.claim_deadline "
             "FROM rebate_accrual_entries e "
             "JOIN calculation_runs r ON r.tenant_id = e.tenant_id AND r.id = e.run_id AND r.status = 'completed' "
-            "JOIN agreements a ON a.tenant_id = e.tenant_id AND a.id = e.agreement_id "
             "WHERE e.tenant_id = :t ORDER BY e.agreement_id, e.period_start, e.id DESC"
         ),
         {"t": tenant_id},
@@ -284,19 +265,17 @@ def tracker(db: Session, tenant_id: UUID) -> list[dict[str, Any]]:
     out: list[dict[str, Any]] = []
     for r in rows:
         tiers = [
-            {"tier_number": t.tier_number, "lower_bound": t.lower_bound, "rate": t.rate}
-            for t in db.execute(
-                text(
-                    "SELECT tier_number, lower_bound, rate FROM agreement_version_tiers "
-                    "WHERE tenant_id = :t AND version_id = :v ORDER BY tier_number"
-                ),
-                {"t": tenant_id, "v": r.agreement_version_id},
-            )
+            {
+                "tier_number": t["tier_number"],
+                "lower_bound": Decimal(t["lower_bound"]),
+                "rate": Decimal(t["rate"]),
+            }
+            for t in sorted(r.tiers, key=lambda t: t["tier_number"])
         ]
         nxt = next((t for t in tiers if t["lower_bound"] > r.cumulative_qualifying), None)
         out.append(
             {
-                **r._mapping,
+                **{k: v for k, v in r._mapping.items() if k != "tiers"},
                 "tiers": tiers,
                 "next_tier_lower_bound": None if nxt is None else nxt["lower_bound"],
                 "amount_to_next_tier": None if nxt is None else nxt["lower_bound"] - r.cumulative_qualifying,
@@ -376,13 +355,7 @@ def propose_adjustments(
 
 def preview(db: Session, who: Who, draft_id: UUID, limit: int) -> dict[str, Any]:
     """Run the engine on a draft's payload against up to ``limit`` imported lines; persists nothing."""
-    draft = db.execute(
-        text(
-            "SELECT payload, agreement_id, amends_version_id FROM agreement_drafts "
-            "WHERE tenant_id = :t AND id = :id"
-        ),
-        {"t": who.tenant_id, "id": draft_id},
-    ).first()
+    draft = agreements.draft_for_preview(db, who.tenant_id, draft_id)
     if draft is None:
         raise NotFound()
     now = clock.now()
@@ -450,16 +423,7 @@ def preview(db: Session, who: Who, draft_id: UUID, limit: int) -> dict[str, Any]
 def _spa_preview(
     db: Session, tenant_id: UUID, today: date, batch: loaders.SalesBatch, results: tuple[LineResult, ...]
 ) -> dict[str, Any]:
-    meta = {
-        str(r.id): r
-        for r in db.execute(
-            text(
-                "SELECT id, document_number, line_number, invoice_date FROM sales_document_lines "
-                "WHERE tenant_id = :t AND id = ANY(CAST(:ids AS uuid[]))"
-            ),
-            {"t": tenant_id, "ids": [UUID(ln.line_id) for ln in batch.lines]},
-        )
-    }
+    meta = {ln.line_id: ln for ln in batch.lines}
     lines = [
         {
             "line_id": r.line_id,

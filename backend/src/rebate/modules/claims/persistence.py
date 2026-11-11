@@ -5,7 +5,7 @@ then marked ``failed``. Readers only ever see ``completed`` runs (see ``service`
 the append-only triggers keep them as evidence.
 """
 
-from collections.abc import Callable, Sequence
+from collections.abc import Callable, Mapping, Sequence
 from datetime import date
 from decimal import Decimal
 from typing import Any
@@ -16,18 +16,32 @@ from sqlalchemy import Engine, insert
 from rebate.core import clock
 from rebate.core.db import transaction
 from rebate.core.ids import new_id
+from rebate.modules.claims.loaders import RebateEntry
 from rebate.modules.claims.models import CalculationResult, RebateAccrualEntry
-from rebate_engine.models import AccrualResult, LineResult
+from rebate_engine.models import AccrualResult, LineResult, SalesLine
 
 CHUNK = 1000
 
 
-def result_row(tenant_id: UUID, run_id: UUID, r: LineResult) -> dict[str, Any]:
+def result_row(
+    tenant_id: UUID,
+    run_id: UUID,
+    r: LineResult,
+    line: SalesLine,
+    manufacturer_id: UUID | None,
+    agreement_of: Mapping[str, str],
+) -> dict[str, Any]:
+    agreement = agreement_of.get(r.agreement_version_id) if r.agreement_version_id else None
     return {
         "tenant_id": tenant_id,
         "id": new_id(),
         "run_id": run_id,
         "sales_document_line_id": UUID(r.line_id),
+        "document_number": line.document_number,
+        "line_number": line.line_number,
+        "invoice_date": line.invoice_date,
+        "manufacturer_id": manufacturer_id,
+        "agreement_id": None if agreement is None else UUID(agreement),
         "agreement_version_id": None if r.agreement_version_id is None else UUID(r.agreement_version_id),
         "status": r.status.value,
         "exception_code": None if r.exception_code is None else r.exception_code.value,
@@ -48,11 +62,18 @@ def insert_results(
     tenant_id: UUID,
     run_id: UUID,
     results: Sequence[LineResult],
+    lines: Sequence[SalesLine],
+    manufacturer_id: UUID | None,
+    agreement_of: Mapping[str, str],
     heartbeat: Callable[[], None] | None = None,
 ) -> None:
     """Insert in chunks; ``heartbeat`` (the job's lease renewal) runs after every committed chunk."""
+    by_id = {ln.line_id: ln for ln in lines}
     for i in range(0, len(results), CHUNK):
-        rows = [result_row(tenant_id, run_id, r) for r in results[i : i + CHUNK]]
+        rows = [
+            result_row(tenant_id, run_id, r, by_id[r.line_id], manufacturer_id, agreement_of)
+            for r in results[i : i + CHUNK]
+        ]
         with transaction(engine, tenant_id) as db:
             db.execute(insert(CalculationResult), rows)
         if heartbeat is not None:
@@ -63,7 +84,7 @@ def insert_accrual(
     engine: Engine,
     tenant_id: UUID,
     run_id: UUID,
-    agreement_id: UUID,
+    entry: RebateEntry,
     r: AccrualResult,
     claim_deadline: date | None,
 ) -> None:
@@ -73,7 +94,14 @@ def insert_accrual(
                 tenant_id=tenant_id,
                 id=new_id(),
                 run_id=run_id,
-                agreement_id=agreement_id,
+                agreement_id=entry.agreement_id,
+                manufacturer_id=UUID(entry.version.manufacturer_id),
+                external_number=entry.version.external_number,
+                agreement_name=entry.agreement_name,
+                tiers=[
+                    {"tier_number": t.tier_number, "lower_bound": str(t.lower_bound), "rate": str(t.rate)}
+                    for t in entry.version.tiers
+                ],
                 agreement_version_id=UUID(r.agreement_version_id),
                 period_start=r.period_start,
                 period_end=r.period_end,

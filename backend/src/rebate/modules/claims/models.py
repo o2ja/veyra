@@ -48,7 +48,6 @@ class CalculationRun(Base):
             unique=True,
             postgresql_where=text("status IN ('queued', 'running')"),
         ),
-        Index("ix_calculation_runs_tenant_id_id", "tenant_id", "id"),
     )
 
     tenant_id: Mapped[UUID] = mapped_column(_tenant_fk("calculation_runs"))
@@ -81,7 +80,10 @@ class CalculationResult(Base):
         _fk("calculation_results", "run_id", "calculation_runs"),
         _fk("calculation_results", "sales_document_line_id", "sales_document_lines"),
         _fk("calculation_results", "agreement_version_id", "agreement_versions"),
-        Index("ix_calculation_results_tenant_id_run_id_status", "tenant_id", "run_id", "status"),
+        _fk("calculation_results", "manufacturer_id", "manufacturers"),
+        _fk("calculation_results", "agreement_id", "agreements"),
+        Index("ix_calculation_results_tenant_id_run_id_status", "tenant_id", "run_id", "status", "id"),
+        Index("ix_calculation_results_tenant_id_run_id_id", "tenant_id", "run_id", "id"),
         Index(
             "ix_calculation_results_tenant_id_sales_document_line_id", "tenant_id", "sales_document_line_id"
         ),
@@ -92,6 +94,11 @@ class CalculationResult(Base):
     id: Mapped[UUID] = mapped_column(primary_key=True)
     run_id: Mapped[UUID] = mapped_column()
     sales_document_line_id: Mapped[UUID] = mapped_column()
+    document_number: Mapped[str] = mapped_column(Text)
+    line_number: Mapped[int] = mapped_column(Integer)
+    invoice_date: Mapped[date] = mapped_column(Date)
+    manufacturer_id: Mapped[UUID | None] = mapped_column()
+    agreement_id: Mapped[UUID | None] = mapped_column()
     agreement_version_id: Mapped[UUID | None] = mapped_column()
     status: Mapped[str] = mapped_column(Text)
     exception_code: Mapped[str | None] = mapped_column(Text)
@@ -120,6 +127,7 @@ class RebateAccrualEntry(Base):
         _fk("rebate_accrual_entries", "run_id", "calculation_runs"),
         _fk("rebate_accrual_entries", "agreement_id", "agreements"),
         _fk("rebate_accrual_entries", "agreement_version_id", "agreement_versions"),
+        _fk("rebate_accrual_entries", "manufacturer_id", "manufacturers"),
         Index(
             "ix_rebate_accrual_entries_tenant_id_agreement_id_period_start",
             "tenant_id",
@@ -133,6 +141,10 @@ class RebateAccrualEntry(Base):
     run_id: Mapped[UUID] = mapped_column()
     agreement_id: Mapped[UUID] = mapped_column()
     agreement_version_id: Mapped[UUID] = mapped_column()
+    manufacturer_id: Mapped[UUID] = mapped_column()
+    external_number: Mapped[str] = mapped_column(Text)
+    agreement_name: Mapped[str] = mapped_column(Text)
+    tiers: Mapped[list[dict[str, Any]]] = mapped_column(JSONB)
     period_start: Mapped[date] = mapped_column(Date)
     period_end: Mapped[date] = mapped_column(Date)
     as_of_date: Mapped[date] = mapped_column(Date)

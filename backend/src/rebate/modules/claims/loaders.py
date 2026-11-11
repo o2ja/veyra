@@ -1,8 +1,8 @@
-"""Loaders: database rows -> frozen ``rebate_engine`` inputs (S5.3).
+"""Loaders: rows from the owning modules' read functions -> frozen ``rebate_engine`` inputs (S5.3).
 
-Read-only SQL over the source tables of other modules (sales/purchase lines, agreement versions, master data):
-the engine needs set-based bulk reads that no module service offers, and routing 1M lines through ORM objects
-would defeat the point. Every query is tenant-scoped explicitly and by RLS.
+The set-based queries live in the modules that own the tables (``ingestion``, ``agreements``, ``masterdata``:
+``calc_reads``); this module only shapes their rows into engine models. Only the run ledger (this module's own
+table) is queried here.
 
 Reproducibility: agreement versions are visible as of the run's ``as_of`` (activated at or before it and not yet
 superseded/cancelled then); source lines are those of import batches completed at or before ``data_cutoff``.
@@ -10,7 +10,7 @@ Source lines superseded by a later import are NOT reconstructed (the current ver
 source change therefore yields new inputs and a different ``input_checksum`` by design.
 """
 
-from collections.abc import Callable, Iterator
+from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import date, datetime
 from decimal import Decimal
@@ -20,6 +20,7 @@ from uuid import UUID
 from sqlalchemy import text
 from sqlalchemy.orm import Session
 
+from rebate.modules import agreements, ingestion, masterdata
 from rebate.modules.claims import frozen
 from rebate_engine.models import (
     CustomerScope,
@@ -58,6 +59,7 @@ class RebateEntry:
 
     version: RebateVersion
     agreement_id: UUID
+    agreement_name: str
     valid_from: date
     valid_to: date
     content_hash: str
@@ -76,22 +78,9 @@ class Versions:
         )
 
 
-def _ids(values: list[UUID]) -> dict[str, Any]:
-    return {"ids": values}
-
-
 def load_settings(
     db: Session, tenant_id: UUID, manufacturer_ids: list[UUID]
 ) -> tuple[ManufacturerSettings, ...]:
-    rows = db.execute(
-        text(
-            "SELECT manufacturer_id, claim_window_basis, claim_window_days, allow_negative_claims, conflict_policy "
-            "FROM manufacturer_settings WHERE tenant_id = :t "
-            "AND (cardinality(CAST(:m AS uuid[])) = 0 OR manufacturer_id = ANY(CAST(:m AS uuid[]))) "
-            "ORDER BY manufacturer_id"
-        ),
-        {"t": tenant_id, "m": manufacturer_ids},
-    )
     return tuple(
         ManufacturerSettings(
             manufacturer_id=str(r.manufacturer_id),
@@ -100,18 +89,11 @@ def load_settings(
             claim_window_days=r.claim_window_days,
             allow_negative_claims=r.allow_negative_claims,
         )
-        for r in rows
+        for r in masterdata.manufacturer_settings_rows(db, tenant_id, manufacturer_ids)
     )
 
 
 def load_conversions(db: Session, tenant_id: UUID) -> tuple[UomConversion, ...]:
-    rows = db.execute(
-        text(
-            "SELECT product_id, from_uom, to_uom, factor FROM uom_conversions WHERE tenant_id = :t "
-            "ORDER BY id"
-        ),
-        {"t": tenant_id},
-    )
     return tuple(
         UomConversion(
             product_id=None if r.product_id is None else str(r.product_id),
@@ -119,85 +101,21 @@ def load_conversions(db: Session, tenant_id: UUID) -> tuple[UomConversion, ...]:
             to_uom=r.to_uom,
             factor=r.factor,
         )
-        for r in rows
-    )
-
-
-def load_manufacturer_ids(db: Session, tenant_id: UUID) -> list[UUID]:
-    return list(
-        db.scalars(text("SELECT id FROM manufacturers WHERE tenant_id = :t ORDER BY id"), {"t": tenant_id})
-    )
-
-
-def _version_rows(db: Session, tenant_id: UUID, as_of: datetime, manufacturer_ids: list[UUID]) -> list[Any]:
-    return list(
-        db.execute(
-            text(
-                "SELECT v.id, v.agreement_id, a.agreement_type, a.external_number, a.manufacturer_id, "
-                "v.valid_from, v.valid_to, v.priority, v.rules, v.content_hash "
-                "FROM agreement_versions v JOIN agreements a ON a.tenant_id = v.tenant_id AND a.id = v.agreement_id "
-                "WHERE v.tenant_id = :t AND v.activated_at <= :as_of "
-                "AND (v.status IN ('active', 'expired') "
-                "     OR (v.status = 'superseded' AND v.superseded_at > :as_of) "
-                "     OR (v.status = 'cancelled' AND a.cancelled_at > :as_of)) "
-                "AND (cardinality(CAST(:m AS uuid[])) = 0 OR a.manufacturer_id = ANY(CAST(:m AS uuid[]))) "
-                "ORDER BY v.id"
-            ),
-            {"t": tenant_id, "as_of": as_of, "m": manufacturer_ids},
-        )
+        for r in masterdata.uom_conversion_rows(db, tenant_id)
     )
 
 
 def load_versions(db: Session, tenant_id: UUID, as_of: datetime, manufacturer_ids: list[UUID]) -> Versions:
-    """Agreement versions in force at ``as_of``. Raises the engine's ``RulesError`` (``UnsupportedRuleError`` for the
-    Release-2 rules) for a stored version it cannot evaluate; ``external_number`` is in the message."""
-    rows = _version_rows(db, tenant_id, as_of, manufacturer_ids)
-    version_ids = [r.id for r in rows]
-    items = db.execute(
-        text(
-            "SELECT version_id, product_id, reference_cost, deviated_cost, sell_price, rate, flat_amount, "
-            "max_quantity, claim_uom FROM agreement_version_items "
-            "WHERE tenant_id = :t AND version_id = ANY(CAST(:ids AS uuid[])) AND customer_id IS NULL "
-            "ORDER BY version_id, line_number"
-        ),
-        {"t": tenant_id, **_ids(version_ids)},
-    )
-    items_by: dict[UUID, list[Any]] = {}
-    for i in items:
-        items_by.setdefault(i.version_id, []).append(i)
-    customers_by: dict[UUID, list[CustomerScope]] = {}
-    for c in db.execute(
-        text(
-            "SELECT version_id, customer_id, scope FROM agreement_version_customers "
-            "WHERE tenant_id = :t AND version_id = ANY(CAST(:ids AS uuid[])) ORDER BY version_id, customer_id"
-        ),
-        {"t": tenant_id, **_ids(version_ids)},
-    ):
-        customers_by.setdefault(c.version_id, []).append(
-            CustomerScope(customer_id=str(c.customer_id), scope=c.scope)
-        )
-    tiers_by: dict[UUID, list[Tier]] = {}
-    for t in db.execute(
-        text(
-            "SELECT version_id, tier_number, lower_bound, rate FROM agreement_version_tiers "
-            "WHERE tenant_id = :t AND version_id = ANY(CAST(:ids AS uuid[])) ORDER BY version_id, tier_number"
-        ),
-        {"t": tenant_id, **_ids(version_ids)},
-    ):
-        tiers_by.setdefault(t.version_id, []).append(
-            Tier(
-                tier_number=t.tier_number,
-                lower_bound=t.lower_bound,
-                rate=t.rate if t.rate is not None else Decimal(0),
-            )
-        )
-
+    """Agreement versions in force at ``as_of``. Raises ``VersionRejected`` (wrapping the engine's ``RulesError`` /
+    ``UnsupportedRuleError`` for the Release-2 rules) for a stored version the engine cannot evaluate."""
+    found = agreements.versions_in_force(db, tenant_id, as_of, manufacturer_ids)
     spa: list[SpaVersion] = []
     hashes: dict[str, str] = {}
     rebates: list[RebateEntry] = []
-    for r in rows:
+    for r in found.versions:
         vid = str(r.id)
         hashes[vid] = r.content_hash
+        items = found.items.get(r.id, [])
         if r.agreement_type == "spa":
             spa.append(
                 SpaVersion(
@@ -220,9 +138,12 @@ def load_versions(db: Session, tenant_id: UUID, as_of: datetime, manufacturer_id
                             max_quantity=i.max_quantity,
                             claim_uom=i.claim_uom,
                         )
-                        for i in items_by.get(r.id, [])
+                        for i in items
                     ),
-                    customers=tuple(customers_by.get(r.id, [])),
+                    customers=tuple(
+                        CustomerScope(customer_id=str(c.customer_id), scope=c.scope)
+                        for c in found.customers.get(r.id, [])
+                    ),
                 )
             )
         else:
@@ -233,10 +154,18 @@ def load_versions(db: Session, tenant_id: UUID, as_of: datetime, manufacturer_id
                         external_number=r.external_number,
                         manufacturer_id=str(r.manufacturer_id),
                         rules=_parsed(r.external_number, parse_rebate_rules, r.rules),
-                        tiers=tuple(tiers_by.get(r.id, [])),
-                        product_ids=tuple(str(i.product_id) for i in items_by.get(r.id, [])),
+                        tiers=tuple(
+                            Tier(
+                                tier_number=t.tier_number,
+                                lower_bound=t.lower_bound,
+                                rate=t.rate if t.rate is not None else Decimal(0),
+                            )
+                            for t in found.tiers.get(r.id, [])
+                        ),
+                        product_ids=tuple(str(i.product_id) for i in items),
                     ),
                     agreement_id=r.agreement_id,
+                    agreement_name=r.name,
                     valid_from=r.valid_from,
                     valid_to=r.valid_to,
                     content_hash=r.content_hash,
@@ -247,12 +176,7 @@ def load_versions(db: Session, tenant_id: UUID, as_of: datetime, manufacturer_id
 
 def customer_ancestors(db: Session, tenant_id: UUID) -> dict[str, tuple[str, ...]]:
     """customer id -> (parent, grandparent, ...); only customers that have a parent appear (§8)."""
-    parents = {
-        r.id: r.parent_customer_id
-        for r in db.execute(
-            text("SELECT id, parent_customer_id FROM customers WHERE tenant_id = :t"), {"t": tenant_id}
-        )
-    }
+    parents = {r.id: r.parent_customer_id for r in masterdata.customer_parent_rows(db, tenant_id)}
     out: dict[str, tuple[str, ...]] = {}
     for cid, parent in parents.items():
         chain: list[str] = []
@@ -269,19 +193,7 @@ def customer_ancestors(db: Session, tenant_id: UUID) -> dict[str, tuple[str, ...
 @dataclass(frozen=True)
 class SalesBatch:
     lines: tuple[SalesLine, ...]
-    checksum_rows: tuple[tuple[str, str], ...]  # (line id, row_hash) in id order: input for the run checksum
-
-
-_SALES = (
-    "SELECT l.id, l.document_number, l.line_number, l.invoice_date, l.ship_date, l.customer_id, l.product_id, "
-    "l.manufacturer_id, p.base_uom, l.quantity, l.uom, l.unit_price, l.unit_cost, l.replacement_cost, "
-    "l.spa_reference, l.original_line_id, l.row_hash "
-    "FROM sales_document_lines l "
-    "JOIN import_batches b ON b.tenant_id = l.tenant_id AND b.id = l.import_batch_id "
-    "LEFT JOIN products p ON p.tenant_id = l.tenant_id AND p.id = l.product_id "
-    "WHERE l.tenant_id = :t AND l.is_current AND b.status IN ('completed', 'completed_with_errors') AND b.completed_at <= :cutoff "
-    "AND l.manufacturer_id IS NOT DISTINCT FROM CAST(:m AS uuid) "
-)
+    checksum_rows: tuple[tuple[str, str], ...]  # (line id, row_hash): input for the run checksum
 
 
 def load_sales_lines(
@@ -299,50 +211,15 @@ def load_sales_lines(
 ) -> SalesBatch:
     """Sales lines of one manufacturer (None = lines without a known manufacturer) dated in the window, with
     return links, returned quantities and prior claims attached (§7)."""
-    params = {"t": tenant_id, "m": manufacturer_id, "cutoff": data_cutoff}
-    sql = _SALES + "AND l.invoice_date BETWEEN :d1 AND :d2 "
-    extra: dict[str, Any] = {"d1": date_from, "d2": date_to}
-    if product_ids is not None:  # preview: only the products the draft covers, newest first, bounded
-        sql += "AND l.product_id = ANY(CAST(:products AS uuid[])) "
-        extra["products"] = product_ids
-    if limit is not None:
-        sql += "ORDER BY l.invoice_date DESC, l.id DESC LIMIT :limit"
-        extra["limit"] = limit
-    else:
-        sql += "ORDER BY l.id"
-    rows = list(db.execute(text(sql), {**params, **extra}))
-    returned: dict[UUID, Decimal] = {
-        r.original_line_id: r.returned
-        for r in db.execute(
-            text(
-                "SELECT l.original_line_id, sum(-l.quantity) AS returned "
-                "FROM sales_document_lines l "
-                "JOIN import_batches b ON b.tenant_id = l.tenant_id AND b.id = l.import_batch_id "
-                "WHERE l.tenant_id = :t AND l.is_current AND l.quantity < 0 AND l.original_line_id IS NOT NULL "
-                "AND b.status IN ('completed', 'completed_with_errors') AND b.completed_at <= :cutoff AND l.invoice_date <= :cutoff_date "
-                "AND l.manufacturer_id IS NOT DISTINCT FROM CAST(:m AS uuid) GROUP BY l.original_line_id"
-            ),
-            {**params, "cutoff_date": data_cutoff.date()},
-        )
-    }
+    rows = ingestion.sales_rows(
+        db, tenant_id, manufacturer_id, date_from, date_to, data_cutoff, product_ids=product_ids, limit=limit
+    )
+    returned = ingestion.returned_quantities(db, tenant_id, manufacturer_id, data_cutoff)
     originals = {r.id for r in rows if r.quantity >= 0}
     original_ids = sorted(
         {r.original_line_id for r in rows if r.quantity < 0 and r.original_line_id is not None}
     )
-    original_qty: dict[UUID, Decimal] = (
-        {
-            r.id: r.quantity
-            for r in db.execute(
-                text(
-                    "SELECT id, quantity FROM sales_document_lines "
-                    "WHERE tenant_id = :t AND id = ANY(CAST(:ids AS uuid[]))"
-                ),
-                {"t": tenant_id, "ids": original_ids},
-            )
-        }
-        if original_ids
-        else {}
-    )
+    original_qty = ingestion.line_quantities(db, tenant_id, original_ids) if original_ids else {}
     prior = source.prior_claims(db, tenant_id, sorted(originals | set(original_ids)))
     lines: list[SalesLine] = []
     for r in rows:
@@ -382,66 +259,6 @@ def load_sales_lines(
     return SalesBatch(tuple(lines), tuple((str(r.id), r.row_hash) for r in rows))
 
 
-def sales_line_windows(
-    db: Session,
-    tenant_id: UUID,
-    manufacturer_id: UUID | None,
-    date_from: date,
-    date_to: date,
-    data_cutoff: datetime,
-    max_lines: int,
-) -> list[tuple[date, date]]:
-    """Consecutive invoice-date windows of at most ``max_lines`` lines (a single date is never split: documents and
-    the engine's processing order stay inside one window)."""
-    rows = db.execute(
-        text(
-            "SELECT l.invoice_date AS d, count(*) AS n FROM sales_document_lines l "
-            "JOIN import_batches b ON b.tenant_id = l.tenant_id AND b.id = l.import_batch_id "
-            "WHERE l.tenant_id = :t AND l.is_current AND b.status IN ('completed', 'completed_with_errors') "
-            "AND b.completed_at <= :cutoff AND l.manufacturer_id IS NOT DISTINCT FROM CAST(:m AS uuid) "
-            "AND l.invoice_date BETWEEN :d1 AND :d2 GROUP BY l.invoice_date ORDER BY l.invoice_date"
-        ),
-        {"t": tenant_id, "m": manufacturer_id, "cutoff": data_cutoff, "d1": date_from, "d2": date_to},
-    ).all()
-    out: list[tuple[date, date]] = []
-    start: date | None = None
-    last: date | None = None
-    count = 0
-    for r in rows:
-        if start is not None and last is not None and count + r.n > max_lines:
-            out.append((start, last))
-            start, count = None, 0
-        if start is None:
-            start = r.d
-        last, count = r.d, count + r.n
-    if start is not None and last is not None:
-        out.append((start, last))
-    return out
-
-
-def sales_line_ids(
-    db: Session,
-    tenant_id: UUID,
-    manufacturer_id: UUID | None,
-    date_from: date,
-    date_to: date,
-    data_cutoff: datetime,
-) -> list[UUID]:
-    """Ids of the run's source lines of one manufacturer: the lines whose claims the cap state must not count twice."""
-    return list(
-        db.scalars(
-            text(
-                "SELECT l.id FROM sales_document_lines l "
-                "JOIN import_batches b ON b.tenant_id = l.tenant_id AND b.id = l.import_batch_id "
-                "WHERE l.tenant_id = :t AND l.is_current AND b.status IN ('completed', 'completed_with_errors') "
-                "AND b.completed_at <= :cutoff AND l.manufacturer_id IS NOT DISTINCT FROM CAST(:m AS uuid) "
-                "AND l.invoice_date BETWEEN :d1 AND :d2"
-            ),
-            {"t": tenant_id, "m": manufacturer_id, "cutoff": data_cutoff, "d1": date_from, "d2": date_to},
-        )
-    )
-
-
 def sales_volume_lines(
     db: Session,
     tenant_id: UUID,
@@ -453,15 +270,7 @@ def sales_volume_lines(
 ) -> tuple[tuple[VolumeLine, ...], tuple[tuple[str, str], ...]]:
     """Signed sales volume (credit notes negative) for a rebate on the sales basis; ``spa_eligible`` comes from the
     SPA results of the same run (§5.4)."""
-    rows = list(
-        db.execute(
-            text(
-                _SALES.replace("l.original_line_id, l.row_hash", "l.extended_amount, l.row_hash")
-                + "AND l.invoice_date BETWEEN :d1 AND :d2 AND l.product_id IS NOT NULL ORDER BY l.id"
-            ),
-            {"t": tenant_id, "m": manufacturer_id, "cutoff": data_cutoff, "d1": date_from, "d2": date_to},
-        )
-    )
+    rows = ingestion.sales_volume_rows(db, tenant_id, manufacturer_id, date_from, date_to, data_cutoff)
     out = tuple(
         VolumeLine(
             line_id=str(r.id),
@@ -482,19 +291,7 @@ def purchase_volume_lines(
     db: Session, tenant_id: UUID, manufacturer_id: UUID, date_from: date, date_to: date, data_cutoff: datetime
 ) -> tuple[tuple[VolumeLine, ...], tuple[tuple[str, str], ...]]:
     """Signed purchase volume (vendor credits negative, normalised at import)."""
-    rows = list(
-        db.execute(
-            text(
-                "SELECT l.id, l.document_date, l.product_id, l.quantity, l.extended_amount, l.row_hash "
-                "FROM purchase_document_lines l "
-                "JOIN import_batches b ON b.tenant_id = l.tenant_id AND b.id = l.import_batch_id "
-                "WHERE l.tenant_id = :t AND l.is_current AND b.status IN ('completed', 'completed_with_errors') AND b.completed_at <= :cutoff "
-                "AND l.manufacturer_id = :m AND l.document_date BETWEEN :d1 AND :d2 "
-                "AND l.product_id IS NOT NULL ORDER BY l.id"
-            ),
-            {"t": tenant_id, "m": manufacturer_id, "cutoff": data_cutoff, "d1": date_from, "d2": date_to},
-        )
-    )
+    rows = ingestion.purchase_volume_rows(db, tenant_id, manufacturer_id, date_from, date_to, data_cutoff)
     out = tuple(
         VolumeLine(
             line_id=str(r.id),
@@ -520,8 +317,3 @@ def prior_accrued(db: Session, tenant_id: UUID, agreement_id: UUID, period_start
         {"t": tenant_id, "a": agreement_id, "p": period_start},
     )
     return Decimal(total)
-
-
-def chunks[T](items: list[T], size: int) -> Iterator[list[T]]:
-    for i in range(0, len(items), size):
-        yield items[i : i + size]

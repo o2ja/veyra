@@ -25,7 +25,7 @@ from rebate.core import clock
 from rebate.core.db import transaction
 from rebate.core.errors import Conflict, ValidationFailed
 from rebate.core.jobs import PermanentError
-from rebate.modules import audit
+from rebate.modules import audit, ingestion, masterdata
 from rebate.modules.claims import frozen, loaders, persistence
 from rebate.modules.claims.models import CalculationRun
 from rebate_engine.deadlines import rebate_deadline
@@ -138,6 +138,7 @@ def preflight(
                     "of every sales line in the period).",
                 )
             )
+    problems += choose_rebate_versions(versions, scope)[1]
     if problems:
         raise RunRuleError(details=problems)
     return versions, settings
@@ -233,15 +234,25 @@ def execute(
         run = db.get(CalculationRun, run_id)
         if run is None:
             raise PermanentError("calculation run not found")
-        if run.status != "queued":
+        stale = run.status == "running"
+        if run.status not in ("queued", "running"):
             raise PermanentError(f"calculation run is {run.status}, not queued")
         scope = Scope.from_json(run.scope)
         as_of, cutoff, run_date = run.as_of, run.data_cutoff, run.run_date
-        db.execute(
-            update(CalculationRun)
-            .where(CalculationRun.id == run_id)
-            .values(status="running", started_at=clock.now())
+        if not stale:
+            db.execute(
+                update(CalculationRun)
+                .where(CalculationRun.id == run_id)
+                .values(status="running", started_at=clock.now())
+            )
+    if stale:  # we hold the tenant lock, so no worker is executing it: its worker died mid-run
+        _fail(
+            engine,
+            tenant_id,
+            run_id,
+            [detail("run", "stale_run", "The worker stopped during the run; start a new run.")],
         )
+        raise PermanentError("calculation run was abandoned by a stopped worker")
     try:
         totals, version_ids = _calculate(
             engine, tenant_id, run_id, scope, as_of, cutoff, run_date, source, heartbeat
@@ -316,7 +327,7 @@ def _calculate(
         versions, settings = preflight(db, tenant_id, scope, as_of)
         conversions = loaders.load_conversions(db, tenant_id)
         ancestors = loaders.customer_ancestors(db, tenant_id)
-        everyone = loaders.load_manufacturer_ids(db, tenant_id)
+        everyone = masterdata.manufacturer_ids(db, tenant_id)
     totals.feed("config", config_hash(scope, as_of, settings, conversions))
     for vid, content_hash in sorted(versions.spa_hashes.items()):
         totals.feed("version", vid, content_hash)
@@ -332,7 +343,7 @@ def _calculate(
         mine = str(group) if group else None
         group_versions = tuple(v for v in versions.spa if v.manufacturer_id == mine)
         with transaction(engine, tenant_id) as db:
-            windows = loaders.sales_line_windows(
+            windows = ingestion.sales_line_windows(
                 db, tenant_id, group, scope.date_from, scope.date_to, cutoff, WINDOW_LINES
             )
             # claims frozen before this run, except the source lines of the run itself (their own consumption is
@@ -341,7 +352,7 @@ def _calculate(
                 source.consumption(
                     db,
                     tenant_id,
-                    loaders.sales_line_ids(db, tenant_id, group, scope.date_from, scope.date_to, cutoff),
+                    ingestion.sales_line_ids(db, tenant_id, group, scope.date_from, scope.date_to, cutoff),
                 )
             )
         for d_from, d_to in windows:
@@ -362,7 +373,9 @@ def _calculate(
                 )
             )
             _carry(consumed, batch.lines, results, agreement_of, conversions)
-            persistence.insert_results(engine, tenant_id, run_id, results, heartbeat)
+            persistence.insert_results(
+                engine, tenant_id, run_id, results, batch.lines, group, agreement_of, heartbeat
+            )
             for r in results:
                 totals.lines += 1
                 totals.by_status[r.status.value] += 1
@@ -413,6 +426,44 @@ def _carry(
         consumed[key] = consumed.get(key, Decimal(0)) + max(pc.quantity - returned, Decimal(0))
 
 
+def choose_rebate_versions(
+    versions: loaders.Versions, scope: Scope
+) -> tuple[dict[tuple[UUID, date], loaders.RebateEntry], list[dict[str, str]]]:
+    """One version per (agreement, measurement period). Several versions of an agreement covering the period (after a
+    split-supersede, BUSINESS_LOGIC §9.2) are fine only when their terms are identical (same content hash: the
+    ledger figure is then unambiguous). Different terms would need a documented rule for applying each version to
+    its part of the period; that is an owner decision, so the run fails closed with `split_period_terms_need_decision`."""
+    groups: dict[tuple[UUID, date], list[loaders.RebateEntry]] = {}
+    for entry in versions.rebates:
+        rules = entry.version.rules
+        if rules.period_start > scope.date_to or rules.period_end < scope.date_from:
+            continue
+        if entry.valid_from > scope.date_to or entry.valid_to < rules.period_start:
+            continue
+        groups.setdefault((entry.agreement_id, rules.period_start), []).append(entry)
+    chosen: dict[tuple[UUID, date], loaders.RebateEntry] = {}
+    problems: list[dict[str, str]] = []
+    for key, entries in groups.items():
+        if len({e.content_hash for e in entries}) > 1:
+            ordered = sorted(entries, key=lambda e: e.valid_from)
+            problems.append(
+                detail(
+                    f"agreement:{ordered[0].version.external_number}",
+                    "split_period_terms_need_decision",
+                    "The measurement period starting "
+                    f"{key[1].isoformat()} is covered by versions with different terms ("
+                    + ", ".join(
+                        f"version {e.version.version_id} valid {e.valid_from.isoformat()} to {e.valid_to.isoformat()}"
+                        for e in ordered
+                    )
+                    + "). How rebate tiers apply across an amendment inside one period is an owner decision; "
+                    "the run is refused until it is made.",
+                )
+            )
+        chosen[key] = max(entries, key=lambda e: e.valid_from)
+    return chosen, problems
+
+
 def _rebates(
     engine: Engine,
     tenant_id: UUID,
@@ -425,18 +476,7 @@ def _rebates(
     totals: Totals,
 ) -> None:
     window_days = {s.manufacturer_id: s.claim_window_days for s in settings}
-    chosen: dict[tuple[UUID, date], loaders.RebateEntry] = {}
-    for entry in versions.rebates:
-        rules = entry.version.rules
-        if rules.period_start > scope.date_to or rules.period_end < scope.date_from:
-            continue
-        # a split-supersede (§9.2) leaves several versions for one agreement and period: the latest terms in force
-        # at the as-of date govern the whole cumulative figure (the ledger is keyed by agreement + period)
-        if entry.valid_from > scope.date_to or entry.valid_to < rules.period_start:
-            continue
-        key = (entry.agreement_id, rules.period_start)
-        if key not in chosen or entry.valid_from > chosen[key].valid_from:
-            chosen[key] = entry
+    chosen, _ = choose_rebate_versions(versions, scope)
     for (agreement_id, period_start), entry in sorted(
         chosen.items(), key=lambda kv: (str(kv[0][0]), kv[0][1])
     ):
@@ -458,6 +498,6 @@ def _rebates(
         result = calculate_accrual(version, lines, scope.date_to, prior)
         days = window_days.get(version.manufacturer_id)
         deadline = None if days is None else rebate_deadline(rules.period_end, days)
-        persistence.insert_accrual(engine, tenant_id, run_id, agreement_id, result, deadline)
+        persistence.insert_accrual(engine, tenant_id, run_id, entry, result, deadline)
         totals.accrual_entries += 1
         totals.accrual_delta += result.delta

@@ -10,8 +10,7 @@ FORCE via the shared helper.
 - claim_adjustments: no DELETE/TRUNCATE; amounts and links are immutable, only the approval workflow columns move.
   ``claim_line_id`` / ``variance_case_id`` are plain uuids until S7/S9 create those tables (FKs are added there).
 - manufacturer_settings.claim_window_basis: ``month_end`` (SPA lines) joins ``period_end`` (rebates only) in the
-  CHECK; owner decision 2026-11-11. Existing ``period_end`` rows keep their value (the engine reports a clear
-  error for SPA lines until an admin picks ``month_end``).
+  CHECK; owner decision 2026-11-11. Existing ``period_end`` rows become ``month_end`` (their old meaning).
 
 Forward-only like the rest of the chain (no downgrade functions).
 
@@ -29,6 +28,10 @@ down_revision = "20261112_0900_agreements"
 branch_labels = None
 depends_on = None
 
+PERIOD_END_TO_MONTH_END = (
+    "UPDATE manufacturer_settings SET claim_window_basis = 'month_end', revision = revision + 1, "
+    "updated_at = now() WHERE claim_window_basis = 'period_end'"
+)
 TENANT_TABLES = ("calculation_runs", "calculation_results", "rebate_accrual_entries", "claim_adjustments")
 RUN_BOOKKEEPING = "'status' - 'agreement_version_ids' - 'input_checksum' - 'totals' - 'error' - 'started_at' - 'completed_at'"
 
@@ -71,7 +74,6 @@ def upgrade() -> None:
         "CREATE UNIQUE INDEX uq_calculation_runs_active_scope ON calculation_runs (tenant_id, scope_hash) "
         "WHERE status IN ('queued', 'running')"
     )
-    op.execute("CREATE INDEX ix_calculation_runs_tenant_id_id ON calculation_runs (tenant_id, id)")
     op.execute(
         f"""
         CREATE FUNCTION fn_calculation_run_update() RETURNS trigger LANGUAGE plpgsql AS $$
@@ -120,6 +122,11 @@ def upgrade() -> None:
             id uuid NOT NULL,
             run_id uuid NOT NULL,
             sales_document_line_id uuid NOT NULL,
+            document_number text NOT NULL,
+            line_number integer NOT NULL,
+            invoice_date date NOT NULL,
+            manufacturer_id uuid,
+            agreement_id uuid,
             agreement_version_id uuid,
             status text NOT NULL,
             exception_code text,
@@ -142,6 +149,10 @@ def upgrade() -> None:
                 FOREIGN KEY (tenant_id, sales_document_line_id) REFERENCES sales_document_lines (tenant_id, id),
             CONSTRAINT fk_calculation_results_agreement_versions FOREIGN KEY (tenant_id, agreement_version_id)
                 REFERENCES agreement_versions (tenant_id, id),
+            CONSTRAINT fk_calculation_results_manufacturers FOREIGN KEY (tenant_id, manufacturer_id)
+                REFERENCES manufacturers (tenant_id, id),
+            CONSTRAINT fk_calculation_results_agreements FOREIGN KEY (tenant_id, agreement_id)
+                REFERENCES agreements (tenant_id, id),
             CONSTRAINT ck_calculation_results_status
                 CHECK (status IN ('eligible', 'exception', 'netted', 'adjustment', 'not_applicable')),
             CONSTRAINT ck_calculation_results_exception_code CHECK (
@@ -153,7 +164,10 @@ def upgrade() -> None:
     )
     op.execute(
         "CREATE INDEX ix_calculation_results_tenant_id_run_id_status ON calculation_results "
-        "(tenant_id, run_id, status)"
+        "(tenant_id, run_id, status, id)"
+    )
+    op.execute(
+        "CREATE INDEX ix_calculation_results_tenant_id_run_id_id ON calculation_results (tenant_id, run_id, id)"
     )
     op.execute(
         "CREATE INDEX ix_calculation_results_tenant_id_sales_document_line_id ON calculation_results "
@@ -172,6 +186,10 @@ def upgrade() -> None:
             run_id uuid NOT NULL,
             agreement_id uuid NOT NULL,
             agreement_version_id uuid NOT NULL,
+            manufacturer_id uuid NOT NULL,
+            external_number text NOT NULL,
+            agreement_name text NOT NULL,
+            tiers jsonb NOT NULL,
             period_start date NOT NULL,
             period_end date NOT NULL,
             as_of_date date NOT NULL,
@@ -198,6 +216,8 @@ def upgrade() -> None:
                 REFERENCES agreements (tenant_id, id),
             CONSTRAINT fk_rebate_accrual_entries_agreement_versions FOREIGN KEY (tenant_id, agreement_version_id)
                 REFERENCES agreement_versions (tenant_id, id),
+            CONSTRAINT fk_rebate_accrual_entries_manufacturers FOREIGN KEY (tenant_id, manufacturer_id)
+                REFERENCES manufacturers (tenant_id, id),
             CONSTRAINT ck_rebate_accrual_entries_period CHECK (period_end >= period_start)
         )
         """
@@ -262,6 +282,12 @@ def upgrade() -> None:
                 RAISE EXCEPTION 'claim_adjustments: amount, type, links and reason are immutable'
                     USING ERRCODE = 'restrict_violation';
             END IF;
+            IF NEW.status = OLD.status AND (NEW.approved_by IS DISTINCT FROM OLD.approved_by
+                OR NEW.approved_at IS DISTINCT FROM OLD.approved_at
+                OR NEW.included_in_batch_id IS DISTINCT FROM OLD.included_in_batch_id) THEN
+                RAISE EXCEPTION 'claim_adjustments: approval columns change only with the status'
+                    USING ERRCODE = 'restrict_violation';
+            END IF;
             IF NEW.status <> OLD.status AND NOT (
                 (OLD.status = 'proposed' AND NEW.status IN ('approved', 'rejected'))
                 OR (OLD.status = 'approved' AND NEW.status IN ('included', 'rejected'))) THEN
@@ -302,3 +328,6 @@ def upgrade() -> None:
         "ALTER TABLE manufacturer_settings ADD CONSTRAINT ck_manufacturer_settings_claim_window_basis "
         "CHECK (claim_window_basis IN ('invoice_date', 'ship_date', 'month_end', 'period_end'))"
     )
+    # the old 'period_end' meant the month end of the line's claim date (SPA lines): keep the meaning, new name;
+    # the revision moves on so open settings forms see the change
+    op.execute(PERIOD_END_TO_MONTH_END)

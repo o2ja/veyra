@@ -5,6 +5,15 @@ The pure file readers, normalisers and the ``Idempotency-Key`` helpers are also 
 module (SPA item import, ``POST /agreement-drafts/{id}/approve``)."""
 
 from rebate.modules.ingestion import jobs as _jobs  # noqa: F401  (registers job handlers)
+from rebate.modules.ingestion.calc_reads import (
+    line_quantities,
+    purchase_volume_rows,
+    returned_quantities,
+    sales_line_ids,
+    sales_line_windows,
+    sales_rows,
+    sales_volume_rows,
+)
 from rebate.modules.ingestion.idempotency import parse_key, replay, store
 from rebate.modules.ingestion.normalizers import (
     CARD_REMOVED,
@@ -26,12 +35,19 @@ __all__ = [
     "canonical_uom",
     "csv_source",
     "find_card_number",
+    "line_quantities",
     "normalise_header",
     "parse_decimal",
     "parse_key",
+    "purchase_volume_rows",
     "records",
     "replay",
+    "returned_quantities",
     "router",
+    "sales_line_ids",
+    "sales_line_windows",
+    "sales_rows",
+    "sales_volume_rows",
     "store",
     "xlsx_source",
 ]
