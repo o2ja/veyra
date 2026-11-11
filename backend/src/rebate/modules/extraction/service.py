@@ -102,9 +102,9 @@ def _write(engine: Engine, tenant_id: UUID, extraction_id: UUID, **columns: Any)
 def request_extraction(db: Session, who: Who, file_id: UUID, rerun: bool) -> tuple[DocumentExtraction, bool]:
     """Queue an extraction of an agreement file. Returns ``(row, newly_queued)``: an active or (without
     ``rerun``) completed extraction of the same file is reused (idempotent, AI_PROCESSING.md §10)."""
+    file = files.get(db, who.tenant_id, file_id)  # 404 for unknown and foreign ids, before anything else
     if not tenancy.get_settings(db, who.tenant_id).ai_processing_enabled:
         raise AiNotEnabled()
-    file = files.get(db, who.tenant_id, file_id)  # 404 for unknown and foreign ids
     if file.kind != "agreement":
         raise InvalidState("Only files uploaded as kind 'agreement' can be extracted.")
     if file.scan_status != "clean":
@@ -429,7 +429,10 @@ def process(db: Session, ctx: JobContext) -> None:
         ex = get_extraction(db, tenant, UUID(ctx.payload["extraction_id"]))
     except (KeyError, ValueError, NotFound) as exc:
         raise PermanentError("extraction not found") from exc
-    ai = ai_engine(ctx.settings)
+    try:
+        ai = ai_engine(ctx.settings)
+    except gateway.NotConfigured as exc:  # operator error: dead-letter, the request stays queued and visible
+        raise PermanentError("the AI gateway is not configured (DATABASE_URL_AI)") from exc
     if ex.status in FINAL:
         if ex.status == "completed" and draft_id_of(db, tenant, ex.id) is None and ex.result:
             # crash window between the AI-role write and the job commit: rebuild the draft from the stored result

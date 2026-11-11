@@ -33,10 +33,10 @@ def _cell(value: str) -> str:
 
 
 def suggest_mapping(db: Session, who: Who, settings: Settings, import_id: UUID) -> dict[str, Any]:
+    sample = ingestion.mapping_sample(db, who.tenant_id, import_id, SAMPLE_ROWS)  # 404 for foreign ids first
     enabled = tenancy.get_settings(db, who.tenant_id).ai_processing_enabled
     if not enabled:
         raise AiNotEnabled()
-    sample = ingestion.mapping_sample(db, who.tenant_id, import_id, SAMPLE_ROWS)  # 404 for foreign ids
     headers, fields = sample["headers"], sample["fields"]
     if not headers:
         raise AiUnavailable()
