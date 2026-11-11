@@ -104,6 +104,36 @@ async def _upload_gate(request: Request) -> JSONResponse | None:
     return await run_in_threadpool(_upload_caller, request)
 
 
+class BodyTooLarge(DomainError):
+    code = "payload_too_large"
+    status_code = 413
+    message = "The request body is too large."
+
+
+async def _body_gate(request: Request) -> JSONResponse | None:
+    """Every request except the upload route: refuse a body above ``body_max_mb`` before it is parsed.
+    A declared Content-Length is checked up front; a body without one (chunked) is read with a running
+    count and refused as soon as it passes the cap, else handed on to the route unchanged."""
+    if request.url.path == UPLOAD_PATH and request.method == "POST":
+        return None
+    settings: Settings = request.app.state.settings
+    cap = settings.body_max_mb * 1024 * 1024
+    length = request.headers.get("content-length")
+    if length is not None:
+        if not length.isdigit():
+            return _error(DomainError("Invalid Content-Length."), _request_id(request))
+        return _error(BodyTooLarge(), _request_id(request)) if int(length) > cap else None
+    if "transfer-encoding" not in request.headers:
+        return None
+    body = bytearray()
+    async for chunk in request.stream():
+        body += chunk
+        if len(body) > cap:
+            return _error(BodyTooLarge(), _request_id(request))
+    request._body = bytes(body)  # replayed to the route by Starlette's cached request
+    return None
+
+
 async def _request_context(request: Request, call_next: Callable[[Request], Awaitable[Response]]) -> Response:
     request_id = str(new_id())  # never trust a client-supplied id
     request.state.request_id = request_id
@@ -111,7 +141,7 @@ async def _request_context(request: Request, call_next: Callable[[Request], Awai
     structlog.contextvars.bind_contextvars(request_id=request_id)
     started = time.perf_counter()
     try:
-        early = await _upload_gate(request)
+        early = await _upload_gate(request) or await _body_gate(request)
         response = early if early is not None else await call_next(request)
     except Exception:
         log.exception("unhandled_error")

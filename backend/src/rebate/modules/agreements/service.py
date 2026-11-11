@@ -6,6 +6,7 @@ submit and again at approval; approval creates the immutable version(s) in the r
 on the agreement (two parallel approvals of one draft: the second sees ``approved`` and gets 409).
 """
 
+import base64
 import hashlib
 import json
 from dataclasses import dataclass
@@ -43,7 +44,7 @@ from rebate.modules.agreements.models import (
     AgreementVersionTier,
 )
 from rebate.modules.audit import Action, Actor
-from rebate.modules.masterdata import Who, keyset
+from rebate.modules.masterdata import Page, Who, keyset
 
 MAX_PAYLOAD_BYTES = 5 * 1024 * 1024  # API_SPECIFICATION.md §1: draft payloads <= 5 MB
 SWEEP_JOB = "agreements_expiry_sweep"
@@ -109,8 +110,10 @@ def _flush(db: Session) -> None:
 
 
 def _draft(db: Session, tenant_id: UUID, draft_id: UUID, *, lock: bool = False) -> AgreementDraft:
+    # populate_existing: a row already in the identity map (read unlocked earlier in this transaction) is
+    # refreshed with the values seen under the lock, never served stale.
     stmt = select(AgreementDraft).where(AgreementDraft.tenant_id == tenant_id, AgreementDraft.id == draft_id)
-    row = db.scalar(stmt.with_for_update() if lock else stmt)
+    row = db.scalar(stmt.with_for_update().execution_options(populate_existing=True) if lock else stmt)
     if row is None:
         raise NotFound()
     return row
@@ -118,7 +121,7 @@ def _draft(db: Session, tenant_id: UUID, draft_id: UUID, *, lock: bool = False) 
 
 def _agreement(db: Session, tenant_id: UUID, agreement_id: UUID, *, lock: bool = False) -> Agreement:
     stmt = select(Agreement).where(Agreement.tenant_id == tenant_id, Agreement.id == agreement_id)
-    row = db.scalar(stmt.with_for_update() if lock else stmt)
+    row = db.scalar(stmt.with_for_update().execution_options(populate_existing=True) if lock else stmt)
     if row is None:
         raise NotFound()
     return row
@@ -128,7 +131,7 @@ def get_version(db: Session, tenant_id: UUID, version_id: UUID, *, lock: bool = 
     stmt = select(AgreementVersion).where(
         AgreementVersion.tenant_id == tenant_id, AgreementVersion.id == version_id
     )
-    row = db.scalar(stmt.with_for_update() if lock else stmt)
+    row = db.scalar(stmt.with_for_update().execution_options(populate_existing=True) if lock else stmt)
     if row is None:
         raise NotFound()
     return row
@@ -616,10 +619,12 @@ def _retire(db: Session, who: Who, version: AgreementVersion, status: str) -> di
     return before
 
 
-def approve(db: Session, who: Who, draft_id: UUID) -> AgreementDraft:
+def approve(db: Session, who: Who, draft_id: UUID, revision: int) -> AgreementDraft:
     draft = _draft(db, who.tenant_id, draft_id, lock=True)
     if draft.status != "pending_approval":
         raise InvalidState("Only drafts pending approval can be approved.")
+    if draft.revision != revision:  # the approver approves the revision they reviewed
+        raise PreconditionFailed()
     settings = tenancy.get_settings(db, who.tenant_id)
     if settings.four_eyes_required and who.user_id in makers(db, draft):
         audit_event(
@@ -631,6 +636,17 @@ def approve(db: Session, who: Who, draft_id: UUID) -> AgreementDraft:
             after=_draft_audit(draft),
         )
         raise AuditedFourEyesViolation()
+    # Lock (and refresh) the agreement and the amended version *before* validating: a concurrent cancel or a
+    # concurrent amendment of the same version is then seen here and refused with 409, never overwritten.
+    if draft.agreement_id is not None:
+        if _agreement(db, who.tenant_id, draft.agreement_id, lock=True).cancelled_at is not None:
+            raise InvalidState("The agreement was cancelled.")
+    if draft.amends_version_id is not None:
+        if get_version(db, who.tenant_id, draft.amends_version_id, lock=True).status not in (
+            "active",
+            "expired",
+        ):
+            raise InvalidState("The amended version is no longer in force.")
     today = business_today(db, who.tenant_id)
     result = _run_validator(db, draft)
     if not result.valid or result.resolved is None:
@@ -805,9 +821,11 @@ def cancel_agreement(
             AgreementVersion.agreement_id == agreement.id,
             AgreementVersion.status.in_(("active", "expired")),
         )
-        .order_by(AgreementVersion.valid_from)
+        .order_by(AgreementVersion.id)  # one lock order everywhere (no deadlocks with the sweep/approval)
         .with_for_update()
+        .execution_options(populate_existing=True)
     ).all()
+    versions = sorted(versions, key=lambda v: v.valid_from)  # chronological numbering of split copies
     number = _next_number(db, agreement)
     for v in versions:
         if v.valid_to < effective_date:
@@ -940,14 +958,37 @@ def _skus(db: Session, tenant_id: UUID) -> dict[UUID, str]:
 
 def list_items(
     db: Session, tenant_id: UUID, version_id: UUID, limit: int, cursor: str | None
-) -> list[tuple[AgreementVersionItem, str]]:
+) -> tuple[list[tuple[AgreementVersionItem, str]], Page]:
+    """Items in line order, keyset on ``line_number`` (unique per version; served by the
+    ``(tenant_id, version_id, line_number)`` index). The cursor stays opaque to the client."""
     get_version(db, tenant_id, version_id)
-    stmt: Select[Any] = select(AgreementVersionItem).where(
-        AgreementVersionItem.tenant_id == tenant_id, AgreementVersionItem.version_id == version_id
+    after = 0
+    if cursor is not None:
+        try:
+            after = int(base64.urlsafe_b64decode(cursor.encode() + b"==").decode())
+        except ValueError, UnicodeDecodeError:
+            raise ValidationFailed(
+                details=[{"field": "cursor", "code": "invalid", "message": "Invalid cursor."}]
+            ) from None
+    rows = list(
+        db.scalars(
+            select(AgreementVersionItem)
+            .where(
+                AgreementVersionItem.tenant_id == tenant_id,
+                AgreementVersionItem.version_id == version_id,
+                AgreementVersionItem.line_number > after,
+            )
+            .order_by(AgreementVersionItem.line_number)
+            .limit(limit + 1)
+        )
     )
-    rows = list(db.scalars(keyset(stmt, AgreementVersionItem.id, cursor, limit, newest_first=False)))
+    more = len(rows) > limit
+    rows = rows[:limit]
+    token = base64.urlsafe_b64encode(str(rows[-1].line_number).encode()).decode().rstrip("=")
     skus = _skus(db, tenant_id)
-    return [(i, skus.get(i.product_id, "")) for i in rows]
+    return [(i, skus.get(i.product_id, "")) for i in rows], Page(
+        next_cursor=token if more and rows else None, has_more=more
+    )
 
 
 def version_payload(db: Session, v: AgreementVersion) -> dict[str, Any]:

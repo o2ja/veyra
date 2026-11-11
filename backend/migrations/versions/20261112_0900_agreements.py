@@ -200,6 +200,8 @@ def upgrade() -> None:
             CONSTRAINT ck_agreement_versions_content_hash CHECK (content_hash ~ '^[0-9a-f]{{64}}$'),
             CONSTRAINT ck_agreement_versions_superseded CHECK (
                 (status = 'superseded') = (superseded_at IS NOT NULL)),
+            CONSTRAINT ck_agreement_versions_superseded_by CHECK (
+                superseded_by_version_id IS NULL OR status = 'superseded'),
             CONSTRAINT ex_agreement_versions_no_overlap EXCLUDE USING gist
                 (tenant_id WITH =, agreement_id WITH =, valid_range WITH &&)
                 WHERE (status IN ('active', 'expired'))

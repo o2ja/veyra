@@ -62,9 +62,12 @@ def submit(api: Api, draft_id: str, acks: list[str] | None = None) -> Any:
     return api.post(f"/agreement-drafts/{draft_id}/submit", json={"acknowledged_warnings": acks or []})
 
 
-def approve(api: Api, draft_id: str, key: str | None = None) -> Any:
+def approve(api: Api, draft_id: str, key: str | None = None, revision: str | None = None) -> Any:
+    """``revision``: the If-Match value; by default the draft's current ETag (what the approver reviewed)."""
+    etag = revision if revision is not None else api.get(f"/agreement-drafts/{draft_id}").headers["ETag"]
     return api.post(
-        f"/agreement-drafts/{draft_id}/approve", headers={"Idempotency-Key": key or str(uuid.uuid4())}
+        f"/agreement-drafts/{draft_id}/approve",
+        headers={"Idempotency-Key": key or str(uuid.uuid4()), "If-Match": etag},
     )
 
 

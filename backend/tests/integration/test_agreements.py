@@ -5,6 +5,7 @@ BUSINESS_LOGIC.md §3.3/§9.2 and hand derivation (split dates), never from the 
 """
 
 import threading
+import time
 import uuid
 from collections.abc import Iterator
 from contextlib import ExitStack, contextmanager
@@ -101,6 +102,17 @@ def test_manual_payload_is_accepted_and_activated(org: Org, name: str, admin_eng
         (t["tier_number"], Decimal(t["lower_bound"]), Decimal(t["rate"])) for t in body["tiers"]
     ]
     stored = {i["sku"]: i for i in items_of(org.p1, v["id"])}
+    paged, cursor = [], None  # keyset pages in line order, cursor opaque
+    while True:
+        r = org.p1.get(
+            f"/agreement-versions/{v['id']}/items",
+            params={"limit": 2, **({"cursor": cursor} if cursor else {})},
+        )
+        paged += [i["sku"] for i in r.json()["data"]]
+        if not r.json()["page"]["has_more"]:
+            break
+        cursor = r.json()["page"]["next_cursor"]
+    assert paged == [i["sku"] for i in body["items"]]
     assert set(stored) == {i["sku"] for i in body["items"]}
     for item in body["items"]:
         for f in ("reference_cost", "deviated_cost", "sell_price", "rate", "flat_amount", "max_quantity"):
@@ -123,7 +135,12 @@ def test_manual_payload_is_accepted_and_activated(org: Org, name: str, admin_eng
 def test_approve_is_idempotent_and_needs_a_key(org: Org) -> None:
     d = create(org.maker, payload=fresh("SPA-VOLT-2026-901"))
     assert submit(org.maker, d["id"]).status_code == 200
-    assert org.p1.post(f"/agreement-drafts/{d['id']}/approve").status_code == 400  # no Idempotency-Key
+    assert org.p1.post(f"/agreement-drafts/{d['id']}/approve", headers={"If-Match": '"1"'}).status_code == 400
+    no_match = org.p1.post(
+        f"/agreement-drafts/{d['id']}/approve", headers={"Idempotency-Key": str(uuid.uuid4())}
+    )
+    assert no_match.status_code == 412  # the approver must name the revision they reviewed
+    assert approve(org.p1, d["id"], revision='"7"').status_code == 412  # stale / other revision
     key = str(uuid.uuid4())
     first = approve(org.p1, d["id"], key)
     again = approve(org.p1, d["id"], key)
@@ -613,6 +630,8 @@ IMMUTABLE: list[tuple[str, str, str]] = [
     ("UPDATE agreement_versions SET status = 'cancelled' WHERE id = :v; "
      "UPDATE agreement_versions SET status = 'active' WHERE id = :v", "cannot become", "cannot become"),
     ("DELETE FROM agreement_versions WHERE id = :v", "permission denied", "append-only"),
+    ("UPDATE agreement_versions SET superseded_by_version_id = id WHERE id = :v", "ck_agreement_versions_superseded_by",
+     "ck_agreement_versions_superseded_by"),
     ("UPDATE agreement_version_items SET deviated_cost = 1 WHERE version_id = :v", "permission denied", "append-only"),
     ("DELETE FROM agreement_version_items WHERE version_id = :v", "permission denied", "append-only"),
     ("INSERT INTO agreement_version_items (tenant_id, id, version_id, line_number, product_id, deviated_cost) "
@@ -647,3 +666,97 @@ def test_active_versions_cannot_be_altered_even_with_direct_sql(
                 got = str(exc.orig).splitlines()[0]
             savepoint.rollback()
             assert got is not None and expected in got, (statement, got)
+
+
+# ---- races on the agreement (review H1): the approval locks and re-reads before validating -----------------
+
+
+def _wait_for_lock_waiter(engine: Engine, timeout: float = 10.0) -> None:
+
+    deadline = time.monotonic() + timeout
+    with engine.connect() as conn:
+        while time.monotonic() < deadline:
+            waiting = conn.execute(
+                text(
+                    "SELECT count(*) FROM pg_stat_activity WHERE wait_event_type = 'Lock' AND datname = current_database()"
+                )
+            ).scalar_one()
+            conn.rollback()
+            if waiting:
+                return
+            time.sleep(0.05)
+    raise AssertionError("the approval never waited for the agreement lock")
+
+
+def test_cancel_committed_while_an_approval_waits_makes_the_approval_fail(
+    org: Org, app_engine: Engine, admin_engine: Engine
+) -> None:
+    v1 = activate(org.maker, org.p1, fresh("SPA-VOLT-2026-884"))
+    d = create(org.maker, amends_version_id=v1["id"])
+    p = d["payload"]
+    p["header"]["valid_from"] = "2026-07-01"
+    d = update(org.maker, d, p).json()
+    assert submit(org.maker, d["id"]).status_code == 200
+    result: dict[str, Any] = {}
+    with (
+        app_engine.connect() as conn
+    ):  # a concurrent cancel: holds the agreement row, then commits cancelled_at
+        conn.execute(text("SELECT set_config('app.tenant_id', :t, true)"), {"t": org.ws.tenant_id})
+        conn.execute(text("SELECT 1 FROM agreements WHERE id = :a FOR UPDATE"), {"a": v1["agreement_id"]})
+        etag = org.p1.get(f"/agreement-drafts/{d['id']}").headers["ETag"]
+        t = threading.Thread(target=lambda: result.update(r=approve(org.p1, d["id"], revision=etag)))
+        t.start()
+        _wait_for_lock_waiter(admin_engine)
+        conn.execute(
+            text("UPDATE agreements SET cancelled_at = now() WHERE id = :a"), {"a": v1["agreement_id"]}
+        )
+        conn.commit()
+    t.join()
+    assert result["r"].status_code == 409 and result["r"].json()["error"]["code"] == "invalid_state", result[
+        "r"
+    ].text
+    with admin_engine.connect() as conn:
+        n = conn.execute(
+            text("SELECT count(*) FROM agreement_versions WHERE draft_id = :d"), {"d": d["id"]}
+        ).scalar_one()
+    assert n == 0
+
+
+def test_two_amendments_of_one_version_approved_in_parallel_exactly_one_wins(
+    org: Org, admin_engine: Engine
+) -> None:
+    v1 = activate(org.maker, org.p1, fresh("SPA-VOLT-2026-884"))
+    drafts = []
+    for start in ("2026-07-01", "2026-09-01"):
+        d = create(org.maker, amends_version_id=v1["id"])
+        p = d["payload"]
+        p["header"]["valid_from"] = start
+        d = update(org.maker, d, p).json()
+        assert submit(org.maker, d["id"]).status_code == 200
+        drafts.append(d)
+    barrier, results = threading.Barrier(2), {}
+
+    def go(name: str, api: Api, draft: dict[str, Any]) -> None:
+        etag = api.get(f"/agreement-drafts/{draft['id']}").headers["ETag"]
+        barrier.wait()
+        results[name] = approve(api, draft["id"], revision=etag)
+
+    threads = [
+        threading.Thread(target=go, args=(n, a, dr))
+        for n, a, dr in (("p1", org.p1, drafts[0]), ("p2", org.p2, drafts[1]))
+    ]
+    for t in threads:
+        t.start()
+    for t in threads:
+        t.join()
+    assert sorted(r.status_code for r in results.values()) == [200, 409], {
+        k: r.text for k, r in results.items()
+    }
+    loser = next(r for r in results.values() if r.status_code == 409)
+    assert loser.json()["error"]["code"] == "invalid_state"
+    with admin_engine.connect() as conn:
+        rows = conn.execute(
+            text("SELECT status, superseded_by_version_id FROM agreement_versions WHERE id = :v"),
+            {"v": v1["id"]},
+        ).one()
+    assert rows.status == "superseded" and rows.superseded_by_version_id is not None

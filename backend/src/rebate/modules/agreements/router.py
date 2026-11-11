@@ -2,7 +2,7 @@
 
 Permissions (SECURITY.md §3): reads ``data.read``; create/edit/validate/import/submit ``agreement.draft``;
 approve/reject/return/cancel ``agreement.approve``. ``POST …/approve`` needs an ``Idempotency-Key``;
-``PUT`` and ``items:import`` need ``If-Match: "<revision>"``.
+``PUT``, ``items:import`` and ``approve`` need ``If-Match: "<revision>"``.
 """
 
 from typing import Annotated, Any, Literal
@@ -146,8 +146,7 @@ def list_items(
     limit: Limit = 50,
     cursor: str | None = None,
 ) -> s.ItemList:
-    rows = service.list_items(ctx(request).db, tenant_of(principal), version_id, limit, cursor)
-    data, p = page(rows, limit, id_of=lambda r: r[0].id)
+    data, p = service.list_items(ctx(request).db, tenant_of(principal), version_id, limit, cursor)
     out = [
         s.ItemOut(
             sku=sku,
@@ -329,21 +328,26 @@ def reject_draft(
 @router.post(
     "/agreement-drafts/{draft_id}/approve",
     operation_id="agreement_draft_approve",
-    responses={409: {"description": "Invalid state or idempotency conflict"}},
+    responses={
+        409: {"description": "Invalid state or idempotency conflict"},
+        412: {"description": "Revision mismatch"},
+    },
 )
 def approve_draft(
     request: Request,
     draft_id: UUID,
     principal: Annotated[Principal, Depends(require(APPROVE))],
     idempotency_key: Annotated[str | None, Header()] = None,
+    if_match: Annotated[str | None, Header()] = None,
 ) -> s.DraftOut:
     c, who = ctx(request), _who(request, principal)
     key = ingestion.parse_key(idempotency_key)
-    endpoint, body = "POST /agreement-drafts/{id}/approve", {"draft_id": str(draft_id)}
+    revision = _revision(if_match)
+    endpoint, body = "POST /agreement-drafts/{id}/approve", {"draft_id": str(draft_id), "revision": revision}
     replayed = ingestion.replay(c.db, who.tenant_id, key, endpoint, body)
     if replayed is not None:
         return JSONResponse(replayed[1], replayed[0])  # type: ignore[return-value]
-    d = service.approve(c.db, who, draft_id)
+    d = service.approve(c.db, who, draft_id, revision)
     out = s.DraftOut.model_validate(d)
     ingestion.store(c.db, who.tenant_id, key, endpoint, body, 200, out.model_dump(mode="json"))
     return out
