@@ -1,7 +1,7 @@
 import AxeBuilder from "@axe-core/playwright";
-import { expect, test, type Page } from "@playwright/test";
+import { expect, type Page } from "@playwright/test";
 
-import { PASSWORD, enrolMfa, signIn, tokenFromMail, uniqueEmail } from "./support";
+import { PASSWORD, enrolMfa, signIn, test, tokenFromMail, uniqueEmail } from "./support";
 
 // S3 master data screens against the real API: create, edit, persist. SYNTHETIC data only.
 

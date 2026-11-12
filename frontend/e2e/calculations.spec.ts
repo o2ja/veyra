@@ -2,9 +2,9 @@ import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 
 import AxeBuilder from "@axe-core/playwright";
-import { expect, test, type Page } from "@playwright/test";
+import { expect, type Page } from "@playwright/test";
 
-import { PASSWORD, enrolMfa, signIn, tokenFromMail, uniqueEmail } from "./support";
+import { PASSWORD, clientIpHeader, enrolMfa, signIn, test, tokenFromMail, uniqueEmail } from "./support";
 
 const data = (rel: string) => fileURLToPath(new URL(`../../testdata/generated/${rel}`, import.meta.url));
 const truth = (name: string) => JSON.parse(readFileSync(data(`ground_truth/${name}`), "utf8")) as unknown;
@@ -99,7 +99,7 @@ test("S5 calculations: run, completion, exception filter, result trace, propose 
   await page.getByRole("button", { name: "Invite" }).click();
   await expect(page.getByText(`Invitation created for ${approver}`)).toBeVisible();
 
-  const approverCtx = await browser.newContext();
+  const approverCtx = await browser.newContext({ extraHTTPHeaders: clientIpHeader() });
   const approverPage = await approverCtx.newPage();
   await approverPage.goto(`/accept-invite#token=${await tokenFromMail(approver)}`);
   await approverPage.getByLabel("Your name").fill("Calc Approver");

@@ -1,7 +1,7 @@
 import AxeBuilder from "@axe-core/playwright";
-import { expect, test, type Page } from "@playwright/test";
+import { expect, type Page } from "@playwright/test";
 
-import { PASSWORD, enrolMfa, signIn, tokenFromMail, uniqueEmail } from "./support";
+import { PASSWORD, clientIpHeader, enrolMfa, signIn, test, tokenFromMail, uniqueEmail } from "./support";
 
 // W5 + W7: manual SPA & Rebate agreement drafts, validation, four-eyes approval, amendment, and diff.
 // SYNTHETIC data only (from testdata/generated/agreements/manual_payloads/SPA-VOLT-2026-884.json & REB-VOLT-2026.json).
@@ -94,7 +94,7 @@ test("W5 + W7: SPA and Rebate drafts, validation error fix, four-eyes approval, 
   await page.getByRole("button", { name: "Invite" }).click();
   await expect(page.getByText(`Invitation created for ${approver}`)).toBeVisible();
 
-  const approverCtx = await browser.newContext();
+  const approverCtx = await browser.newContext({ extraHTTPHeaders: clientIpHeader() });
   const approverPage = await approverCtx.newPage();
   await approverPage.goto(`/accept-invite#token=${await tokenFromMail(approver)}`);
   await approverPage.getByLabel("Your name").fill("Agreement Approver");
