@@ -5,7 +5,8 @@
 2. Owner decisions applied: D1 (refusal kept; Release 2 candidate), D3 (one claim-window setting; Release 2 candidate) in docs; D2 → agent E1.
 3. Running: Antigravity `ui/s5-s6`; E1 D2, E2 S3 gaps + integration, E3 perf + docs.
 4. Logged minors (S4 UI): manual-draft keys missing from a server payload show defaults but are not stored until edited; read-only focus may land on the wrapping fieldset instead of the field label.
-5. Resume: PROJECT_STATUS §3.
+5. D2 MERGED #12 (6371b5e): independent financial review PASS (all GL-R5 + integration values re-derived; no ground-truth change needed). Follow-ups (minor): GL-R5 'mismatch' lines in engine tests carry no SPA result (only the integration test proves price_mismatch is excluded); §14 lists only the first GL-R5 test's values; pre-existing: SPA signals only cover the run's date range while the rebate reads the whole period, so a narrow run can leave in-period SPA lines unsignalled.
+6. Resume: PROJECT_STATUS §3.
 
 ## Log
 - Step 0: ui/s4 WIP committed+pushed (85b3a19). No other worktree had uncommitted work. S4 merged on main (99dc074, CI green); c0dfeae timing flake rerun.
