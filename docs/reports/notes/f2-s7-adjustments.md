@@ -75,7 +75,7 @@ the batch tie-out trigger (lines + signed included adjustments = `total_amount`,
 
 ## Tests (real Postgres; expected values from ground truth or hand derivation in docstrings)
 
-See the evidence section at the end (counts filled from the final full run).
+Evidence at the end of this file.
 
 - `test_adjustments.py`: cap case (A 60 submitted, later run excluding A: B gets 40 x 52.00 = 2,080.00, not 3,120.00).
 - `test_adjustment_flows.py`: SC-09r return reversal -50.00 (ground truth ADJ-2026-0001), idempotent per run and across
@@ -86,7 +86,6 @@ See the evidence section at the end (counts filled from the final full run).
   `expected_changed_rows.json` (flag, proposal -2,200.00) and a two-version chain that stays eligible and is never offered.
 - Existing suites updated: `test_calculation_runs.py` (reference run now has the real batch claimed; the proposal test was
   replaced by the flows above), `test_claims_batches.py` (no stand-in), isolation fixtures, `test_imports.py`.
-- Negative control for the new columns/routes: see evidence.
 
 ## Open items / not done
 
@@ -96,3 +95,17 @@ See the evidence section at the end (counts filled from the final full run).
   its returns (same as before this change).
 - `consumption` scans all submitted claims per manufacturer window (comment `ponytail:` in `frozen.py`); no measurement
   at 1M lines.
+
+## Test evidence (test database `rebate_test_f2`, compose one-off container)
+
+- Full backend suite after the last code change: `pytest -q --no-cov tests` = **1794 passed**, 4 deselected (the
+  live-LLM tests), 0 failed (8 min 50 s).
+- New: `test_adjustments.py` (1) and `test_adjustment_flows.py` (8, ground-truth derived); isolation suite 353 tests
+  (adjustment routes, list, DB rows), negative control: "181 RLS-dependent tests detected the breach; all independent
+  tests still passed" (`python -m tests.isolation.negative_control`, `MIN_TESTS` raised to 353).
+- Mutation check: with the old single-version `UNCLAIMED` predicate the "never offered again" test fails.
+- Gates: `ruff check`, `ruff format --check`, `mypy` (247 files), `lint-imports` (13 kept), `bandit` clean; frontend
+  `npm run lint` and `npm run typecheck` clean after `gen:api` (client regenerated). `pip-audit`, `npm audit` and
+  gitleaks on the full tree were not run (only the pre-commit gitleaks hook on staged changes).
+- Not tested: concurrency of simultaneous inclusion of one adjustment into two batches (row locks
+  `FOR UPDATE` in `lock_for_inclusion` plus the DB trigger; no threaded test); 1M-line cost of `consumption`.
