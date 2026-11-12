@@ -4,6 +4,7 @@ calculation runs, claim batches, an approved return adjustment), and remittance 
 import uuid
 from contextlib import ExitStack
 from dataclasses import dataclass
+from decimal import Decimal
 from typing import Any
 
 from fastapi import FastAPI
@@ -170,3 +171,85 @@ def build_story(app: FastAPI, stack: ExitStack) -> Story:
     assert s.status_code == 200, s.text
     lines |= claim_refs(ws, b.json())
     return Story(ws, dict(ws.manufacturers), lines, adj)
+
+
+# ---- ground-truth checks shared by the CSV and the PDF flows ---------------------------------------------------
+
+
+def ref_of(story: Story, ground_truth_reference: str) -> str:
+    """The ground truth numbers its claim references CL-2026-000001..7 in batch order; the real numbering is the
+    system's, so translate through the invoice number."""
+    invoice = next(
+        x["invoice_no"] for x in FIXTURE["lines"] if x["claim_reference"] == ground_truth_reference
+    )
+    return str(story.lines[invoice]["claim_reference"])
+
+
+def amounts(match: dict[str, Any]) -> list[Decimal]:
+    return [Decimal(a["allocated_amount"]) for a in match["allocations"]]
+
+
+def check_matching(story: Story, rows: dict[int, dict[str, Any]]) -> None:
+    """The matching run of CM-7781 equals ``expected_reconciliation.json`` (method, status, claim, allocations)."""
+    assert sorted(rows) == [1, 2, 3, 4, 5, 6]
+    for exp in EXPECTED["expected"]:
+        if exp.get("not_on_remittance"):
+            continue
+        n = exp["remittance_line"]
+        got = rows[n]
+        if exp["status"] == "unmatched":
+            assert got["state"] == "unmatched" and got["matches"] == [], n
+            continue
+        (m,) = got["matches"]
+        assert (m["method"], m["status"]) == (exp["method"], exp["status"]), n
+        if "claim_reference" in exp and "allocations" not in exp:
+            assert [a["claim_reference"] for a in m["allocations"]] == [
+                ref_of(story, exp["claim_reference"])
+            ], n
+        if n == 4:  # 250.00 on the claim and the -50.00 return reversal on its adjustment: 200.00 paid
+            assert amounts(m) == [Decimal("250.00"), Decimal("-50.00")]
+            assert [a["claim_reference"] for a in m["allocations"]] == [ref_of(story, "CL-2026-000004"), None]
+            assert m["allocations"][1]["claim_adjustment_id"] == story.adjustment["id"]
+        if n == 5:  # GL-V2: unique subset 1000.00 + 1100.00, needs a person
+            assert sorted(amounts(m)) == sorted(Decimal(a) for a in exp["allocations"])
+            assert sorted(a["claim_reference"] for a in m["allocations"]) == sorted(
+                ref_of(story, c) for c in exp["claim_references"]
+            )
+            assert got["state"] == "suggested"
+        else:
+            assert got["state"] == "matched"
+    # per-line paid amounts of the 1:1 matches (hand: the amounts of the file)
+    assert amounts(rows[1]["matches"][0]) == [Decimal("2050.00")]
+    assert amounts(rows[2]["matches"][0]) == [Decimal("3120.00")]
+    assert amounts(rows[3]["matches"][0]) == [Decimal("0.00")]
+
+
+def check_findings(story: Story, body: dict[str, Any]) -> None:
+    """The finalised CM-7781 yields the ground truth's variance cases and nothing else (VOLT lag 3 days, today
+    2026-07-10: the batch submitted 07-05 is overdue, the carrier batch submitted 07-09 is not)."""
+    by_invoice = {v["id"]: inv for inv, v in story.lines.items()}
+    got = sorted(
+        (f["case_type"], f["reason_code"], Decimal(f["amount"]), by_invoice.get(f["claim_line_id"]) or "")
+        for f in body["findings"]
+    )
+    expected = sorted(
+        [
+            ("short_paid", "rejected_price_mismatch", Decimal("150.00"), "INV-10001"),  # GL-V1
+            ("rejected", "rejected_quantity_exceeds_authorization", Decimal("2080.00"), "INV-10011"),
+            ("unmatched_payment", "unmatched_payment", Decimal("75.00"), ""),
+            ("unpaid", "unpaid_no_remittance", Decimal("660.00"), "INV-10060"),
+        ]
+    )
+    assert got == expected
+    for exp in EXPECTED["expected"]:  # every ground-truth variance is among the findings
+        v = exp.get("variance")
+        if v:
+            assert (v["case_type"], v["reason_code"], Decimal(v["amount"])) in {
+                (c, r, a) for c, r, a, _ in got
+            }
+    short = next(f for f in body["findings"] if f["case_type"] == "short_paid")
+    assert (Decimal(short["claimed"]), Decimal(short["paid"]), short["external_reason_code"]) == (
+        Decimal("2200.00"),
+        Decimal("2050.00"),
+        "E12",
+    )

@@ -1,0 +1,5 @@
+# s8-reconciliation resume (I1) — 2026-11-12 stop
+Pushed: 41a9bd2 S8.3 migrations; 764ae82 S8.4–S8.6 ingestion/matching run/decisions/finalisation/API + CM-7781 CSV e2e tests. This WIP = PDF path tests (test_reconciliation_pdf.py + recorded fixtures), support/csv test edits, UNVERIFIED.
+Interface notes: docs/reports/notes/i1-s8-reconciliation.md.
+MIGRATION RE-CHAIN NEEDED: 20261117_0900_remittances has down_revision 20261116_0900_adjustments_wiring, same as F2's new 20261117_0900_neg_claims_guard on s7-adjustments → after merging origin/s7-adjustments set remittances.down_revision = neg_claims_guard (check `alembic heads` = 1). J1's 20261118_0900_recovery_cases chains after 20261117_0910_recon_matches.
+Left: PDF tests green; RA-5521, DN-310; ambiguous/tie, arithmetic mismatch, duplicate remittance, re-run keeps confirmed; isolation per route; large-remittance perf number; OpenAPI + API spec + client regen; full suite/isolation/negctl/mypy/ruff/lint-imports; notes final. Then financial + security + DB review, PR.

@@ -20,9 +20,11 @@ from tests.conftest import DbUrls
 from tests.reconciliation.support import (
     CSV,
     EXPECTED,
-    FIXTURE,
     Story,
+    amounts,
     build_story,
+    check_findings,
+    check_matching,
     create,
     finalize,
     ingest,
@@ -62,19 +64,6 @@ def story(env: Env) -> Story:
 def variant(extra: str) -> bytes:
     """Same lines as the ground-truth file with a harmless trailing remark, so the content hash differs."""
     return CM_CSV.replace(b"Credit - unidentified", b"Credit - unidentified" + extra.encode())
-
-
-def ref_of(story: Story, ground_truth_reference: str) -> str:
-    """The ground truth numbers its claim references CL-2026-000001..7 in batch order; the real numbering is the
-    system's, so translate through the invoice number."""
-    invoice = next(
-        x["invoice_no"] for x in FIXTURE["lines"] if x["claim_reference"] == ground_truth_reference
-    )
-    return str(story.lines[invoice]["claim_reference"])
-
-
-def amounts(match: dict[str, Any]) -> list[Decimal]:
-    return [Decimal(a["allocated_amount"]) for a in match["allocations"]]
 
 
 # ---- ambiguity: never auto-confirmed -----------------------------------------------------------------------
@@ -222,41 +211,9 @@ def test_the_same_file_cannot_back_two_remittances(story: Story) -> None:
 
 
 def test_matching_reproduces_the_ground_truth(story: Story) -> None:
-    ws = story.ws
     doc = SHARED["doc"]
-    reconcile(ws, doc["id"])
-    rows = view(ws, doc["id"])
-    assert sorted(rows) == [1, 2, 3, 4, 5, 6]
-    for exp in GT:
-        if exp.get("not_on_remittance"):
-            continue
-        n = exp["remittance_line"]
-        got = rows[n]
-        if exp["status"] == "unmatched":
-            assert got["state"] == "unmatched" and got["matches"] == [], n
-            continue
-        (m,) = got["matches"]
-        assert (m["method"], m["status"]) == (exp["method"], exp["status"]), n
-        if "claim_reference" in exp and "allocations" not in exp:
-            assert [a["claim_reference"] for a in m["allocations"]] == [
-                ref_of(story, exp["claim_reference"])
-            ], n
-        if n == 4:  # 250.00 on the claim and the -50.00 return reversal on its adjustment: 200.00 paid
-            assert amounts(m) == [Decimal("250.00"), Decimal("-50.00")]
-            assert [a["claim_reference"] for a in m["allocations"]] == [ref_of(story, "CL-2026-000004"), None]
-            assert m["allocations"][1]["claim_adjustment_id"] == story.adjustment["id"]
-        if n == 5:  # GL-V2: unique subset 1000.00 + 1100.00, needs a person
-            assert sorted(amounts(m)) == sorted(Decimal(a) for a in exp["allocations"])
-            assert sorted(a["claim_reference"] for a in m["allocations"]) == sorted(
-                ref_of(story, c) for c in exp["claim_references"]
-            )
-            assert got["state"] == "suggested"
-        else:
-            assert got["state"] == "matched"
-    # per-line paid amounts of the 1:1 matches (hand: the amounts of the file)
-    assert amounts(rows[1]["matches"][0]) == [Decimal("2050.00")]
-    assert amounts(rows[2]["matches"][0]) == [Decimal("3120.00")]
-    assert amounts(rows[3]["matches"][0]) == [Decimal("0.00")]
+    reconcile(story.ws, doc["id"])
+    check_matching(story, view(story.ws, doc["id"]))
 
 
 def test_a_rerun_keeps_confirmed_matches_untouched(story: Story) -> None:
@@ -335,36 +292,7 @@ def test_finalising_classifies_the_variances_of_the_ground_truth(story: Story) -
         matching._HOOKS.remove(hook)
     body = r.json()
     assert body["remittance"]["status"] == "reconciled"
-    by_invoice = {v["id"]: inv for inv, v in story.lines.items()}
-    got = sorted(
-        (f["case_type"], f["reason_code"], Decimal(f["amount"]), by_invoice.get(f["claim_line_id"]))
-        for f in body["findings"]
-    )
-    expected = sorted(
-        [
-            ("short_paid", "rejected_price_mismatch", Decimal("150.00"), "INV-10001"),  # GL-V1
-            ("rejected", "rejected_quantity_exceeds_authorization", Decimal("2080.00"), "INV-10011"),
-            ("unmatched_payment", "unmatched_payment", Decimal("75.00"), None),
-            # GL-V: submitted 2026-07-05, lag 3 days -> overdue on 2026-07-10; the carrier batch (INV-10020/1,
-            # submitted 2026-07-09 + 3 days) is not overdue yet, so it is no finding
-            ("unpaid", "unpaid_no_remittance", Decimal("660.00"), "INV-10060"),
-        ],
-        key=lambda t: (t[0], t[1], t[2], t[3] or ""),
-    )
-    assert got == sorted(expected, key=lambda t: (t[0], t[1], t[2], t[3] or ""))
-    for exp in GT:  # every ground-truth variance is among the findings
-        v = exp.get("variance")
-        if v:
-            assert (v["case_type"], v["reason_code"], Decimal(v["amount"])) in {
-                (c, rc, a) for c, rc, a, _ in got
-            }
-    # paid / claimed on the short-pay: claimed 2200.00 (hand: ground truth), paid 2050.00
-    short = next(f for f in body["findings"] if f["case_type"] == "short_paid")
-    assert (Decimal(short["claimed"]), Decimal(short["paid"]), short["external_reason_code"]) == (
-        Decimal("2200.00"),
-        Decimal("2050.00"),
-        "E12",
-    )
+    check_findings(story, body)
     assert [f.case_type for f in seen[0].findings].count("unpaid") == 1
     assert seen[0].document_number == "CM-7781" and str(seen[0].payment_date) == "2026-07-31"
 
