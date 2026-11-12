@@ -1,14 +1,14 @@
 # Project Status
 
-> Living document. Updated at the end of every stage and whenever a decision, risk or known issue changes. Last updated: 2026-11-11.
+> Living document. Updated at the end of every stage and whenever a decision, risk or known issue changes. Last updated: 2026-11-12.
 
 ## 1. Current position
 
 | Item | State |
 |---|---|
 | Phase | **Release 1 build** |
-| Current stage | **S3–S6 batch in progress** (S2 approved 2026-11-10); see §3 |
-| Application code | S0 skeleton + S1: identity, tenancy, audit modules; auth/MFA/sessions/CSRF; admin UI; isolation suite with negative control |
+| Current stage | **S3–S6 batch in progress** (S2 approved 2026-11-10); S3–S6 backends merged, UI for S5/S6 pending; see §3 |
+| Application code | S0 skeleton + S1 (identity, tenancy, audit, auth/MFA/sessions/CSRF, isolation suite with negative control); S2 files + job queue; S3 ingestion; S4 agreements; S5 calculation runs; S6 AI extraction (backends; S3/S4 UI) |
 | Synthetic test data | Generated and self-checked (`testdata/`) |
 
 ## 2. Completed
@@ -18,6 +18,7 @@
 - [x] Documentation package (`docs/`, `CLAUDE.md`, `README.md`)
 - [x] Synthetic dataset generator and ground truth (`testdata/generate.py`)
 - [x] S0 Foundation and tooling (signed off 2026-11-09)
+- [x] S1 and S2 (signed off 2026-11-10); S3, S4, S5, S6 backends merged to `main` (UI for S5/S6 pending); 1M-row baselines in `reports/PERFORMANCE_BASELINES.md`
 - [x] Independent check of every worked example in `BUSINESS_LOGIC.md` (`testdata/verify_business_logic_examples.py`, passes)
 
 ## 3. In progress
@@ -37,12 +38,18 @@ Multi-agent waves (worktree branches, orchestrator merges). Resume point:
 - S4 frontend handed to an external agent (Antigravity/Gemini) on branch `ui/s4` (worktree `D:eyraeyra-ui-s4`):
   brief `docs/reports/notes/ui-brief-s4.md`, prompt `antigravity-prompt-s4.md`, report expected at
   `ui-report-s4.md`. Orchestrator verifies + reviews before merge. (S3 frontend was already merged in #5.)
-- **Resume point (2026-11-12 morning):** merged #10 (ExtractionResult schema) and #11 (S4 UI; e2e per-test client
-  IP fix). D1/D3 documented (BUSINESS_LOGIC §5.3/§12, roadmap Release 2 list). Running: Antigravity on `ui/s5-s6`
-  (worktree `D:/veyra/veyra-ui-s5s6`, prompt `docs/reports/notes/antigravity-prompt-s5-s6.md`); Claude agents E1
-  `e1-d2-spa-lines` (D2), E2 `e2-s3-integration` (S3 gaps + e2e integration + AI-suggest UI), E3 `e3-perf-docs`
-  (briefs `docs/reports/notes/briefs/E*.md`). Next: financial review of E1, merge E1–E3, S3–S6 batch report, then
-  S7 (day 1), S8+S9 (day 2), S10+S11 code (day 3). Deadline 2026-11-15.
+- **S3–S6 batch complete (2026-11-12):** #16 S5/S6 UI merged (c41e448); report `docs/reports/S3_S6_BATCH_REPORT.md`
+  (full suite 1630 passed; S5 sign-off is the owner's).
+- **Resume point (2026-11-12 afternoon):** PR #15 S7 core (gated on F2 `s7-adjustments`, financial review running);
+  PR #17 S8 matching (financial review: no discrepancy; findings fixed); PR #18 S11 ops (CI + security review);
+  S7 UI with Antigravity on `ui/s7` (brief `docs/reports/notes/ui-brief-s7.md` on that branch).
+- Earlier (2026-11-12 midday): merged #12 D2 (financial review PASS), #13 S3 gaps + end-to-end
+  integration (all 23 scenarios + GL-R1a/R1b/R2/R3 match ground truth), #14 perf baselines
+  (`docs/reports/PERFORMANCE_BASELINES.md`: import 1M 1372 s, calc 1M 762 s, eligible=0 caveat). S5/S6 UI
+  (`ui/s5-s6`): batch 1 review FAIL → batch 2 fixes with Antigravity (`ui-brief-s5-s6-fixes.md`). Running: F1 `s7-claims`
+  (S7.1–S7.3), G1 `s8-matching` (S8.1–S8.2 pure), H1 `s11-ops` (deploy config, CF-Connecting-IP, backup/restore,
+  runbooks, dependency audit). Next: S7.4 adjustments after F1; S7 UI brief for Antigravity; S3–S6 batch report
+  after the UI merges. Deadline 2026-11-15.
 - Claim window (owner 2026-11-11): `month_end` for SPA lines (last day of the claim-date month), `period_end` for
   rebates only (measurement period end); replaces the earlier orchestrator definition.
 - Open engine rules (raise instead of guessing): `cap_scope=per_agreement`, `tier_metric=quantity`,
@@ -50,17 +57,17 @@ Multi-agent waves (worktree branches, orchestrator merges). Resume point:
 
 ## 4. Pending
 
-Stages S0–S11 per `DEVELOPMENT_ROADMAP.md` / `IMPLEMENTATION_PLAN.md`. Release 2 candidates are listed in the roadmap and are not scheduled.
+S5/S6 UI, then S7 onwards per `DEVELOPMENT_ROADMAP.md` / `IMPLEMENTATION_PLAN.md`. NFR-04 evidence (shared dev VM, one run each): 1M-row import 22.9 min (target < 30), 1M-line calculation 12.7 min (target < 15), both on a file where no line is eligible; list-endpoint p95 on 5M lines not measured. Release 2 candidates are listed in the roadmap and are not scheduled.
 
 ## 5. Decisions outstanding
 
 | ID | Decision | Status | Needed before |
 |---|---|---|---|
-| OD-1 | First vertical: electrical (recommended, ADR-019) vs HVAC | PROPOSED | S3 (affects UoM/terminology defaults; low switching cost) |
-| OD-2 | LLM provider and data-handling terms (ADR-012) | PROPOSED | S6, and before any real document is processed |
-| OD-3 | Production PostgreSQL hosting (self-managed vs managed Postgres) (ADR-023) | PROPOSED | S11 (earlier if a pilot needs hosting) |
-| OD-4 | Hosting provider and region (ADR-023) | PROPOSED | S11 |
-| OD-5 | Release 2 scope and ordering | UNRESOLVED | After S11 |
+| OD-1 | First vertical: electrical (recommended, ADR-019) vs HVAC | APPROVED (owner 2026-11-12) | S3 (affects UoM/terminology defaults; low switching cost) |
+| OD-2 | LLM provider and data-handling terms (ADR-012) | DEFERRED (owner 2026-11-12: not now; S6/S8 use recorded fixtures) | S6, and before any real document is processed |
+| OD-3 | Production PostgreSQL hosting (self-managed vs managed Postgres) (ADR-023) — PR #18 uses SeaweedFS in prod, ADR-017 limits it to dev/CI; owner to decide | PROPOSED | S11 (earlier if a pilot needs hosting) |
+| OD-4 | Hosting provider and region (ADR-023) — PR #18 uses SeaweedFS in prod, ADR-017 limits it to dev/CI; owner to decide | PROPOSED | S11 |
+| OD-5 | Release 2 scope and ordering | PARTIAL (owner 2026-11-12: 3 validator refusals + split-period tiers = Release 2) | After S11 |
 
 ## 6. Known issues and gaps
 
@@ -108,3 +115,4 @@ Top items only; full list in the analysis and `SECURITY.md` §12.
 | 2026-11-09 | S0 signed off. S1 kickoff approved with D-1..D-8 (negative-control DB, `cryptography`, local breach list, Postgres rate-limit counters, email-change endpoints, no in-app MFA reset + runbook, per-tenant auth audit rows, `segno`). Owner standing delegation recorded in `CLAUDE.md` §18; reviewer subagent `.claude/agents/reviewer.md` |
 | 2026-11-10 | S1 complete: audit shows actor names; runbook operator scripts + dry run (found and fixed a missing EXECUTE grant, migration `20261110_0900`); session-ended message; axe on S1 pages; completion report |
 | 2026-11-10 | S2 complete: job queue (ADR-005 fallback), worker, files module (SeaweedFS + ClamAV, quarantine → clean), Files/Jobs pages; two independent reviews (8 serious findings fixed); K-4, K-9 closed; K-10..K-12 opened |
+| 2026-11-12 | Owner decisions: S5 signed off; OD-1 approved; OD-2 deferred (recorded fixtures); 3 validator refusals + split-period tiers moved to Release 2; `cannot_be_net_claimed` adjustments stay `proposed` and batches <= 0 are refused unless `allow_negative_claims`; unpaid line without rejection code = `short_paid_unexplained` (BUSINESS_LOGIC §10.3) |

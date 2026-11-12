@@ -1,7 +1,7 @@
 import { expect, test } from "vitest";
 
 import { firstPage, nextPage, pageCursor, prevPage } from "../masterdata/common";
-import { cleanDefaults, initialMapping, label, stepOf, unmappedRequired } from "./logic";
+import { cleanDefaults, initialMapping, label, stepOf, unmappedRequired, usableSuggestion } from "./logic";
 
 const fields = [
   { name: "document_number", kind: "text", required: true },
@@ -59,4 +59,13 @@ test("keyset pager keeps a cursor stack for previous/next", () => {
 
 test("field labels are readable", () => {
   expect(label("unit_price")).toBe("Unit price");
+});
+
+test("an AI suggestion keeps only known fields and real columns", () => {
+  const out = usableSuggestion(fields, ["Invoice #", "Cur"], {
+    document_number: "Invoice #",
+    currency_code: "Made up column",
+    not_a_field: "Cur",
+  });
+  expect(out).toEqual({ document_number: "Invoice #", currency_code: null, spa_reference: null });
 });

@@ -161,13 +161,34 @@ class ManufacturerSettingsOut(BaseModel):
     updated_at: datetime
 
 
+# BUSINESS_LOGIC.md §10.3 controlled list; mirrors the seeded `reason_codes` table (a test keeps them equal).
+ReasonCodeName = Literal[
+    "rejected_agreement_expired",
+    "rejected_customer_ineligible",
+    "rejected_product_ineligible",
+    "rejected_price_mismatch",
+    "rejected_duplicate_claim",
+    "rejected_outside_claim_window",
+    "rejected_missing_documentation",
+    "rejected_quantity_exceeds_authorization",
+    "rejected_uom_mismatch",
+    "rejected_other",
+    "short_paid_unexplained",
+    "unpaid_no_remittance",
+    "overpaid",
+    "unmatched_payment",
+    "source_changed",
+    "unknown",
+]
+
+
 class ReasonCodeMappingIn(BaseModel):
     model_config = STRICT
     external_code: Annotated[
         str, BeforeValidator(_strip), StringConstraints(min_length=1, max_length=50, pattern=NO_CONTROL)
     ]
     external_text: LongText | None = None
-    reason_code: Annotated[str, StringConstraints(pattern=r"^[a-z][a-z0-9_]{1,62}$")]
+    reason_code: ReasonCodeName
 
 
 class ReasonCodeMappingsIn(BaseModel):
@@ -180,7 +201,7 @@ class ReasonCodeMappingOut(BaseModel):
     id: UUID
     external_code: str
     external_text: str | None
-    reason_code: str
+    reason_code: ReasonCodeName
 
 
 class ReasonCodeMappingList(BaseModel):

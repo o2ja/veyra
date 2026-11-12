@@ -30,6 +30,7 @@ from rebate.modules.claims import frozen, loaders, persistence
 from rebate.modules.claims.models import CalculationRun
 from rebate_engine.deadlines import rebate_deadline
 from rebate_engine.models import (
+    Code,
     EngineRuleError,
     LineResult,
     ManufacturerSettings,
@@ -338,6 +339,7 @@ def _calculate(
     if not scope.manufacturer_ids:
         groups.append(None)  # lines whose product is unknown have no manufacturer: unknown_product results
     eligible_ids: set[str] = set()
+    exception_signal_ids: set[str] = set()  # §5.4 D2: outside_claim_window / cap_exhausted count as SPA lines
     agreement_of = {v.version_id: v.agreement_id for v in versions.spa}
     for group in groups:
         mine = str(group) if group else None
@@ -382,6 +384,8 @@ def _calculate(
                 totals.by_status[r.status.value] += 1
                 if r.exception_code is not None:
                     totals.by_exception[r.exception_code.value] += 1
+                    if r.exception_code in (Code.OUTSIDE_CLAIM_WINDOW, Code.CAP_EXHAUSTED):
+                        exception_signal_ids.add(r.line_id)
                 if r.status is Status.ELIGIBLE:
                     totals.eligible_amount += r.claim_amount
                     eligible_ids.add(r.line_id)
@@ -391,7 +395,18 @@ def _calculate(
                     totals.adjustment_amount += r.claim_amount
                 totals.add_result(r.line_id, r.inputs_hash)
 
-    _rebates(engine, tenant_id, run_id, scope, cutoff, versions, settings, frozenset(eligible_ids), totals)
+    _rebates(
+        engine,
+        tenant_id,
+        run_id,
+        scope,
+        cutoff,
+        versions,
+        settings,
+        frozenset(eligible_ids),
+        frozenset(exception_signal_ids),
+        totals,
+    )
     return totals, versions.ids
 
 
@@ -474,6 +489,7 @@ def _rebates(
     versions: loaders.Versions,
     settings: tuple[ManufacturerSettings, ...],
     eligible_ids: frozenset[str],
+    exception_signal_ids: frozenset[str],
     totals: Totals,
 ) -> None:
     window_days = {s.manufacturer_id: s.claim_window_days for s in settings}
@@ -491,7 +507,14 @@ def _rebates(
                 )
             else:
                 lines, rows = loaders.sales_volume_lines(
-                    db, tenant_id, mfr, rules.period_start, window_end, cutoff, eligible_ids
+                    db,
+                    tenant_id,
+                    mfr,
+                    rules.period_start,
+                    window_end,
+                    cutoff,
+                    eligible_ids,
+                    exception_signal_ids,
                 )
             prior = loaders.prior_accrued(db, tenant_id, agreement_id, period_start)
         for line_id, row_hash in rows:

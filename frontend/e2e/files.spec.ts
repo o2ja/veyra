@@ -1,6 +1,6 @@
-import { expect, test } from "@playwright/test";
+import { expect } from "@playwright/test";
 
-import { PASSWORD, enrolMfa, signIn, tokenFromMail, uniqueEmail } from "./support";
+import { PASSWORD, enrolMfa, signIn, test, tokenFromMail, uniqueEmail } from "./support";
 
 // S2: upload -> quarantine -> ClamAV scan by the worker -> clean (downloadable) or blocked.
 // Needs the full stack: API, worker, SeaweedFS, ClamAV, Mailpit. SYNTHETIC data only.

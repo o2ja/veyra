@@ -276,9 +276,11 @@ def sales_volume_lines(
     date_to: date,
     data_cutoff: datetime,
     eligible_line_ids: frozenset[str],
+    exception_signal_line_ids: frozenset[str] = frozenset(),
 ) -> tuple[tuple[VolumeLine, ...], tuple[tuple[str, str], ...]]:
-    """Signed sales volume (credit notes negative) for a rebate on the sales basis; ``spa_eligible`` comes from the
-    SPA results of the same run (§5.4)."""
+    """Signed sales volume (credit notes negative) for a rebate on the sales basis; ``spa_eligible`` and
+    ``spa_exception_signal`` (outside_claim_window / cap_exhausted) come from the SPA results of the same run
+    (§5.4, owner decision D2)."""
     rows = ingestion.sales_volume_rows(db, tenant_id, manufacturer_id, date_from, date_to, data_cutoff)
     out = tuple(
         VolumeLine(
@@ -290,6 +292,7 @@ def sales_volume_lines(
             quantity=r.quantity,
             spa_reference=r.spa_reference,
             spa_eligible=str(r.id) in eligible_line_ids,
+            spa_exception_signal=str(r.id) in exception_signal_line_ids,
         )
         for r in rows
     )
