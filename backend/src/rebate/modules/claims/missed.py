@@ -133,7 +133,7 @@ def summary(
         text(
             f"WITH {LATEST} SELECT l.exception_code AS code, count(*) AS lines, "  # nosec B608 (module constants, bound values)
             "COALESCE(sum(l.claim_amount), 0) AS stored_amount FROM latest l "
-            f"WHERE l.status = 'exception' {extra}GROUP BY l.exception_code ORDER BY l.exception_code"
+            f"WHERE l.status = 'exception' AND {UNCLAIMED} {extra}GROUP BY l.exception_code ORDER BY l.exception_code"
         ),
         params,
     ).all()
@@ -141,7 +141,7 @@ def summary(
         text(
             f"WITH {LATEST} SELECT count(*) AS lines, COALESCE(sum(l.claim_amount), 0) AS amount FROM latest l "  # nosec B608 (module constants, bound values)
             "WHERE l.status = 'exception' AND l.exception_code = 'outside_claim_window' AND l.claim_amount > 0 "
-            + extra
+            f"AND {UNCLAIMED} {extra}"
         ),
         params,
     ).one()

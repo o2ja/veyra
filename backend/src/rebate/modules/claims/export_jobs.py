@@ -141,12 +141,15 @@ def claims_export(db: Session, ctx: JobContext) -> None:
                 raise PermanentError("the export template is gone")
         fmt = template.format if template else "csv"
         rows = batch_rows(db, ctx.tenant_id, batch.id)
-        data = exporting.render(
-            fmt,
-            template.columns if template else exporting.DEFAULT_COLUMNS,
-            template.options if template else {},
-            rows,
-        )
+        try:
+            data = exporting.render(
+                fmt,
+                template.columns if template else exporting.DEFAULT_COLUMNS,
+                template.options if template else {},
+                rows,
+            )
+        except exporting.FormatWouldRound as exc:
+            raise PermanentError(f"the template would round a frozen value: {exc}") from None
         _store(db, ctx, ctx.tenant_id, file_id, f"{batch.batch_number}.{fmt}", fmt, data)
         after: dict[str, Any] = {
             "exported_file_id": file_id,
