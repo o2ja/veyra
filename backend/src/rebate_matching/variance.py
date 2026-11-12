@@ -85,7 +85,8 @@ def classify_claim_line(
         return VarianceCase("rejected", abs(diff), map_reason(ext, reason_mappings) or "unknown")
     if paid > claimed + tolerance:
         return VarianceCase("overpaid", abs(diff), "overpaid")
-    if 0 < paid < claimed - tolerance:
+    # paid = 0 without a rejection code: short_paid / short_paid_unexplained (owner decision 2026-11-12, §10.3)
+    if 0 <= paid < claimed - tolerance:
         return VarianceCase("short_paid", diff, map_reason(ext, reason_mappings) or "short_paid_unexplained")
     raise UnclassifiableVariance(f"claim line {claim.id}: claimed {claimed}, paid {paid}, no rejection code")
 
