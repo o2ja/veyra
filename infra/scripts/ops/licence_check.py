@@ -17,11 +17,11 @@ from pathlib import Path
 # A name may be glued to a version ("GPLv3", "AGPL3"): match it unless more letters follow, and never inside a
 # longer name (LGPL is weak, not GPL).
 _END = r"(?:v?(?=\d)|(?![a-z]))"
-STRONG = re.compile(rf"(?<![a-z])(A?GPL|SSPL|EUPL){_END}|GNU (Affero )?General Public", re.I)
+STRONG = re.compile(rf"(?<![a-z])(A?GPL|SSPL|EUPL){_END}|GNU (Affero|General Public)", re.I)
 WEAK = re.compile(rf"(?<![a-z])(LGPL|MPL|EPL|CDDL|CC-BY-SA){_END}|Lesser General Public|Mozilla Public|Eclipse Public", re.I)
 
 
-UNKNOWN = re.compile(r"proprietary|commercial|unlicensed|see licen[cs]e", re.I)
+UNKNOWN = re.compile(r"proprietary|commercial|unlicensed|see licen[cs]e|BUSL|Business Source|Elastic[ -]Licen[cs]e|Elastic-2|Commons Clause|CC-BY-NC", re.I)
 RANK = ["strong", "unknown", "weak", "ok"]  # worst first
 
 
@@ -42,7 +42,8 @@ def classify(text: str) -> str:
 
 def python_licence(name: str) -> str:
     md = metadata.metadata(name)
-    parts = [md.get("License-Expression") or "", md.get("License") or ""]
+    # old setuptools writes the literal "UNKNOWN" for a missing licence: treat it as absent
+    parts = [p if p.strip().upper() != "UNKNOWN" else "" for p in (md.get("License-Expression") or "", md.get("License") or "")]
     parts += [c.split("::")[-1].strip() for c in md.get_all("Classifier") or [] if c.startswith("License ::")]
     # a long License field is the licence text itself: classify on the classifiers/expression first
     short = [p for p in parts if p and len(p) < 200]

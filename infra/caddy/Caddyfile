@@ -41,6 +41,9 @@
 		Content-Security-Policy "default-src 'none'; sandbox"
 		-Server
 	}
+	request_body {
+		max_size 1KB
+	}
 	# Allow-list in front of SeaweedFS (OD-3/OD-4 pending): only signed GET/HEAD on the one bucket. The app issues
 	# nothing else to browsers, so listing, uploads, deletes and the other buckets are unreachable from outside.
 	@allowed {

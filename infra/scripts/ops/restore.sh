@@ -2,11 +2,11 @@
 # Restore a backup into a FRESH database and bucket, verify, and report timing (never overwrites a live one).
 # Usage: restore.sh [--live] <backup dir> <new database name> <new bucket name>
 # Env:   COMPOSE as in backup.sh. Refuses a target database that exists, and (unless --live) any target whose
-#        database or bucket name equals the live one (REBATE_DB_NAME / S3_BUCKET in the env file).
+#        database or bucket name equals the live one (as `compose config` resolves them: REBATE_DB_NAME / S3_BUCKET).
 #        --live allows the live names but still needs an interactive typed confirmation (no env/flag bypass).
 #        Object loading uses the S3_ADMIN_* identity from the env file (the app identity cannot create buckets).
 # Steps: verify SHA256SUMS -> create DB -> pg_restore -> alembic_version == repo head -> row counts
-#        -> load objects into the new bucket. Point DATABASE_URL / S3_BUCKET at the restored copies only
+#        -> load objects into the new bucket. Set REBATE_DB_NAME / S3_BUCKET to the restored copies only
 #        after these checks pass (runbooks/backup-restore.md).
 set -euo pipefail
 here="$(cd "$(dirname "$0")" && pwd)"
@@ -16,9 +16,11 @@ dir="${1:?backup dir}"; newdb="${2:?new database name}"; newbucket="${3:?new buc
 ENV_FILE="${ENV_FILE:-.env.prod}"
 COMPOSE="${COMPOSE:-docker compose --env-file $ENV_FILE -f infra/docker/compose.prod.yml}"
 # live names as compose resolves them (quotes, comments, overrides), not raw env-file lines
-cfg="$($COMPOSE config 2>/dev/null)"
-livedb="$(sed -n 's#^ *DATABASE_URL: .*/##p' <<< "$cfg" | head -1 | tr -d '"')"
-livebucket="$(sed -n 's#^ *S3_BUCKET: ##p' <<< "$cfg" | head -1 | tr -d '"')"
+cfg="$($COMPOSE config 2>/dev/null)" || { echo "compose config failed" >&2; exit 2; }
+livedb="$(sed -n 's#^ *DATABASE_URL: .*/##p' <<< "$cfg" | head -1 | tr -d '
+"')"
+livebucket="$(sed -n 's#^ *S3_BUCKET: ##p' <<< "$cfg" | head -1 | tr -d '
+"')"
 [[ -n "$livedb" && -n "$livebucket" ]] || { echo "cannot read the live database/bucket names from '$COMPOSE config'" >&2; exit 2; }
 envval() { sed -n "s/^$1=//p" "$ENV_FILE" 2>/dev/null | tail -1; }
 case "$newdb" in postgres|template0|template1) echo "refusing target database '$newdb'" >&2; exit 2;; esac

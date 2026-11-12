@@ -30,6 +30,13 @@ CASES = {
     "UNLICENSED": "unknown",
     "SEE LICENSE IN LICENSE.txt": "unknown",
     "MIT | Other/Proprietary License": "unknown",
+    "BUSL-1.1": "unknown",
+    "Business Source License 1.1": "unknown",
+    "Elastic License 2.0": "unknown",
+    "Elastic-2.0": "unknown",
+    "Commons Clause": "unknown",
+    "CC-BY-NC-4.0": "unknown",
+    "GNU Affero": "strong",
     "GPL-3.0-only OR LGPL-3.0": "weak",
 }
 bad = {k: (v, classify(k)) for k, v in CASES.items() if classify(k) != v}
