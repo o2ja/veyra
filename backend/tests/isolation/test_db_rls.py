@@ -350,6 +350,19 @@ S6_ROWS: dict[str, tuple[str, str]] = {
 }
 
 
+# ---- S7 tables (claims) ---------------------------------------------------------------------------------
+S7_ROWS: dict[str, tuple[str, str]] = {
+    "claim_export_templates": ("id", "tpl"),
+    "claim_batches": ("id", "batch"),
+    "claim_lines": ("id", "line"),
+}
+S7_UPDATABLE = {
+    "claim_export_templates": "name = name",
+    "claim_batches": "status = status",
+    "claim_lines": "released_at = released_at",
+}
+
+
 def test_every_tenant_isolated_table_is_in_the_isolation_suite(admin_engine: Engine) -> None:
     """Every table carrying the tenant_isolation policy is attacked by D1/D7/D8/D12, and every S3 one by the
     S3 D-series below (policies survive the negative control's DISABLE ROW LEVEL SECURITY)."""
@@ -369,7 +382,7 @@ def test_every_tenant_isolated_table_is_in_the_isolation_suite(admin_engine: Eng
         "file_objects",
     }
     assert policed == set(TENANT_TABLES), policed ^ set(TENANT_TABLES)
-    everything = set(S3_ROWS) | set(S4_ROWS) | set(S5_ROWS) | set(S6_ROWS)
+    everything = set(S3_ROWS) | set(S4_ROWS) | set(S5_ROWS) | set(S6_ROWS) | set(S7_ROWS)
     assert policed - s2 == everything, (policed - s2) ^ everything
 
 
@@ -701,3 +714,68 @@ def test_d9_s6_nobody_deletes_and_the_app_role_cannot_write_results(
             ),
         ]
     assert all(r.startswith("error: permission denied") for r in results), results
+
+
+# ---- S7 attacks ------------------------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize("table", sorted(S7_ROWS))
+def test_d2_s7_select_by_foreign_id_returns_nothing(app_engine: Engine, world: World, table: str) -> None:
+    column, key = S7_ROWS[table]
+    with as_app(app_engine, world.a.tenant_id) as conn:
+        own = conn.execute(text(f"SELECT 1 FROM {table} WHERE {column} = :id"), {"id": world.a.s7[key]}).all()
+        rows = conn.execute(
+            text(f"SELECT 1 FROM {table} WHERE {column} = :id"), {"id": world.b.s7[key]}
+        ).all()
+    assert own, f"{table}: fixture row for A must be visible to A"
+    assert rows == [], breach(f"A reads B's {table} row by id")
+
+
+@pytest.mark.parametrize("table", sorted(S7_UPDATABLE))
+def test_d3_s7_update_foreign_row_affects_nothing(app_engine: Engine, world: World, table: str) -> None:
+    column, key = S7_ROWS[table]
+    with as_app(app_engine, world.a.tenant_id) as conn:
+        got = _outcome(
+            conn, f"UPDATE {table} SET {S7_UPDATABLE[table]} WHERE {column} = :id", {"id": world.b.s7[key]}
+        )
+    assert got == "n=0", breach(f"A updated B's {table} row ({got})")
+
+
+@pytest.mark.parametrize("table", ["claim_export_templates", "claim_batches"])
+def test_d5_s7_insert_into_foreign_tenant_is_rejected(app_engine: Engine, world: World, table: str) -> None:
+    with as_app(app_engine, world.a.tenant_id) as conn:
+        cols = ", ".join(
+            conn.execute(
+                text(
+                    "SELECT column_name FROM information_schema.columns WHERE table_schema = 'public' "
+                    "AND table_name = :t AND is_generated = 'NEVER' ORDER BY ordinal_position"
+                ),
+                {"t": table},
+            ).scalars()
+        )
+        got = _outcome(
+            conn,
+            f"INSERT INTO {table} ({cols}) SELECT {cols} FROM jsonb_populate_record(NULL::{table}, "
+            f"(SELECT to_jsonb(x) || jsonb_build_object('tenant_id', CAST(:b AS uuid), 'id', gen_random_uuid()) "
+            f"FROM {table} x WHERE tenant_id = :a LIMIT 1))",
+            {"a": world.a.tenant_id, "b": world.b.tenant_id},
+        )
+    assert got == "rls", breach(f"insert of a {table} row into tenant B was not rejected by RLS ({got})")
+
+
+@pytest.mark.parametrize("table", sorted(S7_ROWS))
+def test_d9_s7_nobody_deletes_and_the_tenant_column_is_pinned(
+    app_engine: Engine, world: World, table: str
+) -> None:
+    """No DELETE for any S7 table (history), and for batches and lines no UPDATE on tenant_id (grants)."""
+    column, key = S7_ROWS[table]
+    with as_app(app_engine, world.a.tenant_id) as conn:
+        deleted = _outcome(conn, f"DELETE FROM {table} WHERE {column} = :id", {"id": world.a.s7[key]})
+        moved = _outcome(
+            conn,
+            f"UPDATE {table} SET tenant_id = :b WHERE {column} = :id",
+            {"b": world.b.tenant_id, "id": world.a.s7[key]},
+        )
+    assert deleted.startswith("error: permission denied"), deleted
+    if table != "claim_export_templates":
+        assert moved.startswith("error: permission denied"), moved

@@ -61,6 +61,10 @@ TENANT_TABLES: dict[str, str] = {
     "calculation_results": "tenant_id",
     "rebate_accrual_entries": "tenant_id",
     "claim_adjustments": "tenant_id",
+    # S7 claims
+    "claim_export_templates": "tenant_id",
+    "claim_batches": "tenant_id",
+    "claim_lines": "tenant_id",
     # S6 AI extraction
     "document_extractions": "tenant_id",
     "ai_invocations": "tenant_id",
@@ -82,6 +86,7 @@ class TenantData:
     s4: dict[str, UUID] = field(default_factory=dict)  # one row id per S4 tenant table
     s5: dict[str, UUID] = field(default_factory=dict)  # one row id per S5 tenant table
     s6: dict[str, UUID] = field(default_factory=dict)  # one row id per S6 tenant table
+    s7: dict[str, UUID] = field(default_factory=dict)  # one row id per S7 tenant table
 
 
 @dataclass
@@ -142,6 +147,7 @@ def _tenant(conn: Connection, name: str, admin_email: str) -> TenantData:
     data.s4 = _s4_rows(conn, tid, admin, data.s3)
     data.s5 = _s5_rows(conn, tid, admin, data.s3, data.s4)
     data.s6 = _s6_rows(conn, tid, admin, fid)
+    data.s7 = _s7_rows(conn, tid, admin, data.s3, data.s4, data.s5)
     conn.execute(
         text(
             "INSERT INTO audit_log (tenant_id, occurred_at, actor_type, actor_user_id, action, "
@@ -266,6 +272,26 @@ def _s6_rows(conn: Connection, t: UUID, user: UUID, file_id: UUID) -> dict[str, 
         "VALUES (:t, :extraction, :f, 'agreement', :u)",
         "INSERT INTO ai_invocations (tenant_id, id, extraction_id, purpose, provider, model, prompt_version, status) "
         "VALUES (:t, :invocation, :extraction, 'agreement_pass_a', 'anthropic', 'm', 'v', 'ok')",
+    ):
+        conn.execute(text(sql), p)
+    return ids
+
+
+def _s7_rows(
+    conn: Connection, t: UUID, user: UUID, s3: dict[str, UUID], s4: dict[str, UUID], s5: dict[str, UUID]
+) -> dict[str, UUID]:
+    """One row in each S7 tenant table: a template, a draft batch and its single claim line (one transaction:
+    the batch/line totals are checked at commit)."""
+    ids = {k: new_id() for k in ("tpl", "batch", "line")}
+    p = {"t": t, "u": user, "mfr": s3["mfr"], "sline": s3["sline"], "ver": s4["ver"], "res": s5["res"], **ids}
+    for sql in (
+        "INSERT INTO claim_export_templates (tenant_id, id, manufacturer_id, name, format, columns, created_by) "
+        'VALUES (:t, :tpl, :mfr, \'iso\', \'csv\', \'[{"header": "Ref", "source": "claim_reference"}]\', :u)',
+        "INSERT INTO claim_batches (tenant_id, id, manufacturer_id, batch_number, line_count, total_amount, "
+        "created_by) VALUES (:t, :batch, :mfr, 'CB-ISO-000001', 1, 1, :u)",
+        "INSERT INTO claim_lines (tenant_id, id, batch_id, claim_reference, source_kind, sales_document_line_id, "
+        "calculation_result_id, agreement_version_id, claim_amount) VALUES (:t, :line, :batch, 'CL-ISO-000001', "
+        "'sales_line', :sline, :res, :ver, 1)",
     ):
         conn.execute(text(sql), p)
     return ids
