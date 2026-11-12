@@ -11,7 +11,7 @@ from rebate.core.access import require, tenant_of
 from rebate.core.query import only_query_params
 from rebate.core.request import Principal, ctx
 from rebate.modules import ingestion
-from rebate.modules.claims import batch_router, service
+from rebate.modules.claims import adjustments, batch_router, service
 from rebate.modules.claims import schemas as s
 from rebate.modules.masterdata import Who, page
 
@@ -161,12 +161,63 @@ def tracker(request: Request, principal: Annotated[Principal, Depends(require(RE
 def propose_adjustments(
     request: Request, run_id: UUID, principal: Annotated[Principal, Depends(require(RUN))]
 ) -> s.ProposalsOut:
-    compared, made = service.propose_adjustments(ctx(request).db, _who(request, principal), run_id)
+    compared, made = adjustments.propose(ctx(request).db, _who(request, principal), run_id)
     return s.ProposalsOut(
         run_id=run_id,
         compared=compared,
         proposed=[s.AdjustmentOut.model_validate(m, from_attributes=True) for m in made],
     )
+
+
+ADJUST = "adjustment.approve"
+ADJ_FILTERS = ("status", "manufacturer_id", "adjustment_type", "claim_line_id", "included_in_batch_id")
+
+
+@router.get(
+    "/claim-adjustments",
+    operation_id="claim_adjustment_list",
+    dependencies=[Depends(only_query_params(*ADJ_FILTERS, *PAGED))],
+)
+def list_adjustments(
+    request: Request,
+    principal: Annotated[Principal, Depends(require(READ))],
+    status: s.AdjustmentStatus | None = None,
+    manufacturer_id: UUID | None = None,
+    adjustment_type: s.AdjustmentType | None = None,
+    claim_line_id: UUID | None = None,
+    included_in_batch_id: UUID | None = None,
+    limit: Limit = 50,
+    cursor: str | None = None,
+) -> s.AdjustmentList:
+    rows = adjustments.list_adjustments(
+        ctx(request).db,
+        tenant_of(principal),
+        status=status,
+        manufacturer_id=manufacturer_id,
+        adjustment_type=adjustment_type,
+        claim_line_id=claim_line_id,
+        batch_id=included_in_batch_id,
+        limit=limit,
+        cursor=cursor,
+    )
+    data, p = page(rows, limit)
+    return s.AdjustmentList(data=[s.AdjustmentOut.model_validate(r._mapping) for r in data], page=p)
+
+
+@router.post("/claim-adjustments/{adjustment_id}/approve", operation_id="claim_adjustment_approve")
+def approve_adjustment(
+    request: Request, adjustment_id: UUID, principal: Annotated[Principal, Depends(require(ADJUST))]
+) -> s.AdjustmentOut:
+    a = adjustments.approve(ctx(request).db, _who(request, principal), adjustment_id)
+    return s.AdjustmentOut.model_validate(a, from_attributes=True)
+
+
+@router.post("/claim-adjustments/{adjustment_id}/reject", operation_id="claim_adjustment_reject")
+def reject_adjustment(
+    request: Request, adjustment_id: UUID, principal: Annotated[Principal, Depends(require(ADJUST))]
+) -> s.AdjustmentOut:
+    a = adjustments.reject(ctx(request).db, _who(request, principal), adjustment_id)
+    return s.AdjustmentOut.model_validate(a, from_attributes=True)
 
 
 @router.post(

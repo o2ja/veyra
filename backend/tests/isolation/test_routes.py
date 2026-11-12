@@ -12,6 +12,7 @@ from typing import Any
 
 import pytest
 from fastapi.routing import APIRoute
+from sqlalchemy import Engine, text
 
 from rebate.api.app import MODULE_ROUTERS
 from rebate.modules.files import storage
@@ -40,7 +41,7 @@ class Side:
 
 
 @pytest.fixture(scope="module")
-def sides(migrated_db: DbUrls) -> Iterator[tuple[Side, Side]]:
+def sides(migrated_db: DbUrls, admin_engine: Engine) -> Iterator[tuple[Side, Side]]:
     app = make_app(migrated_db.app)
     storage.ensure_bucket(app.state.settings)
     with fake_clock(), api_client(app) as a, api_client(app) as b:
@@ -68,6 +69,7 @@ def sides(migrated_db: DbUrls) -> Iterator[tuple[Side, Side]]:
             side.s5 = _seed_s5(app, api, side.s3)
             side.s6 = _seed_s6(api)
             side.s7 = _seed_s7(api, side.s3)
+            side.s7["adjustment_id"] = _seed_adjustment(admin_engine, side)
             out.append(side)
         yield out[0], out[1]
 
@@ -190,8 +192,31 @@ def _seed_s7(api: Api, s3: dict[str, str]) -> dict[str, str]:
     }
 
 
+def _seed_adjustment(admin: Engine, side: Side) -> str:
+    """A proposed adjustment against the claim line of the (voided) fixture batch. Adjustments come from a run that
+    follows a submitted claim; the isolation world has none, so the owner role inserts the row (as for the DB-level
+    isolation fixtures); the routes under test only read and move it."""
+    adj = uuid.uuid4()
+    with admin.begin() as conn:
+        line = conn.execute(
+            text(
+                "SELECT l.id, b.manufacturer_id FROM claim_lines l JOIN claim_batches b ON b.tenant_id = l.tenant_id "
+                "AND b.id = l.batch_id WHERE l.tenant_id = :t LIMIT 1"
+            ),
+            {"t": side.tenant_id},
+        ).one()
+        conn.execute(
+            text(
+                "INSERT INTO claim_adjustments (tenant_id, id, manufacturer_id, adjustment_type, claim_line_id, "
+                "amount, reason) VALUES (:t, :a, :m, 'agreement_change', :l, -1, 'isolation fixture')"
+            ),
+            {"t": side.tenant_id, "a": adj, "m": line.manufacturer_id, "l": line.id},
+        )
+    return str(adj)
+
+
 S6_PARAMS = ("extraction_id",)
-S7_PARAMS = ("batch_id", "export_template_id")
+S7_PARAMS = ("batch_id", "export_template_id", "adjustment_id")
 S4_PARAMS = ("agreement_id", "draft_id", "version_id", "other_version_id")
 S3_PARAMS = ("manufacturer_id", "customer_id", "product_id", "conversion_id", "entry_id", "import_id",
              "template_id", "line_id")  # fmt: skip
@@ -371,6 +396,7 @@ S3_LISTS = (
     "/manufacturers", "/customers", "/products", "/branches", "/uom-conversions", "/unmapped-entities",
     "/imports", "/mapping-templates", "/sales-lines", "/purchase-lines", "/agreements", "/agreement-drafts",
     "/calculation-runs", "/rebate-accruals", "/claim-batches", "/claim-export-templates", "/missed-claims",
+    "/claim-adjustments",
 )  # fmt: skip
 
 

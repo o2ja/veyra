@@ -6,8 +6,9 @@ Concurrency: every batch creation takes one advisory lock per tenant, so two con
 second sees the first's claim lines and answers 409 ``already_claimed``; reference numbering cannot collide. The
 partial unique indexes stay the real guard (a violation is mapped to the same 409).
 
-Lines are fixed when the batch is created. ``include_adjustment_ids`` (S7.4) is deliberately not part of the
-request yet.
+Lines are fixed when the batch is created. Rebate accrual entries (positive delta, BUSINESS_LOGIC.md §5.5) become
+``rebate_accrual`` claim lines, and approved adjustments of the manufacturer can be included (S7.4): the batch total
+is the lines plus the signed adjustments, ``line_count`` counts lines only.
 """
 
 from datetime import date
@@ -24,8 +25,8 @@ from rebate.core import clock
 from rebate.core.errors import Conflict, FourEyesViolation, InvalidState, NotFound, ValidationFailed
 from rebate.core.ids import new_id
 from rebate.modules import audit, masterdata, tenancy
+from rebate.modules.claims import adjustments, export_jobs, missed, templates
 from rebate.modules.claims import batch_schemas as s
-from rebate.modules.claims import export_jobs, missed, templates
 from rebate.modules.claims.models import ClaimBatch, ClaimExportTemplate, ClaimLine
 from rebate.modules.masterdata import Who, keyset
 
@@ -234,13 +235,112 @@ def _selected_by_results(
     return rows
 
 
+def _claim_line(
+    tenant_id: UUID, batch_id: UUID, reference: str, r: Row[Any], now: Any, rebate: bool
+) -> ClaimLine:
+    common = {
+        "tenant_id": tenant_id,
+        "id": new_id(),
+        "batch_id": batch_id,
+        "claim_reference": reference,
+        "agreement_version_id": r.agreement_version_id,
+        "created_at": now,
+    }
+    if rebate:  # the accrued delta, claimed as one line (no quantity, no unit amount)
+        return ClaimLine(
+            **common, source_kind="rebate_accrual", rebate_accrual_entry_id=r.id, claim_amount=r.delta
+        )
+    return ClaimLine(
+        **common,
+        source_kind="sales_line",
+        sales_document_line_id=r.sales_document_line_id,
+        calculation_result_id=r.id,
+        quantity=r.eligible_quantity,
+        unit_amount=r.claim_unit_amount,
+        claim_amount=r.claim_amount,
+    )
+
+
+def _selected_by_accruals(
+    db: Session, tenant_id: UUID, manufacturer_id: UUID, entry_ids: list[UUID]
+) -> list[Row[Any]]:
+    ids = sorted(set(entry_ids))
+    raw = {
+        r.id: r
+        for r in db.execute(
+            text(
+                "SELECT e.id, e.manufacturer_id, e.agreement_version_id, e.delta, e.period_start, e.period_end "
+                "FROM rebate_accrual_entries e JOIN calculation_runs cr ON cr.tenant_id = e.tenant_id "
+                "AND cr.id = e.run_id AND cr.status = 'completed' "
+                "WHERE e.tenant_id = :t AND e.id = ANY(:ids)"
+            ),
+            {"t": tenant_id, "ids": ids},
+        )
+    }
+    problems = []
+    for i in ids:
+        r = raw.get(i)
+        if r is None:
+            problems.append(
+                _problem("accrual_entry_ids", "not_found", "Unknown accrual entry.", entry_id=str(i))
+            )
+        elif r.manufacturer_id != manufacturer_id:
+            problems.append(
+                _problem(
+                    "accrual_entry_ids",
+                    "wrong_manufacturer",
+                    "The accrual entry belongs to another manufacturer.",
+                    entry_id=str(i),
+                )
+            )
+        elif r.delta <= 0:
+            problems.append(
+                _problem(
+                    "accrual_entry_ids",
+                    "not_claimable",
+                    "Only a positive accrual delta can be claimed; a negative one is a rebate_clawback adjustment.",
+                    entry_id=str(i),
+                )
+            )
+    if problems:
+        raise ValidationFailed(details=problems)
+    claimed = db.execute(
+        text(
+            "SELECT cl.rebate_accrual_entry_id, cl.claim_reference, b.batch_number, b.id AS batch_id "
+            "FROM claim_lines cl JOIN claim_batches b ON b.tenant_id = cl.tenant_id AND b.id = cl.batch_id "
+            "WHERE cl.tenant_id = :t AND cl.rebate_accrual_entry_id = ANY(:ids) AND cl.released_at IS NULL "
+            "ORDER BY cl.claim_reference"
+        ),
+        {"t": tenant_id, "ids": ids},
+    ).all()
+    if claimed:
+        raise AlreadyClaimed(
+            details=[
+                _problem(
+                    "accrual_entry_ids",
+                    "already_claimed",
+                    "The accrual entry is already claimed.",
+                    entry_id=str(c.rebate_accrual_entry_id),
+                    claim_reference=c.claim_reference,
+                    batch_id=str(c.batch_id),
+                    batch_number=c.batch_number,
+                )
+                for c in claimed
+            ]
+        )
+    return sorted(raw.values(), key=lambda r: (r.period_start, r.id))
+
+
 def create(db: Session, who: Who, body: s.BatchIn) -> ClaimBatch:
     t = who.tenant_id
     if masterdata.existing_manufacturer_ids(db, t, [body.manufacturer_id]) != {body.manufacturer_id}:
         raise ValidationFailed(details=[_problem("manufacturer_id", "not_found", "Unknown manufacturer.")])
     db.execute(text("SELECT pg_advisory_xact_lock(hashtextextended(:k, 0))"), {"k": f"claims:{t}"})
+    rebate = body.accrual_entry_ids is not None
     if body.result_ids is not None:
         rows = _selected_by_results(db, t, body.manufacturer_id, body.result_ids)
+    elif body.accrual_entry_ids is not None:
+        rows = _selected_by_accruals(db, t, body.manufacturer_id, body.accrual_entry_ids)
     else:
         f = body.filter or s.BatchFilter()  # the request model guarantees one of the two selections
         rows = missed.missed(
@@ -266,7 +366,13 @@ def create(db: Session, who: Who, body: s.BatchIn) -> ClaimBatch:
     year = _today(db, t).year
     base_batch = _next_number(db, t, "claim_batches", "batch_number", f"CB-{year}-")
     base_line = _next_number(db, t, "claim_lines", "claim_reference", f"CL-{year}-")
-    total = sum((Decimal(r.claim_amount) for r in rows), Decimal(0))
+    included = (
+        adjustments.lock_for_inclusion(db, t, body.manufacturer_id, body.include_adjustment_ids)
+        if body.include_adjustment_ids
+        else []
+    )
+    lines_total = sum((Decimal(r.delta if rebate else r.claim_amount) for r in rows), Decimal(0))
+    total = lines_total + adjustments.total(included)
     now = clock.now()
     batch = ClaimBatch(
         tenant_id=t,
@@ -274,8 +380,8 @@ def create(db: Session, who: Who, body: s.BatchIn) -> ClaimBatch:
         manufacturer_id=body.manufacturer_id,
         batch_number=f"CB-{year}-{base_batch + 1:06d}",
         status="draft",
-        period_from=min(r.invoice_date for r in rows),
-        period_to=max(r.invoice_date for r in rows),
+        period_from=min(r.period_start if rebate else r.invoice_date for r in rows),
+        period_to=max(r.period_end if rebate else r.invoice_date for r in rows),
         line_count=len(rows),
         total_amount=total,
         created_by=who.user_id,
@@ -284,20 +390,7 @@ def create(db: Session, who: Who, body: s.BatchIn) -> ClaimBatch:
     db.add(batch)
     db.flush()
     db.add_all(
-        ClaimLine(
-            tenant_id=t,
-            id=new_id(),
-            batch_id=batch.id,
-            claim_reference=f"CL-{year}-{base_line + n:06d}",
-            source_kind="sales_line",
-            sales_document_line_id=r.sales_document_line_id,
-            calculation_result_id=r.id,
-            agreement_version_id=r.agreement_version_id,
-            quantity=r.eligible_quantity,
-            unit_amount=r.claim_unit_amount,
-            claim_amount=r.claim_amount,
-            created_at=now,
-        )
+        _claim_line(t, batch.id, f"CL-{year}-{base_line + n:06d}", r, now, rebate)
         for n, r in enumerate(rows, start=1)
     )
     try:
@@ -305,7 +398,14 @@ def create(db: Session, who: Who, body: s.BatchIn) -> ClaimBatch:
             db.flush()
     except IntegrityError:  # the unique index caught a double claim the pre-check could not see
         raise AlreadyClaimed() from None
-    _audit(db, who, audit.Action.CLAIM_BATCH_CREATED, batch, after=_view(batch))
+    adjustments.include(db, who, included, batch.id)
+    after = _view(batch)
+    if included:
+        after |= {
+            "included_adjustment_ids": [str(a.id) for a in included],
+            "adjustments_total": str(adjustments.total(included)),
+        }
+    _audit(db, who, audit.Action.CLAIM_BATCH_CREATED, batch, after=after)
     return batch
 
 
@@ -371,6 +471,7 @@ def void(db: Session, who: Who, batch_id: UUID, reason: str) -> ClaimBatch:
         .values(released_at=now)
         .execution_options(synchronize_session=False)
     )
+    adjustments.release(db, who, b.id)  # its approved adjustments go back to the queue
     _audit(db, who, audit.Action.CLAIM_BATCH_VOIDED, b, before=before, after=_view(b))
     return b
 

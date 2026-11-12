@@ -83,6 +83,12 @@ class Action(StrEnum):
     CALCULATION_RUN_COMPLETED = "calculation_run.completed"
     CALCULATION_RUN_FAILED = "calculation_run.failed"
     CALCULATION_ADJUSTMENTS_PROPOSED = "calculation_run.adjustments_proposed"
+    CLAIM_ADJUSTMENT_PROPOSED = "claim_adjustment.proposed"
+    CLAIM_ADJUSTMENT_APPROVED = "claim_adjustment.approved"
+    CLAIM_ADJUSTMENT_REJECTED = "claim_adjustment.rejected"
+    CLAIM_ADJUSTMENT_FOUR_EYES_VIOLATION = "claim_adjustment.four_eyes_violation"
+    CLAIM_ADJUSTMENT_INCLUDED = "claim_adjustment.included"
+    CLAIM_ADJUSTMENT_RELEASED = "claim_adjustment.released"
     CLAIM_BATCH_CREATED = "claim_batch.created"
     CLAIM_BATCH_APPROVED = "claim_batch.approved"
     CLAIM_BATCH_FOUR_EYES_VIOLATION = "claim_batch.four_eyes_violation"
@@ -244,6 +250,22 @@ AUDITED_FIELDS: dict[str, frozenset[str]] = {
             "submitted_at",
             "external_reference",
             "void_reason",
+            "included_adjustment_ids",
+            "adjustments_total",
+        }
+    ),
+    "claim_adjustment": frozenset(
+        {
+            "manufacturer_id",
+            "adjustment_type",
+            "claim_line_id",
+            "rebate_accrual_entry_id",
+            "calculation_result_id",
+            "run_id",
+            "amount",
+            "reason",
+            "status",
+            "included_in_batch_id",
         }
     ),
     "claim_export_template": frozenset(

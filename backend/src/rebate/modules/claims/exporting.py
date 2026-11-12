@@ -18,6 +18,7 @@ from openpyxl.cell import WriteOnlyCell  # type: ignore[import-untyped]
 # source field -> kind. The only fields a template may read (no free-form expressions).
 FIELDS: dict[str, str] = {
     "claim_reference": "text",
+    "line_type": "text",  # claim | rebate_claim | adjustment:<type>
     "batch_number": "text",
     "manufacturer_code": "text",
     "manufacturer_name": "text",

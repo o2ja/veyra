@@ -249,15 +249,66 @@
         "title": "AccrualTierOut",
         "type": "object"
       },
+      "AdjustmentList": {
+        "properties": {
+          "data": {
+            "items": {
+              "$ref": "#/components/schemas/AdjustmentOut"
+            },
+            "title": "Data",
+            "type": "array"
+          },
+          "page": {
+            "$ref": "#/components/schemas/Page"
+          }
+        },
+        "required": [
+          "data",
+          "page"
+        ],
+        "title": "AdjustmentList",
+        "type": "object"
+      },
       "AdjustmentOut": {
         "properties": {
           "adjustment_type": {
+            "enum": [
+              "return_reversal",
+              "agreement_change",
+              "manual_correction",
+              "rebate_clawback",
+              "recovery_reclaim"
+            ],
             "title": "Adjustment Type",
             "type": "string"
           },
           "amount": {
             "title": "Amount",
             "type": "string"
+          },
+          "approved_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Approved At"
+          },
+          "approved_by": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Approved By"
           },
           "calculation_result_id": {
             "anyOf": [
@@ -283,19 +334,71 @@
             ],
             "title": "Claim Line Id"
           },
+          "claim_reference": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Claim Reference"
+          },
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
           "id": {
             "format": "uuid",
             "title": "Id",
             "type": "string"
+          },
+          "included_in_batch_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Included In Batch Id"
           },
           "manufacturer_id": {
             "format": "uuid",
             "title": "Manufacturer Id",
             "type": "string"
           },
+          "proposed_by": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Proposed By"
+          },
           "reason": {
             "title": "Reason",
             "type": "string"
+          },
+          "rebate_accrual_entry_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Rebate Accrual Entry Id"
           },
           "run_id": {
             "anyOf": [
@@ -310,6 +413,12 @@
             "title": "Run Id"
           },
           "status": {
+            "enum": [
+              "proposed",
+              "approved",
+              "included",
+              "rejected"
+            ],
             "title": "Status",
             "type": "string"
           }
@@ -319,11 +428,17 @@
           "manufacturer_id",
           "adjustment_type",
           "claim_line_id",
+          "rebate_accrual_entry_id",
           "calculation_result_id",
           "run_id",
           "amount",
           "reason",
-          "status"
+          "status",
+          "included_in_batch_id",
+          "proposed_by",
+          "approved_by",
+          "approved_at",
+          "created_at"
         ],
         "title": "AdjustmentOut",
         "type": "object"
@@ -637,7 +752,25 @@
       },
       "BatchIn": {
         "additionalProperties": false,
+        "description": "Lines: exactly one of ``result_ids`` (eligible results), ``filter`` (the missed-claims scan) or\n``accrual_entry_ids`` (rebate accrual entries with a positive delta, BUSINESS_LOGIC.md \u00a75.5). Approved\nadjustments of the manufacturer can ride along in ``include_adjustment_ids``.",
         "properties": {
+          "accrual_entry_ids": {
+            "anyOf": [
+              {
+                "items": {
+                  "format": "uuid",
+                  "type": "string"
+                },
+                "maxItems": 1000,
+                "minItems": 1,
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Accrual Entry Ids"
+          },
           "filter": {
             "anyOf": [
               {
@@ -647,6 +780,15 @@
                 "type": "null"
               }
             ]
+          },
+          "include_adjustment_ids": {
+            "items": {
+              "format": "uuid",
+              "type": "string"
+            },
+            "maxItems": 1000,
+            "title": "Include Adjustment Ids",
+            "type": "array"
           },
           "manufacturer_id": {
             "format": "uuid",
@@ -4704,9 +4846,16 @@
             "type": "string"
           },
           "calculation_result_id": {
-            "format": "uuid",
-            "title": "Calculation Result Id",
-            "type": "string"
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Calculation Result Id"
           },
           "claim_amount": {
             "title": "Claim Amount",
@@ -12625,6 +12774,249 @@
           }
         },
         "summary": "List Results",
+        "tags": [
+          "calculation"
+        ]
+      }
+    },
+    "/api/v1/claim-adjustments": {
+      "get": {
+        "operationId": "claim_adjustment_list",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "status",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "enum": [
+                    "proposed",
+                    "approved",
+                    "included",
+                    "rejected"
+                  ],
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Status"
+            }
+          },
+          {
+            "in": "query",
+            "name": "manufacturer_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "format": "uuid",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Manufacturer Id"
+            }
+          },
+          {
+            "in": "query",
+            "name": "adjustment_type",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "enum": [
+                    "return_reversal",
+                    "agreement_change",
+                    "manual_correction",
+                    "rebate_clawback",
+                    "recovery_reclaim"
+                  ],
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Adjustment Type"
+            }
+          },
+          {
+            "in": "query",
+            "name": "claim_line_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "format": "uuid",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Claim Line Id"
+            }
+          },
+          {
+            "in": "query",
+            "name": "included_in_batch_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "format": "uuid",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Included In Batch Id"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 50,
+              "maximum": 200,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "cursor",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Cursor"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AdjustmentList"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List Adjustments",
+        "tags": [
+          "calculation"
+        ]
+      }
+    },
+    "/api/v1/claim-adjustments/{adjustment_id}/approve": {
+      "post": {
+        "operationId": "claim_adjustment_approve",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "adjustment_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Adjustment Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AdjustmentOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Approve Adjustment",
+        "tags": [
+          "calculation"
+        ]
+      }
+    },
+    "/api/v1/claim-adjustments/{adjustment_id}/reject": {
+      "post": {
+        "operationId": "claim_adjustment_reject",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "adjustment_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Adjustment Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AdjustmentOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Reject Adjustment",
         "tags": [
           "calculation"
         ]

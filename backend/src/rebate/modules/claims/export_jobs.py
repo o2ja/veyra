@@ -60,14 +60,57 @@ def enqueue_export(db: Session, tenant_id: UUID, user_id: UUID, payload: dict[st
 
 
 def batch_rows(db: Session, tenant_id: UUID, batch_id: UUID) -> list[dict[str, Any]]:
-    sql = (
-        "SELECT cl.claim_reference, b.batch_number, cl.quantity, cl.unit_amount, cl.claim_amount, "
-        f"{_COMMON} {_FROM} "
-        "JOIN claim_lines cl ON cl.tenant_id = r.tenant_id AND cl.calculation_result_id = r.id "
-        "JOIN claim_batches b ON b.tenant_id = cl.tenant_id AND b.id = cl.batch_id "
-        "WHERE cl.tenant_id = :t AND cl.batch_id = :b ORDER BY cl.claim_reference"
+    """The batch as the manufacturer receives it: the sales-line claims, then the rebate claims, then the batch's
+    adjustments (signed amounts, against the claim line they correct), so the file ties out to the batch total."""
+    params = {"t": tenant_id, "b": batch_id}
+    claims = db.execute(
+        text(
+            "SELECT cl.claim_reference, b.batch_number, cl.quantity, cl.unit_amount, cl.claim_amount, "
+            f"'claim' AS line_type, {_COMMON} {_FROM} "
+            "JOIN claim_lines cl ON cl.tenant_id = r.tenant_id AND cl.calculation_result_id = r.id "
+            "JOIN claim_batches b ON b.tenant_id = cl.tenant_id AND b.id = cl.batch_id "
+            "WHERE cl.tenant_id = :t AND cl.batch_id = :b ORDER BY cl.claim_reference"
+        ),
+        params,
     )
-    return [dict(r._mapping) for r in db.execute(text(sql), {"t": tenant_id, "b": batch_id})]
+    rebates = db.execute(
+        text(
+            "SELECT cl.claim_reference, b.batch_number, cl.claim_amount, 'rebate_claim' AS line_type, "
+            "m.code AS manufacturer_code, m.name AS manufacturer_name, ag.external_number AS agreement_number "
+            "FROM claim_lines cl JOIN claim_batches b ON b.tenant_id = cl.tenant_id AND b.id = cl.batch_id "
+            "JOIN rebate_accrual_entries e ON e.tenant_id = cl.tenant_id AND e.id = cl.rebate_accrual_entry_id "
+            "JOIN agreements ag ON ag.tenant_id = e.tenant_id AND ag.id = e.agreement_id "
+            "JOIN manufacturers m ON m.tenant_id = e.tenant_id AND m.id = e.manufacturer_id "
+            "WHERE cl.tenant_id = :t AND cl.batch_id = :b AND cl.source_kind = 'rebate_accrual' "
+            "ORDER BY cl.claim_reference"
+        ),
+        params,
+    )
+    adjusted = db.execute(
+        text(
+            "SELECT cl.claim_reference, b.batch_number, r.eligible_quantity AS quantity, "
+            "r.claim_unit_amount AS unit_amount, adj.amount AS claim_amount, "
+            "'adjustment:' || adj.adjustment_type AS line_type, m.code AS manufacturer_code, "
+            "m.name AS manufacturer_name, ag.external_number AS agreement_number, r.document_number, r.line_number, "
+            "r.invoice_date, s.ship_date, s.sku_raw AS sku, p.description AS product_description, "
+            "p.manufacturer_part_number, c.code AS customer_code, c.name AS customer_name, s.spa_reference, "
+            "s.project_reference, r.claim_uom, s.unit_price, s.extended_amount, s.currency_code "
+            "FROM claim_adjustments adj JOIN claim_batches b ON b.tenant_id = adj.tenant_id "
+            "AND b.id = adj.included_in_batch_id "
+            "LEFT JOIN claim_lines cl ON cl.tenant_id = adj.tenant_id AND cl.id = adj.claim_line_id "
+            "LEFT JOIN calculation_results r ON r.tenant_id = adj.tenant_id AND r.id = adj.calculation_result_id "
+            "LEFT JOIN sales_document_lines s ON s.tenant_id = r.tenant_id AND s.id = r.sales_document_line_id "
+            "LEFT JOIN products p ON p.tenant_id = s.tenant_id AND p.id = s.product_id "
+            "LEFT JOIN customers c ON c.tenant_id = s.tenant_id AND c.id = s.customer_id "
+            "LEFT JOIN rebate_accrual_entries e ON e.tenant_id = adj.tenant_id AND e.id = adj.rebate_accrual_entry_id "
+            "LEFT JOIN agreements ag ON ag.tenant_id = adj.tenant_id AND ag.id = COALESCE(r.agreement_id, e.agreement_id) "
+            "LEFT JOIN manufacturers m ON m.tenant_id = adj.tenant_id AND m.id = adj.manufacturer_id "
+            "WHERE adj.tenant_id = :t AND adj.included_in_batch_id = :b ORDER BY adj.id"
+        ),
+        params,
+    )
+    blank = dict.fromkeys(exporting.FIELDS)
+    return [blank | dict(r._mapping) for result in (claims, rebates, adjusted) for r in result]
 
 
 def missed_rows(db: Session, tenant_id: UUID, ids: list[UUID]) -> list[dict[str, Any]]:

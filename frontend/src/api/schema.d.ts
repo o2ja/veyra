@@ -726,6 +726,57 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/claim-adjustments": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List Adjustments */
+        get: operations["claim_adjustment_list"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/claim-adjustments/{adjustment_id}/approve": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Approve Adjustment */
+        post: operations["claim_adjustment_approve"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/claim-adjustments/{adjustment_id}/reject": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Reject Adjustment */
+        post: operations["claim_adjustment_reject"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/claim-batches": {
         parameters: {
             query?: never;
@@ -1805,32 +1856,61 @@ export interface components {
             /** Tier Number */
             tier_number: number;
         };
+        /** AdjustmentList */
+        AdjustmentList: {
+            /** Data */
+            data: components["schemas"]["AdjustmentOut"][];
+            page: components["schemas"]["Page"];
+        };
         /** AdjustmentOut */
         AdjustmentOut: {
-            /** Adjustment Type */
-            adjustment_type: string;
+            /**
+             * Adjustment Type
+             * @enum {string}
+             */
+            adjustment_type: "return_reversal" | "agreement_change" | "manual_correction" | "rebate_clawback" | "recovery_reclaim";
             /** Amount */
             amount: string;
+            /** Approved At */
+            approved_at: string | null;
+            /** Approved By */
+            approved_by: string | null;
             /** Calculation Result Id */
             calculation_result_id: string | null;
             /** Claim Line Id */
             claim_line_id: string | null;
+            /** Claim Reference */
+            claim_reference?: string | null;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
             /**
              * Id
              * Format: uuid
              */
             id: string;
+            /** Included In Batch Id */
+            included_in_batch_id: string | null;
             /**
              * Manufacturer Id
              * Format: uuid
              */
             manufacturer_id: string;
+            /** Proposed By */
+            proposed_by: string | null;
             /** Reason */
             reason: string;
+            /** Rebate Accrual Entry Id */
+            rebate_accrual_entry_id: string | null;
             /** Run Id */
             run_id: string | null;
-            /** Status */
-            status: string;
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "proposed" | "approved" | "included" | "rejected";
         };
         /** AgreementList */
         AgreementList: {
@@ -1926,9 +2006,18 @@ export interface components {
             /** Invoice To */
             invoice_to?: string | null;
         };
-        /** BatchIn */
+        /**
+         * BatchIn
+         * @description Lines: exactly one of ``result_ids`` (eligible results), ``filter`` (the missed-claims scan) or
+         *     ``accrual_entry_ids`` (rebate accrual entries with a positive delta, BUSINESS_LOGIC.md §5.5). Approved
+         *     adjustments of the manufacturer can ride along in ``include_adjustment_ids``.
+         */
         BatchIn: {
+            /** Accrual Entry Ids */
+            accrual_entry_ids?: string[] | null;
             filter?: components["schemas"]["BatchFilter"] | null;
+            /** Include Adjustment Ids */
+            include_adjustment_ids?: string[];
             /**
              * Manufacturer Id
              * Format: uuid
@@ -3325,11 +3414,8 @@ export interface components {
              * Format: uuid
              */
             batch_id: string;
-            /**
-             * Calculation Result Id
-             * Format: uuid
-             */
-            calculation_result_id: string;
+            /** Calculation Result Id */
+            calculation_result_id: string | null;
             /** Claim Amount */
             claim_amount: string;
             /** Claim Reference */
@@ -6739,6 +6825,105 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ResultList"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    claim_adjustment_list: {
+        parameters: {
+            query?: {
+                status?: ("proposed" | "approved" | "included" | "rejected") | null;
+                manufacturer_id?: string | null;
+                adjustment_type?: ("return_reversal" | "agreement_change" | "manual_correction" | "rebate_clawback" | "recovery_reclaim") | null;
+                claim_line_id?: string | null;
+                included_in_batch_id?: string | null;
+                limit?: number;
+                cursor?: string | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AdjustmentList"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    claim_adjustment_approve: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                adjustment_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AdjustmentOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    claim_adjustment_reject: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                adjustment_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AdjustmentOut"];
                 };
             };
             /** @description Validation Error */

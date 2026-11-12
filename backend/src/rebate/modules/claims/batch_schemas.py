@@ -160,16 +160,22 @@ class BatchFilter(BaseModel):
 
 
 class BatchIn(BaseModel):
+    """Lines: exactly one of ``result_ids`` (eligible results), ``filter`` (the missed-claims scan) or
+    ``accrual_entry_ids`` (rebate accrual entries with a positive delta, BUSINESS_LOGIC.md §5.5). Approved
+    adjustments of the manufacturer can ride along in ``include_adjustment_ids``."""
+
     model_config = STRICT
 
     manufacturer_id: JsonUUID
     result_ids: Annotated[list[JsonUUID], Field(min_length=1, max_length=20000)] | None = None
     filter: BatchFilter | None = None
+    accrual_entry_ids: Annotated[list[JsonUUID], Field(min_length=1, max_length=1000)] | None = None
+    include_adjustment_ids: Annotated[list[JsonUUID], Field(max_length=1000)] = Field(default_factory=list)
 
     @model_validator(mode="after")
     def _one_selection(self) -> Self:
-        if (self.result_ids is None) == (self.filter is None):
-            raise ValueError("Send exactly one of result_ids and filter.")
+        if sum(x is not None for x in (self.result_ids, self.filter, self.accrual_entry_ids)) != 1:
+            raise ValueError("Send exactly one of result_ids, filter and accrual_entry_ids.")
         return self
 
 
@@ -228,7 +234,7 @@ class LineOut(BaseModel):
     source_kind: Literal["sales_line", "rebate_accrual"]
     sales_document_line_id: UUID | None
     rebate_accrual_entry_id: UUID | None
-    calculation_result_id: UUID
+    calculation_result_id: UUID | None  # NULL for rebate accrual lines
     agreement_version_id: UUID
     document_number: str | None
     line_number: int | None

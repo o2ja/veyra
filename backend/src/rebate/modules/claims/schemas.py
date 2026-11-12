@@ -171,16 +171,34 @@ class TrackerOut(BaseModel):
     data: list[TrackerRow]
 
 
+AdjustmentStatus = Literal["proposed", "approved", "included", "rejected"]
+AdjustmentType = Literal[
+    "return_reversal", "agreement_change", "manual_correction", "rebate_clawback", "recovery_reclaim"
+]
+
+
 class AdjustmentOut(BaseModel):
     id: UUID
     manufacturer_id: UUID
-    adjustment_type: str
+    adjustment_type: AdjustmentType
     claim_line_id: UUID | None
+    claim_reference: str | None = None  # of the corrected claim line (list only)
+    rebate_accrual_entry_id: UUID | None
     calculation_result_id: UUID | None
     run_id: UUID | None
     amount: Money
     reason: str
-    status: str
+    status: AdjustmentStatus
+    included_in_batch_id: UUID | None
+    proposed_by: UUID | None
+    approved_by: UUID | None
+    approved_at: datetime | None
+    created_at: datetime
+
+
+class AdjustmentList(BaseModel):
+    data: list[AdjustmentOut]
+    page: Page
 
 
 class ProposalsOut(BaseModel):
