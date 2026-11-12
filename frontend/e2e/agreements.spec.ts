@@ -159,7 +159,12 @@ test("W5 + W7: SPA and Rebate drafts, validation error fix, four-eyes approval, 
   // Fix the validation error
   await page.getByLabel("Valid from").fill("2026-01-01");
   await page.getByLabel("Valid to").fill("2026-12-31");
+  // "Draft saved." is still shown from the first save: wait for this save's response before validating
+  const saved = page.waitForResponse(
+    (r) => r.request().method() === "PUT" && /\/agreement-drafts\/[^/]+$/.test(r.url()),
+  );
   await page.getByRole("button", { name: "Save draft" }).click();
+  expect((await saved).ok()).toBe(true);
   await expect(page.getByText("Draft saved.")).toBeVisible();
   await page.getByRole("region", { name: "Validation" }).getByRole("button", { name: "Validate" }).click();
   await expect(page.getByText("Validation passed.")).toBeVisible();

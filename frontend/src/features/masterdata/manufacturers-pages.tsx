@@ -17,10 +17,12 @@ import {
   orNull,
   usePager,
 } from "./common";
+import { REASON_CODES, REASON_CODE_LABELS, type ReasonCode } from "./reason-codes";
 
 type Settings = components["schemas"]["ManufacturerSettingsOut"];
 type SettingsIn = components["schemas"]["ManufacturerSettingsIn"];
-type Mapping = components["schemas"]["ReasonCodeMappingIn"];
+type MappingIn = components["schemas"]["ReasonCodeMappingIn"];
+type Mapping = Omit<MappingIn, "reason_code"> & { reason_code: ReasonCode | "" }; // "" = not chosen yet
 
 function CreateManufacturer() {
   const client = useQueryClient();
@@ -302,7 +304,7 @@ function ReasonCodeMappings({ manufacturerId }: { manufacturerId: string }) {
       unwrap(
         api.PUT("/api/v1/manufacturers/{manufacturer_id}/reason-code-mappings", {
           params: { path: { manufacturer_id: manufacturerId } },
-          body: { mappings: current },
+          body: { mappings: current as MappingIn[] }, // save is disabled while any row is ""
         }),
       ),
     onSuccess: (data) => {
@@ -325,7 +327,7 @@ function ReasonCodeMappings({ manufacturerId }: { manufacturerId: string }) {
     >
       <p className="text-sm text-muted">
         Translate the manufacturer&apos;s own deduction or rejection codes into Veyra reason codes (for
-        example <code>price_mismatch</code>). Saving replaces the whole list.
+        example <code>rejected_price_mismatch</code>). Saving replaces the whole list.
       </p>
       <ErrorAlert error={(query.error as ApiError | null) ?? (save.error as ApiError | null)} />
       {current.length === 0 && <p className="text-sm text-muted">No mappings yet.</p>}
@@ -347,12 +349,18 @@ function ReasonCodeMappings({ manufacturerId }: { manufacturerId: string }) {
             value={r.external_text ?? ""}
             onChange={(e) => update(i, { external_text: orNull(e.target.value) })}
           />
-          <Field
+          <SelectField
             label="Reason code"
             value={r.reason_code}
-            error={fieldError(save.error as ApiError | null, `mappings.${i}.reason_code`)}
-            onChange={(e) => update(i, { reason_code: e.target.value.trim() })}
-          />
+            onChange={(e) => update(i, { reason_code: e.target.value as ReasonCode | "" })}
+          >
+            <option value="">Choose…</option>
+            {REASON_CODES.map((c) => (
+              <option key={c} value={c}>
+                {REASON_CODE_LABELS[c]}
+              </option>
+            ))}
+          </SelectField>
           {editable && (
             <Button
               variant="secondary"
@@ -373,7 +381,10 @@ function ReasonCodeMappings({ manufacturerId }: { manufacturerId: string }) {
           >
             Add mapping
           </Button>
-          <Button type="submit" disabled={save.isPending || rows === null}>
+          <Button
+            type="submit"
+            disabled={save.isPending || rows === null || current.some((r) => !r.reason_code)}
+          >
             Save mappings
           </Button>
         </div>
