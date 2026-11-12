@@ -42,6 +42,10 @@ import { RunsPage } from "../features/calculations/runs-page";
 import { AiUsagePage } from "../features/extractions/ai-usage-page";
 import { ExtractionDetailPage } from "../features/extractions/extraction-detail-page";
 import { ExtractionsPage } from "../features/extractions/extractions-page";
+import { ClaimBatchDetailPage } from "../features/claims/claim-batch-detail-page";
+import { ClaimBatchesPage } from "../features/claims/claim-batches-page";
+import { ClaimExportTemplatesPage } from "../features/claims/claim-export-templates-page";
+import { MissedClaimsPage } from "../features/claims/missed-claims-page";
 import { AppLayout } from "./app-layout";
 import { RequirePermission, RequireSession } from "./guards";
 import { RouteError } from "./route-error";
@@ -198,6 +202,12 @@ export const routes: RouteObject[] = [
       guarded("extractions", "data.read", <ExtractionsPage />),
       guarded("extractions/usage", "data.read", <AiUsagePage />),
       guarded("extractions/:extractionId", "data.read", <ExtractionDetailPage />),
+      // S7: claims
+      { path: "claims", element: <Navigate to="/claims/missed" replace /> },
+      guarded("claims/missed", "data.read", <MissedClaimsPage />),
+      guarded("claims/batches", "data.read", <ClaimBatchesPage />),
+      guarded("claims/batches/:batchId", "data.read", <ClaimBatchDetailPage />),
+      guarded("claims/templates", "claim_batch.create", <ClaimExportTemplatesPage />),
     ],
   },
 ];
