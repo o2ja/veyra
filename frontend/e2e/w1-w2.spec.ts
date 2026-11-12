@@ -1,6 +1,6 @@
-import { expect, test } from "@playwright/test";
+import { expect } from "@playwright/test";
 
-import { PASSWORD, enrolMfa, signIn, tokenFromMail, uniqueEmail } from "./support";
+import { PASSWORD, clientIpHeader, enrolMfa, signIn, test, tokenFromMail, uniqueEmail } from "./support";
 
 // W1 (register → verify → MFA setup) and W2 (invite analyst and viewer → accept → role limits).
 // SYNTHETIC data only.
@@ -55,7 +55,7 @@ test("W1 + W2: register, verify, enrol MFA, invite an analyst and a viewer, role
   }
 
   for (const [role, email] of Object.entries(members)) {
-    const ctx = await browser.newContext();
+    const ctx = await browser.newContext({ extraHTTPHeaders: clientIpHeader() });
     const p = await ctx.newPage();
     await p.goto(`/accept-invite#token=${await tokenFromMail(email)}`);
     await p.getByLabel("Your name").fill(`Test ${role}`);

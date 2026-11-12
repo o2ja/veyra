@@ -13,6 +13,8 @@ const NAV = [
   { to: "/lines/sales", label: "Lines", permission: "data.read" },
   { to: "/master-data", label: "Master data", permission: "data.read" },
   { to: "/agreements", label: "Agreements", permission: "data.read" },
+  { to: "/calculations", label: "Calculations", permission: "data.read" },
+  { to: "/extractions", label: "Extractions", permission: "data.read" },
   { to: "/admin/users", label: "Users", permission: "user.manage" },
   { to: "/admin/invitations", label: "Invitations", permission: "invitation.manage" },
   { to: "/admin/settings", label: "Settings", permission: "settings.read" },
