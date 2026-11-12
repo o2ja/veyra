@@ -18,26 +18,15 @@ import {
   label,
   stepOf,
   unmappedRequired,
+  usableSuggestion,
 } from "./logic";
 
 type ImportOut = components["schemas"]["ImportOut"];
 type Preview = components["schemas"]["PreviewOut"];
 type Options = components["schemas"]["MappingOptions"];
 
-// ponytail: GET /imports/{id}/errors has no response schema in the OpenAPI document (reported to the
-// backend owner); this mirrors the backend's RowErrorOut until the generated client carries it.
-interface RowError {
-  id: string;
-  row_number: number | null;
-  column_name: string | null;
-  code: string;
-  message: string;
-  severity: string;
-}
-interface RowErrorPage {
-  data: RowError[];
-  page: components["schemas"]["Page"];
-}
+type RowErrorList = components["schemas"]["RowErrorList"];
+type Suggestion = components["schemas"]["MappingOut"];
 
 function Counts({ i }: { i: ImportOut }) {
   const c = i.counts;
@@ -75,6 +64,8 @@ function MappingForm({ i, preview, onDone }: { i: ImportOut; preview: Preview; o
   );
   const [template, setTemplate] = useState("");
   const [ai, setAi] = useState<ApiError | null>(null);
+  const [suggestion, setSuggestion] = useState<Suggestion | null>(null);
+  const [asking, setAsking] = useState(false);
   const save = useMutation({
     mutationFn: () =>
       unwrap(
@@ -95,14 +86,21 @@ function MappingForm({ i, preview, onDone }: { i: ImportOut; preview: Preview; o
   });
   async function suggest() {
     setAi(null);
+    setSuggestion(null);
+    setAsking(true);
     try {
-      await unwrap(
-        api.POST("/api/v1/imports/{import_id}/suggest-mapping", { params: { path: { import_id: i.id } } }),
+      setSuggestion(
+        await unwrap(
+          api.POST("/api/v1/imports/{import_id}/suggest-mapping", { params: { path: { import_id: i.id } } }),
+        ),
       );
     } catch (e) {
       setAi(e instanceof ApiError ? e : null);
+    } finally {
+      setAsking(false);
     }
   }
+  const suggested = suggestion ? usableSuggestion(preview.fields, preview.headers, suggestion.mapping) : null;
   const error = save.error as ApiError | null;
   const missing = unmappedRequired(preview.fields, mapping, defaults);
   return (
@@ -200,17 +198,35 @@ function MappingForm({ i, preview, onDone }: { i: ImportOut; preview: Preview; o
         />
       </div>
       {missing.length > 0 && <Alert tone="info">Still needed: {missing.map(label).join(", ")}.</Alert>}
-      {ai && (
-        <Alert tone="info">
-          {ai.code === "ai_not_enabled" ? ai.message : `AI suggestion failed: ${ai.message}`}
-        </Alert>
+      {ai && <Alert tone="info">{ai.message}</Alert>}
+      {suggestion && suggested && (
+        <div className="rounded-md border border-line p-3 text-sm" role="region" aria-label="AI suggestion">
+          <p className="font-medium">AI suggestion (not saved)</p>
+          <ul className="my-2">
+            {preview.fields.map((f) => (
+              <li key={f.name}>
+                {label(f.name)}: <span className="font-mono">{suggested[f.name] ?? "not in the file"}</span>
+              </li>
+            ))}
+          </ul>
+          <Button
+            variant="secondary"
+            onClick={() => {
+              setMapping(suggested);
+              setSuggestion(null);
+            }}
+          >
+            Apply suggestion
+          </Button>
+          <span className="ml-2 text-muted">Applying only fills the form above; check it, then save.</span>
+        </div>
       )}
       <ErrorAlert error={error} />
       <div className="flex flex-wrap gap-3">
         <Button type="submit" disabled={save.isPending}>
           Apply mapping and check rows
         </Button>
-        <Button variant="secondary" onClick={() => void suggest()}>
+        <Button variant="secondary" disabled={asking} onClick={() => void suggest()}>
           Suggest with AI
         </Button>
       </div>
@@ -257,11 +273,12 @@ function RowErrors({ i }: { i: ImportOut }) {
   const list = useQuery({
     queryKey: ["imports", i.id, "errors", i.mapping_revision, i.status, pager.cursor],
     queryFn: async () =>
+      // the operation also lists text/csv (?format=csv), so the client's body type is a union: narrow to JSON
       (await unwrap(
         api.GET("/api/v1/imports/{import_id}/errors", {
           params: { path: { import_id: i.id }, query: { cursor: pager.cursor, limit: 50 } },
         }),
-      )) as RowErrorPage,
+      )) as RowErrorList,
   });
   return (
     <>

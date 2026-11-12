@@ -5758,7 +5758,24 @@
             "title": "External Text"
           },
           "reason_code": {
-            "pattern": "^[a-z][a-z0-9_]{1,62}$",
+            "enum": [
+              "rejected_agreement_expired",
+              "rejected_customer_ineligible",
+              "rejected_product_ineligible",
+              "rejected_price_mismatch",
+              "rejected_duplicate_claim",
+              "rejected_outside_claim_window",
+              "rejected_missing_documentation",
+              "rejected_quantity_exceeds_authorization",
+              "rejected_uom_mismatch",
+              "rejected_other",
+              "short_paid_unexplained",
+              "unpaid_no_remittance",
+              "overpaid",
+              "unmatched_payment",
+              "source_changed",
+              "unknown"
+            ],
             "title": "Reason Code",
             "type": "string"
           }
@@ -5809,6 +5826,24 @@
             "type": "string"
           },
           "reason_code": {
+            "enum": [
+              "rejected_agreement_expired",
+              "rejected_customer_ineligible",
+              "rejected_product_ineligible",
+              "rejected_price_mismatch",
+              "rejected_duplicate_claim",
+              "rejected_outside_claim_window",
+              "rejected_missing_documentation",
+              "rejected_quantity_exceeds_authorization",
+              "rejected_uom_mismatch",
+              "rejected_other",
+              "short_paid_unexplained",
+              "unpaid_no_remittance",
+              "overpaid",
+              "unmatched_payment",
+              "source_changed",
+              "unknown"
+            ],
             "title": "Reason Code",
             "type": "string"
           }
@@ -6532,6 +6567,94 @@
           "timing"
         ],
         "title": "Rounding",
+        "type": "object"
+      },
+      "RowErrorList": {
+        "properties": {
+          "data": {
+            "items": {
+              "$ref": "#/components/schemas/RowErrorOut"
+            },
+            "title": "Data",
+            "type": "array"
+          },
+          "page": {
+            "$ref": "#/components/schemas/Page"
+          }
+        },
+        "required": [
+          "data",
+          "page"
+        ],
+        "title": "RowErrorList",
+        "type": "object"
+      },
+      "RowErrorOut": {
+        "properties": {
+          "code": {
+            "title": "Code",
+            "type": "string"
+          },
+          "column_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Column Name"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "message": {
+            "title": "Message",
+            "type": "string"
+          },
+          "raw": {
+            "anyOf": [
+              {
+                "additionalProperties": {
+                  "type": "string"
+                },
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Raw"
+          },
+          "row_number": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Row Number"
+          },
+          "severity": {
+            "title": "Severity",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "row_number",
+          "column_name",
+          "code",
+          "message",
+          "severity",
+          "raw"
+        ],
+        "title": "RowErrorOut",
         "type": "object"
       },
       "RunAccepted": {
@@ -12517,7 +12640,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "title": "Response Import Errors"
+                  "$ref": "#/components/schemas/RowErrorList"
                 }
               },
               "text/csv": {}
