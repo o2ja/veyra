@@ -1,6 +1,13 @@
 import { createHmac, randomBytes } from "node:crypto";
 
-import { expect, type Page } from "@playwright/test";
+import { expect, test, type Page } from "@playwright/test";
+
+// Every spec imports this file, so this hook runs before each test: each test gets its own client IP
+// (a random private address, forwarded by the dev proxy, which CI trusts) so per-IP limits such as register (5/h) do not leak across specs.
+test.beforeEach(async ({ context }) => {
+  const n = randomBytes(2);
+  await context.setExtraHTTPHeaders({ "X-Forwarded-For": `10.${n[0] ?? 0}.${n[1] ?? 0}.1` });
+});
 
 export const MAILPIT = process.env.E2E_MAILPIT_URL ?? "http://localhost:8025";
 export const PASSWORD = "correct horse battery staple 42";
