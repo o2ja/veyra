@@ -211,6 +211,7 @@ def _csv_lines(rows: list[tuple[Any, ...]]) -> Iterator[str]:
 @router.get(
     "/imports/{import_id}/errors",
     operation_id="import_errors",
+    response_model=s.RowErrorList,
     dependencies=[Depends(only_query_params("format", *PAGED))],
     responses={200: {"content": {"text/csv": {}}}},
 )
