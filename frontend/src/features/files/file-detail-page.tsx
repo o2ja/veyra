@@ -1,7 +1,7 @@
 import { useQuery } from "@tanstack/react-query";
 import { Link, useParams } from "react-router-dom";
 
-import { Card, ErrorAlert, Loading } from "../../components/ui";
+import { Card, ErrorAlert, Loading, PermissionDenied } from "../../components/ui";
 import { api } from "../../lib/api/client";
 import { ApiError, unwrap } from "../../lib/api/errors";
 import { STATUS_TEXT } from "./files-page";
@@ -15,6 +15,8 @@ export function FileDetailPage() {
     refetchInterval: (q) => (q.state.data?.scan_status === "pending" ? 2000 : false),
   });
   const f = file.data;
+  if ((file.error as ApiError)?.status === 403) return <PermissionDenied />;
+
   return (
     <Card title={f?.original_name ?? "File"}>
       <ErrorAlert error={file.error as ApiError | null} />

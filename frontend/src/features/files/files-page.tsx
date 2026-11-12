@@ -3,7 +3,7 @@ import { useRef, useState } from "react";
 import { Link } from "react-router-dom";
 
 import type { components } from "../../api/schema";
-import { Alert, Button, Card, Empty, ErrorAlert, Loading } from "../../components/ui";
+import { Alert, Button, Card, Empty, ErrorAlert, Loading, PermissionDenied } from "../../components/ui";
 import { api, ensureCsrf, readCsrfCookie } from "../../lib/api/client";
 import { ApiError, toApiError, unwrap } from "../../lib/api/errors";
 import { useSession } from "../../lib/session";
@@ -154,6 +154,8 @@ export function FilesPage() {
       setDownloadError(e instanceof ApiError ? e : null);
     }
   }
+
+  if ((files.error as ApiError)?.status === 403) return <PermissionDenied />;
 
   return (
     <div className="flex flex-col gap-6">
