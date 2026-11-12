@@ -1,7 +1,7 @@
 import AxeBuilder from "@axe-core/playwright";
-import { expect, test, type Page } from "@playwright/test";
+import { expect, type Page } from "@playwright/test";
 
-import { PASSWORD, enrolMfa, signIn, tokenFromMail, uniqueEmail } from "./support";
+import { PASSWORD, clientIpHeader, enrolMfa, signIn, test, tokenFromMail, uniqueEmail } from "./support";
 
 // W5 + W7: manual SPA & Rebate agreement drafts, validation, four-eyes approval, amendment, and diff.
 // SYNTHETIC data only (from testdata/generated/agreements/manual_payloads/SPA-VOLT-2026-884.json & REB-VOLT-2026.json).
@@ -59,7 +59,11 @@ test("W5 + W7: SPA and Rebate drafts, validation error fix, four-eyes approval, 
   ] as const) {
     await page.getByLabel("Name", { exact: true }).fill(name);
     await page.getByLabel("Code", { exact: true }).fill(code);
+    const added = page.waitForResponse(
+      (r) => r.request().method() === "POST" && /\/customers$/.test(r.url()),
+    );
     await page.getByRole("button", { name: "Add customer" }).click();
+    expect((await added).ok()).toBe(true);
     await expect(page.getByText("Customer added.")).toBeVisible();
   }
 
@@ -76,7 +80,10 @@ test("W5 + W7: SPA and Rebate drafts, validation error fix, four-eyes approval, 
       .getByLabel("Manufacturer", { exact: true })
       .selectOption({ label: "Voltara Electric (SYNTHETIC) (VOLT)" });
     await page.getByLabel("Base unit of measure").fill("EA");
+    // "Product added." stays visible from the previous product: wait for this product's own POST
+    const added = page.waitForResponse((r) => r.request().method() === "POST" && /\/products$/.test(r.url()));
     await page.getByRole("button", { name: "Add product" }).click();
+    expect((await added).ok()).toBe(true);
     await expect(page.getByText("Product added.")).toBeVisible();
   }
 
@@ -87,7 +94,7 @@ test("W5 + W7: SPA and Rebate drafts, validation error fix, four-eyes approval, 
   await page.getByRole("button", { name: "Invite" }).click();
   await expect(page.getByText(`Invitation created for ${approver}`)).toBeVisible();
 
-  const approverCtx = await browser.newContext();
+  const approverCtx = await browser.newContext({ extraHTTPHeaders: clientIpHeader() });
   const approverPage = await approverCtx.newPage();
   await approverPage.goto(`/accept-invite#token=${await tokenFromMail(approver)}`);
   await approverPage.getByLabel("Your name").fill("Agreement Approver");
