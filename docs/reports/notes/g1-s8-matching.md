@@ -13,7 +13,7 @@ session limit before writing its report. Verification below was run by the orche
   (`assignment.unique_subset_sum`); a tier accepts a pair only when unambiguous from both sides; only exact tiers
   auto-confirm; confirmed `existing` matches are kept and their lines excluded; limits produce notes
   (`assignment_limit_reached`, `combination_limit_reached`, `ambiguous_subset_sum`) instead of guesses.
-  `manual_match`, `confirm_suggestion`, `validate_matches` (allocation never exceeds either side → `InvariantViolation`).
+  `manual_match`, `confirm_suggestion`, `validate_matches` (Σ allocations never exceed the remittance line's `amount_paid` → `InvariantViolation`). **Deviation from the brief:** the brief said "never exceeds a line's amount on either side"; the claim side is deliberately not capped, so an overpayment stays visible to §10.3 `overpaid` (§10.2 only requires Σ ≤ `amount_paid`).
 - `assignment.maximise_assignment` deterministic optimal one-to-one assignment (integer weights, documented tie-break).
 - `variance.py` `classify_claim_line`, `classify_unmatched_payment` (§10.3); `dispute.py` `assess_dispute(reason_code,
   DisputeFacts) -> DisputeAssessment` (§10.4).
@@ -23,6 +23,18 @@ session limit before writing its report. Verification below was run by the orche
 properties: allocation bounds, conservation, re-run keeps confirmed, input-order determinism; ambiguity and limit
 cases); `mypy --strict src/rebate_matching` clean; import-linter 13 kept / 0 broken; ruff clean.
 
+## Financial review (2026-11-12, independent, re-derived CM-7781 / RA-5521 / DN-310 by hand)
+No financial discrepancy. Fixed: report claim above (blocker), CL-4 no-variance and GL-V2 confirm-then-no-variance
+now asserted (minor 3). Logged follow-ups: re-run keep-confirmed property with changed inputs; richer Hypothesis
+inputs (adjustments, zero payments, dates); T5 ambiguity across remittance lines (greedy by id, no note); two
+remittance lines with one `claim_reference` match in neither T1 nor T2 (split payment) — document or allow;
+RA-5521 L2 ground-truth wording; rapidfuzz/scipy named in TECH_STACK/§10.2 but reimplemented (doc update or ADR;
+empty-vs-empty similarity 0 vs 100); `existing` ids missing from inputs raise KeyError; `max_assignment_dim=500`,
+tolerance read as max(5 %, $5), integer Hungarian weights recorded as decisions.
+
 ## Open
+- **Owner decision (§10.3 gap):** a confirmed match with `paid = 0` and no rejection code fits no row of the table;
+  the package raises `UnclassifiableVariance` (fail closed). Recommendation: `short_paid` for the full amount with
+  reason `short_paid_unexplained`.
 - Independent financial review (re-derive the golden values) required before merge.
 - Interface consumer: S8 reconciliation module (remittance ingestion, persistence, workbench API) — next agent.

@@ -6,7 +6,7 @@ from decimal import Decimal
 import pytest
 
 from rebate_matching.dispute import DisputeFacts, assess_dispute
-from rebate_matching.engine import reconcile
+from rebate_matching.engine import confirm_suggestion, reconcile
 from rebate_matching.models import ClaimLine, RemittanceLine, Status
 from rebate_matching.variance import (
     UnclassifiableVariance,
@@ -54,8 +54,16 @@ def test_cm_7781_variances_match_ground_truth() -> None:
                 D(v["amount"]),
                 v["reason_code"],
             ), ref
-    # GL-V2 lines are still undecided (suggestion, not confirmed): both would be reported unpaid by the caller
-    assert got["CL-2026-000005"] is None or got["CL-2026-000005"].case_type == "unpaid"
+    # L4 (hand derivation): claimed 250.00 - return adjustment 50.00 = 200.00 net, paid 200.00 -> no case
+    assert got["CL-2026-000004"] is None
+    # GL-V2: L5 (2,100.00) is a T5 suggestion over CL-5 (1,000.00) + CL-6 (1,100.00); once a user confirms it,
+    # neither line has a variance
+    sugg = [m for m in res.matches if m.status is Status.SUGGESTED and m.remittance_line_id == "5"]
+    assert len(sugg) == 1
+    after = [*confirmed, confirm_suggestion(sugg[0])]
+    for ref in ("CL-2026-000005", "CL-2026-000006"):
+        claim = next(c for c in claims if c.claim_reference == ref)
+        assert classify_claim_line(claim, after, rmap, mappings) is None, ref
     # unmatched payment (line 6): 75.00
     case6 = classify_unmatched_payment(rmap["6"], res.matches)
     assert case6 is not None and (case6.case_type, case6.amount, case6.reason_code) == (
