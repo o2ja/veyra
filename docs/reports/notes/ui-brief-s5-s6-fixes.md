@@ -52,3 +52,9 @@ sections). Branch `ui/s5-s6` (main already merged in). Independent review verdic
 The local dev API counts registrations per IP (5/hour) and does not trust the dev proxy's forwarded IP. Run the
 specs in batches of at most 4 files and before each batch run (dev database only, nothing else):
 `docker exec veyra-recover-postgres-1 psql -U postgres -d rebate -qc "delete from rate_limit_counters"`.
+
+## Orchestrator's own run (2026-11-12)
+lint, typecheck, vitest 30/30 pass. Playwright: 7 of 8 specs pass; `e2e/calculations.spec.ts:48` FAILED locally
+with `locator.click: Test ended` (test timeout while the shared worker was busy). 17. Make it robust: wait for the
+run with `expect.poll`/`toHaveText` on the status cell (up to 3 min), give the test `test.setTimeout(300_000)`, and
+never click before the element is visible. It must pass locally twice in a row.
