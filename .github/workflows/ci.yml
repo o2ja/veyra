@@ -86,6 +86,10 @@ jobs:
         run: |
           uv export --frozen --no-hashes --no-emit-project -o "$RUNNER_TEMP/req.txt" -q
           uv run pip-audit --strict --no-deps --disable-pip -r "$RUNNER_TEMP/req.txt"
+      - name: licence check (runtime dependencies; fails on GPL/AGPL/SSPL/unknown, lists weak copyleft)
+        run: |
+          uv export --frozen --no-dev --no-hashes --no-emit-project -o "$RUNNER_TEMP/req-runtime.txt" -q
+          uv run python ../infra/scripts/ops/licence_check.py python "$RUNNER_TEMP/req-runtime.txt"
       - name: OCR tools for the extraction tests (the worker image has them; S6.1)
         run: sudo apt-get update -qq && sudo apt-get install -y -qq --no-install-recommends ocrmypdf tesseract-ocr-eng
       - run: uv run pytest --junitxml=junit-backend.xml
@@ -117,6 +121,9 @@ jobs:
         run: python3 ../infra/scripts/check-no-skips.py junit-frontend.xml
       - run: npm run build
       - run: npm audit --audit-level=moderate
+      - run: npm audit --omit=dev --audit-level=high
+      - name: licence check (runtime dependencies)
+        run: python3 ../infra/scripts/ops/licence_check.py npm package-lock.json
 
   api-contract:
     runs-on: ubuntu-24.04
