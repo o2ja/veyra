@@ -21,6 +21,10 @@ export function ExtractionsPage() {
   const [rerun, setRerun] = useState(false);
   const [uploadProgress, setUploadProgress] = useState<number | null>(null);
   const [uploadError, setUploadError] = useState<ApiError | null>(null);
+  const [localError, setLocalError] = useState<string | null>(null);
+  const [fileBeforeStack, setFileBeforeStack] = useState<(string | null)[]>([null]);
+
+  const currentBefore = fileBeforeStack[fileBeforeStack.length - 1] ?? null;
 
   const list = useQuery({
     queryKey: ["document-extractions"],
@@ -33,40 +37,23 @@ export function ExtractionsPage() {
   });
 
   const files = useQuery({
-    queryKey: ["files", "agreement-picker"],
+    queryKey: ["files", "agreement-picker", currentBefore],
     enabled: can("agreement.draft"),
-    queryFn: () => unwrap(api.GET("/api/v1/files", { params: { query: { limit: 100 } } })),
+    queryFn: () =>
+      unwrap(
+        api.GET("/api/v1/files", {
+          params: { query: { limit: 50, before: currentBefore } },
+        }),
+      ),
   });
 
   const start = useMutation({
-    mutationFn: async () => {
-      let fileId = selectedFileId;
-      const pickedFile = fileInput.current?.files?.[0];
-      if (pickedFile) {
-        setUploadError(null);
-        setUploadProgress(0);
-        try {
-          const uploaded = await uploadWithProgress(pickedFile, "agreement", setUploadProgress);
-          fileId = uploaded.id;
-          setSelectedFileId(uploaded.id);
-          if (fileInput.current) fileInput.current.value = "";
-          void client.invalidateQueries({ queryKey: ["files"] });
-        } catch (e) {
-          setUploadError(e instanceof ApiError ? e : null);
-          throw e;
-        } finally {
-          setUploadProgress(null);
-        }
-      }
-      if (!fileId) {
-        throw new ApiError(422, "validation_error", "Choose or upload an agreement file.", [], null);
-      }
-      return unwrap(
+    mutationFn: async (fileId: string) =>
+      unwrap(
         api.POST("/api/v1/document-extractions", {
           body: { file_id: fileId, kind: "agreement", rerun },
         }),
-      );
-    },
+      ),
     onSuccess: (created) => {
       void client.invalidateQueries({ queryKey: ["document-extractions"] });
       if (created && typeof created === "object" && "id" in created && created.id) {
@@ -74,6 +61,34 @@ export function ExtractionsPage() {
       }
     },
   });
+
+  async function handleSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    setLocalError(null);
+    let fileId = selectedFileId;
+    const pickedFile = fileInput.current?.files?.[0];
+    if (pickedFile) {
+      setUploadError(null);
+      setUploadProgress(0);
+      try {
+        const uploaded = await uploadWithProgress(pickedFile, "agreement", setUploadProgress);
+        fileId = uploaded.id;
+        setSelectedFileId(uploaded.id);
+        if (fileInput.current) fileInput.current.value = "";
+        void client.invalidateQueries({ queryKey: ["files"] });
+      } catch (err) {
+        setUploadError(err instanceof ApiError ? err : null);
+        return;
+      } finally {
+        setUploadProgress(null);
+      }
+    }
+    if (!fileId) {
+      setLocalError("Choose or upload an agreement file.");
+      return;
+    }
+    start.mutate(fileId);
+  }
 
   const listErr = list.error as ApiError | null;
   const startErr = start.error as ApiError | null;
@@ -87,7 +102,9 @@ export function ExtractionsPage() {
     );
   }
 
-  const agreementFiles = (files.data?.data ?? []).filter((f) => f.kind === "agreement");
+  const agreementFiles = (files.data?.data ?? []).filter(
+    (f) => f.kind === "agreement" && f.scan_status === "clean",
+  );
   const aiDisabled = startErr?.code === "ai_not_enabled";
   const rateLimited = startErr?.code === "rate_limited" || startErr?.code === "too_many_extractions";
 
@@ -97,25 +114,46 @@ export function ExtractionsPage() {
       <div className="flex flex-col gap-6">
         {can("agreement.draft") && (
           <Card title="Start agreement extraction">
-            <form
-              className="flex max-w-2xl flex-col gap-4"
-              onSubmit={(e) => {
-                e.preventDefault();
-                start.mutate();
-              }}
-            >
-              <SelectField
-                label="Existing agreement file"
-                value={selectedFileId}
-                onChange={(e) => setSelectedFileId(e.target.value)}
-              >
-                <option value="">Choose an uploaded agreement file…</option>
-                {agreementFiles.map((f) => (
-                  <option key={f.id} value={f.id}>
-                    {f.original_name} ({utc(f.created_at)})
-                  </option>
-                ))}
-              </SelectField>
+            <form className="flex max-w-2xl flex-col gap-4" onSubmit={(e) => void handleSubmit(e)}>
+              <div className="flex flex-col gap-2">
+                <SelectField
+                  label="Existing agreement file (clean only)"
+                  value={selectedFileId}
+                  onChange={(e) => {
+                    setLocalError(null);
+                    setSelectedFileId(e.target.value);
+                  }}
+                >
+                  <option value="">Choose an uploaded agreement file…</option>
+                  {agreementFiles.map((f) => (
+                    <option key={f.id} value={f.id}>
+                      {f.original_name} ({utc(f.created_at)})
+                    </option>
+                  ))}
+                </SelectField>
+                {(fileBeforeStack.length > 1 || files.data?.next_before) && (
+                  <div className="flex items-center gap-2 text-xs">
+                    <Button
+                      variant="secondary"
+                      disabled={fileBeforeStack.length <= 1}
+                      onClick={() => setFileBeforeStack((s) => (s.length > 1 ? s.slice(0, -1) : s))}
+                    >
+                      Newer files
+                    </Button>
+                    <span>Page {fileBeforeStack.length}</span>
+                    <Button
+                      variant="secondary"
+                      disabled={!files.data?.next_before}
+                      onClick={() => {
+                        const nb = files.data?.next_before;
+                        if (nb) setFileBeforeStack((s) => [...s, nb]);
+                      }}
+                    >
+                      Older files
+                    </Button>
+                  </div>
+                )}
+              </div>
 
               <div className="flex flex-col gap-1">
                 <label htmlFor="extraction-upload" className="text-sm font-medium">
@@ -127,6 +165,7 @@ export function ExtractionsPage() {
                   type="file"
                   accept=".pdf,.xlsx"
                   className="text-sm"
+                  onChange={() => setLocalError(null)}
                 />
                 {uploadProgress !== null && (
                   <p role="status" className="text-xs text-muted">
@@ -137,6 +176,7 @@ export function ExtractionsPage() {
 
               <Checkbox label="Re-run even if an extraction exists" checked={rerun} onChange={setRerun} />
 
+              {localError && <Alert>{localError}</Alert>}
               {aiDisabled ? (
                 <Alert>
                   AI extraction is not enabled for this workspace.{" "}

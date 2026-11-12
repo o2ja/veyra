@@ -1,8 +1,30 @@
 import { useMemo, useState } from "react";
 import { NavLink } from "react-router-dom";
 
-import { Button, Empty } from "../../components/ui";
+import { Alert, Button, Empty, ErrorAlert } from "../../components/ui";
+import type { ApiError } from "../../lib/api/errors";
 import { buildTraceTree, collectExpandableIds, flattenKeyValues, type TraceNode } from "./logic";
+
+export function ValidationDetailsAlert({ error }: { error: ApiError | null | undefined }) {
+  if (!error) return null;
+  return (
+    <div className="flex flex-col gap-2">
+      <ErrorAlert error={error} />
+      {error.details.length > 0 && (
+        <Alert>
+          <ul className="list-disc pl-5 text-xs">
+            {error.details.map((d, idx) => (
+              <li key={`${d.field}-${d.code}-${idx}`}>
+                {d.field ? `${d.field}: ` : ""}
+                {d.message}
+              </li>
+            ))}
+          </ul>
+        </Alert>
+      )}
+    </div>
+  );
+}
 
 const SECTIONS = [
   { to: "/calculations", label: "Runs", end: true },

@@ -1,30 +1,39 @@
 import { useMutation } from "@tanstack/react-query";
 import { useState } from "react";
 
-import { Alert, Button, Card, Empty, ErrorAlert, Field } from "../../components/ui";
+import { Alert, Button, Card, Empty, Field } from "../../components/ui";
 import { api } from "../../lib/api/client";
 import { ApiError, unwrap } from "../../lib/api/errors";
-import { KeyValueGrid, TraceTree } from "./common";
+import { KeyValueGrid, TraceTree, ValidationDetailsAlert } from "./common";
 import { RESULT_STATUS_LABELS, formatDecimal, type DraftPreviewLine } from "./logic";
 
 export function DraftPreviewPanel({ draftId }: { draftId: string }) {
   const [limitInput, setLimitInput] = useState("200");
+  const [limitError, setLimitError] = useState<string | null>(null);
   const [expandedLineId, setExpandedLineId] = useState<string | null>(null);
 
   const preview = useMutation({
-    mutationFn: () => {
-      const parsed = Number.parseInt(limitInput.trim(), 10);
-      const limit = Number.isFinite(parsed) && parsed > 0 ? parsed : 200;
-      return unwrap(
+    mutationFn: (limit: number) =>
+      unwrap(
         api.POST("/api/v1/agreement-drafts/{draft_id}/preview-calculation", {
           params: { path: { draft_id: draftId } },
           body: { limit },
         }),
-      );
-    },
+      ),
   });
 
   const err = preview.error as ApiError | null;
+
+  function handleSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    const trimmed = limitInput.trim();
+    if (!/^-?\d+$/.test(trimmed)) {
+      setLimitError("Enter a whole number.");
+      return;
+    }
+    setLimitError(null);
+    preview.mutate(Number.parseInt(trimmed, 10));
+  }
 
   return (
     <Card title="Calculation preview">
@@ -33,21 +42,17 @@ export function DraftPreviewPanel({ draftId }: { draftId: string }) {
           Preview — not saved. Runs against sample sales lines without persisting results.
         </Alert>
 
-        <form
-          className="flex flex-wrap items-end gap-3"
-          onSubmit={(e) => {
-            e.preventDefault();
-            preview.mutate();
-          }}
-        >
-          <div className="w-36">
+        <form className="flex flex-wrap items-end gap-3" onSubmit={handleSubmit}>
+          <div className="w-40">
             <Field
               label="Sample limit"
               type="number"
-              min={1}
-              max={200}
               value={limitInput}
-              onChange={(e) => setLimitInput(e.target.value)}
+              error={limitError ?? undefined}
+              onChange={(e) => {
+                setLimitError(null);
+                setLimitInput(e.target.value);
+              }}
             />
           </div>
           <Button type="submit" variant="secondary" disabled={preview.isPending}>
@@ -55,7 +60,7 @@ export function DraftPreviewPanel({ draftId }: { draftId: string }) {
           </Button>
         </form>
 
-        <ErrorAlert error={err} />
+        <ValidationDetailsAlert error={err} />
 
         {preview.data && (
           <div className="flex flex-col gap-4">
@@ -79,13 +84,13 @@ export function DraftPreviewPanel({ draftId }: { draftId: string }) {
             </dl>
 
             <div>
-              <h3 className="mb-2 text-sm font-semibold">Totals</h3>
+              <h2 className="mb-2 text-sm font-semibold">Totals</h2>
               <KeyValueGrid data={preview.data.totals} empty="No totals." />
             </div>
 
             {preview.data.accrual && (
               <div className="rounded border border-line p-3">
-                <h3 className="mb-2 text-sm font-semibold">Accrual preview</h3>
+                <h2 className="mb-2 text-sm font-semibold">Accrual preview</h2>
                 <dl className="grid gap-3 text-sm sm:grid-cols-3">
                   <div>
                     <dt className="text-muted">Period</dt>
@@ -180,6 +185,7 @@ export function DraftPreviewPanel({ draftId }: { draftId: string }) {
                             <Button
                               variant="secondary"
                               aria-expanded={isExpanded}
+                              aria-label={`Trace for ${line.document_number} line ${line.line_number}`}
                               onClick={() =>
                                 setExpandedLineId((cur) => (cur === line.line_id ? null : line.line_id))
                               }

@@ -45,11 +45,11 @@ async function noViolations(page: Page, name: string) {
   expect(summary, `${name}: ${summary.join(", ")}`).toEqual([]);
 }
 
-test("S5 calculations: run, completion, exception filter, result trace, rebate tracker, axe", async ({
+test("S5 calculations: run, completion, exception filter, result trace, propose adjustments, draft preview, rebate tracker, axe", async ({
   page,
   browser,
 }) => {
-  test.setTimeout(600_000);
+  test.setTimeout(300_000);
   const admin = uniqueEmail("e2e-calc-admin");
   const approver = uniqueEmail("e2e-calc-approver");
 
@@ -89,7 +89,10 @@ test("S5 calculations: run, completion, exception filter, result trace, rebate t
     await importFile(page, type, file);
   }
 
-  // 3. Invite approver + MFA
+  // 3. Import sales CSV before agreement preview so preview has sample lines
+  await importFile(page, "Sales", "sales/sales_scenarios_layoutA.csv");
+
+  // 4. Invite approver + MFA
   await page.getByRole("link", { name: "Invitations" }).click();
   await page.getByLabel("Email").fill(approver);
   await page.getByLabel("Role").selectOption("approver");
@@ -105,11 +108,11 @@ test("S5 calculations: run, completion, exception filter, result trace, rebate t
   await signIn(approverPage, approver);
   await enrolMfa(approverPage);
 
-  // 4. Create & approve SPA agreement
+  // 5. Create SPA draft, run DraftPreviewPanel, then submit & approve
   await page.goto("/agreement-drafts");
   await page.getByRole("button", { name: "New draft" }).click();
   await expect(page).toHaveURL(/\/agreement-drafts\/[0-9a-f-]+$/);
-  const draftId = page.url().split("/").pop() ?? "";
+  const spaDraftId = page.url().split("/").pop() ?? "";
 
   await page.getByLabel("Agreement type").selectOption("spa");
   await page.getByLabel("External number").fill("SPA-VOLT-2026-884");
@@ -138,20 +141,71 @@ test("S5 calculations: run, completion, exception filter, result trace, rebate t
 
   await page.getByRole("button", { name: "Save draft" }).click();
   await expect(page.getByText("Draft saved.")).toBeVisible();
+
+  // Item 13: Draft preview panel
+  const previewRegion = page.getByRole("region", { name: "Calculation preview" });
+  await previewRegion.getByRole("button", { name: "Run preview" }).click();
+  await expect(previewRegion.getByText("Preview — not saved", { exact: true })).toBeVisible({
+    timeout: 60_000,
+  });
+  const previewTable = previewRegion.getByRole("table", { name: "Preview lines" });
+  await expect(previewTable).toBeVisible();
+  expect(await previewTable.locator("tbody tr").count()).toBeGreaterThanOrEqual(1);
+
   await page.getByRole("region", { name: "Validation" }).getByRole("button", { name: "Validate" }).click();
   await expect(page.getByText("Validation passed.")).toBeVisible();
   await page.getByRole("button", { name: "Submit for approval" }).click();
   await expect(page.getByText("Draft submitted for approval.")).toBeVisible();
 
-  await approverPage.goto(`/agreement-drafts/${draftId}`);
+  await approverPage.goto(`/agreement-drafts/${spaDraftId}`);
+  await expect(approverPage.getByRole("button", { name: "Approve draft" })).toBeVisible();
+  await approverPage.getByRole("button", { name: "Approve draft" }).click();
+  await expect(approverPage.getByText("Draft approved.")).toBeVisible();
+
+  // 6. Create & approve Rebate draft REB-VOLT-2026 (Item 14: populated rebate tracker row)
+  await page.goto("/agreement-drafts");
+  await page.getByRole("button", { name: "New draft" }).click();
+  await expect(page).toHaveURL(/\/agreement-drafts\/[0-9a-f-]+$/);
+  const rebDraftId = page.url().split("/").pop() ?? "";
+
+  await page.getByLabel("Agreement type").selectOption("rebate");
+  await page.getByLabel("External number").fill("REB-VOLT-2026");
+  await page.getByLabel("Manufacturer code").fill("VOLT");
+  await page.getByLabel("Name", { exact: true }).fill("Voltara annual volume rebate 2026 (SYNTHETIC)");
+  await page.getByLabel("Valid from").fill("2026-01-01");
+  await page.getByLabel("Valid to").fill("2026-12-31");
+  await page.getByLabel("Volume basis").selectOption("sales");
+  await page.getByLabel("Tier metric").selectOption("amount");
+  await page.getByLabel("Tier mode").selectOption("retroactive");
+  await page.getByLabel("SPA lines").selectOption("include");
+  await page.getByLabel("Product scope").selectOption("all");
+  await page.getByLabel("Measurement period kind").fill("calendar_year");
+  await page.getByLabel("Measurement period start").fill("2026-01-01");
+  await page.getByLabel("Measurement period end").fill("2026-12-31");
+
+  for (const [i, tier] of [
+    { bound: "0", rate: "0.015" },
+    { bound: "1000000", rate: "0.025" },
+    { bound: "2000000", rate: "0.035" },
+  ].entries()) {
+    await page.getByRole("button", { name: "Add tier" }).click();
+    await page.getByLabel("Lower bound").nth(i).fill(tier.bound);
+    await page.getByLabel("Rate").nth(i).fill(tier.rate);
+  }
+  await page.getByRole("button", { name: "Save draft" }).click();
+  await expect(page.getByText("Draft saved.")).toBeVisible();
+  await page.getByRole("region", { name: "Validation" }).getByRole("button", { name: "Validate" }).click();
+  await expect(page.getByText("Validation passed.")).toBeVisible();
+  await page.getByRole("button", { name: "Submit for approval" }).click();
+  await expect(page.getByText("Draft submitted for approval.")).toBeVisible();
+
+  await approverPage.goto(`/agreement-drafts/${rebDraftId}`);
+  await expect(approverPage.getByRole("button", { name: "Approve draft" })).toBeVisible();
   await approverPage.getByRole("button", { name: "Approve draft" }).click();
   await expect(approverPage.getByText("Draft approved.")).toBeVisible();
   await approverCtx.close();
 
-  // 5. Import sales CSV via import wizard
-  await importFile(page, "Sales", "sales/sales_scenarios_layoutA.csv");
-
-  // 6. Start a calculation run and wait for completion
+  // 7. Start a calculation run and wait up to 3 min for Completed on the status cell (Item 17)
   await page.getByRole("link", { name: "Calculations" }).click();
   await expect(page.getByRole("heading", { name: "Calculation runs" })).toBeVisible();
   await noViolations(page, "/calculations");
@@ -161,32 +215,73 @@ test("S5 calculations: run, completion, exception filter, result trace, rebate t
   await page.getByRole("button", { name: "Start calculation run" }).click();
 
   const runsTable = page.getByRole("table", { name: "Calculation runs" });
-  await expect(runsTable.getByText("Completed").first()).toBeVisible({ timeout: 120_000 });
+  const firstRunRow = runsTable.locator("tbody tr").first();
+  await expect(firstRunRow).toBeVisible({ timeout: 30_000 });
+  await expect(firstRunRow.locator("td").nth(1)).toHaveText("Completed", { timeout: 180_000 });
 
   // Open run detail
-  await runsTable.locator("tbody tr").first().getByRole("link").first().click();
+  const runLink = firstRunRow.getByRole("link").first();
+  await expect(runLink).toBeVisible();
+  await runLink.click();
   await expect(page).toHaveURL(/\/calculations\/[0-9a-f-]+$/);
   await expect(page.getByRole("heading", { name: "Results" })).toBeVisible();
   await noViolations(page, "/calculations/:runId");
 
-  // Filter exceptions
+  // Item 12: Propose adjustments
+  const proposeBtn = page.getByRole("button", { name: "Propose adjustments" });
+  await expect(proposeBtn).toBeVisible();
+  await proposeBtn.click();
+  const proposalsRegion = page.getByRole("region", { name: "Proposed adjustments" });
+  await expect(proposalsRegion.getByText(/Compared \d+ item\(s\)/)).toBeVisible({ timeout: 30_000 });
+  await expect(
+    proposalsRegion
+      .getByRole("table", { name: "Proposed adjustments" })
+      .or(proposalsRegion.getByText("No adjustments proposed.")),
+  ).toBeVisible();
+
+  // Item 3: Filter exceptions, assert every row's Status & Exception code, open trace & expand
   await page.getByLabel("Status").selectOption("exception");
   const resultsTable = page.getByRole("table", { name: "Calculation results" });
-  await expect(resultsTable.or(page.getByText("No matching results."))).toBeVisible();
-
-  // Clear filter and open first result's trace
-  await page.getByLabel("Status").selectOption("");
   await expect(resultsTable).toBeVisible();
-  await resultsTable.locator("tbody tr").first().getByRole("link").first().click();
+  const exceptionRows = resultsTable.locator("tbody tr");
+  const exCount = await exceptionRows.count();
+  expect(exCount).toBeGreaterThanOrEqual(1);
+  for (let i = 0; i < exCount; i++) {
+    const row = exceptionRows.nth(i);
+    await expect(row.locator("td").nth(3)).toHaveText("Exception");
+    const exCode = (await row.locator("td").nth(4).innerText()).trim();
+    expect(exCode).not.toBe("");
+    expect(exCode).not.toBe("—");
+  }
+
+  const firstExLink = exceptionRows.first().getByRole("link").first();
+  await expect(firstExLink).toBeVisible();
+  await firstExLink.click();
   await expect(page).toHaveURL(/\/calculations\/results\/[0-9a-f-]+$/);
   await expect(page.getByRole("heading", { name: "Explain this number" })).toBeVisible();
   await noViolations(page, "/calculations/results/:resultId");
 
-  // Rebate tracker
+  const traceRegion = page.getByRole("region", { name: "Calculation trace" });
+  const collapseBtn = traceRegion.getByRole("button", { name: "Collapse all" });
+  if (await collapseBtn.isVisible()) {
+    await collapseBtn.click();
+  }
+  const firstExpander = traceRegion.locator("ul button[aria-expanded]").first();
+  await expect(firstExpander).toBeVisible();
+  await expect(firstExpander).toHaveAttribute("aria-expanded", "false");
+  await firstExpander.click();
+  await expect(firstExpander).toHaveAttribute("aria-expanded", "true");
+  await expect(firstExpander.locator("..").locator("ul li").first()).toBeVisible();
+
+  // Item 14: Rebate tracker with populated tracker row and ledger row
   await page
     .getByRole("navigation", { name: "Calculations" })
     .getByRole("link", { name: "Rebate tracker" })
     .click();
   await expect(page.getByRole("heading", { name: "Rebate tracker" })).toBeVisible();
+  await expect(page.getByRole("link", { name: "REB-VOLT-2026" }).first()).toBeVisible();
+  const accrualsTable = page.getByRole("table", { name: "Rebate accruals" });
+  await expect(accrualsTable).toBeVisible();
+  expect(await accrualsTable.locator("tbody tr").count()).toBeGreaterThanOrEqual(1);
   await noViolations(page, "/calculations/rebates");
 });

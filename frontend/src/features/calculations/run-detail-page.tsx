@@ -1,4 +1,5 @@
 import { useMutation, useQuery } from "@tanstack/react-query";
+import { useState } from "react";
 import { Link, useParams, useSearchParams } from "react-router-dom";
 
 import {
@@ -22,7 +23,7 @@ import {
   usePager,
   utc,
 } from "../masterdata/common";
-import { CalculationsNav, KeyValueGrid } from "./common";
+import { CalculationsNav, KeyValueGrid, ValidationDetailsAlert } from "./common";
 import {
   RESULT_STATUSES,
   RESULT_STATUS_LABELS,
@@ -46,6 +47,9 @@ export function RunDetailPage() {
   const manufacturerId = searchParams.get("manufacturer_id") ?? "";
   const agreementId = searchParams.get("agreement_id") ?? "";
 
+  const [exceptionInput, setExceptionInput] = useState(exceptionCode);
+  const [agreementInput, setAgreementInput] = useState(agreementId);
+
   const run = useQuery({
     queryKey: ["calculation-runs", runId],
     queryFn: () =>
@@ -56,11 +60,13 @@ export function RunDetailPage() {
     },
   });
 
+  const runStatus = run.data?.status;
   const results = useQuery({
     queryKey: [
       "calculation-runs",
       runId,
       "results",
+      runStatus,
       statusFilter,
       exceptionCode,
       manufacturerId,
@@ -127,6 +133,19 @@ export function RunDetailPage() {
     const next = new URLSearchParams(searchParams);
     if (value) next.set(key, value);
     else next.delete(key);
+    setSearchParams(next, { replace: true });
+    pager.reset();
+  }
+
+  function applyTextFilters(e: React.FormEvent) {
+    e.preventDefault();
+    const next = new URLSearchParams(searchParams);
+    const ex = exceptionInput.trim();
+    const ag = agreementInput.trim();
+    if (ex) next.set("exception_code", ex);
+    else next.delete("exception_code");
+    if (ag) next.set("agreement_id", ag);
+    else next.delete("agreement_id");
     setSearchParams(next, { replace: true });
     pager.reset();
   }
@@ -258,91 +277,107 @@ export function RunDetailPage() {
         )}
 
         <Card title="Results">
-          <div className="mb-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-            <SelectField
-              label="Status"
-              value={statusFilter}
-              onChange={(e) => setFilter("status", e.target.value)}
-            >
-              <option value="">All statuses</option>
-              {RESULT_STATUSES.map((s) => (
-                <option key={s} value={s}>
-                  {RESULT_STATUS_LABELS[s] ?? s}
-                </option>
-              ))}
-            </SelectField>
-            <Field
-              label="Exception code"
-              value={exceptionCode}
-              placeholder="e.g. price_mismatch"
-              onChange={(e) => setFilter("exception_code", e.target.value)}
-            />
-            <ManufacturerSelect
-              allowAny="All manufacturers"
-              value={manufacturerId}
-              onChange={(id) => setFilter("manufacturer_id", id)}
-            />
-            <Field
-              label="Agreement ID"
-              value={agreementId}
-              placeholder="UUID"
-              onChange={(e) => setFilter("agreement_id", e.target.value)}
-            />
+          <div className="mb-4 flex flex-col gap-3">
+            <div className="grid gap-3 sm:grid-cols-2">
+              <SelectField
+                label="Status"
+                value={statusFilter}
+                onChange={(e) => setFilter("status", e.target.value)}
+              >
+                <option value="">All statuses</option>
+                {RESULT_STATUSES.map((s) => (
+                  <option key={s} value={s}>
+                    {RESULT_STATUS_LABELS[s] ?? s}
+                  </option>
+                ))}
+              </SelectField>
+              <ManufacturerSelect
+                allowAny="All manufacturers"
+                value={manufacturerId}
+                onChange={(id) => setFilter("manufacturer_id", id)}
+              />
+            </div>
+
+            <form className="flex flex-wrap items-end gap-3" onSubmit={applyTextFilters}>
+              <div className="min-w-48 flex-1">
+                <Field
+                  label="Exception code"
+                  value={exceptionInput}
+                  placeholder="e.g. price_mismatch"
+                  onChange={(e) => setExceptionInput(e.target.value)}
+                />
+              </div>
+              <div className="min-w-56 flex-1">
+                <Field
+                  label="Agreement ID"
+                  value={agreementInput}
+                  placeholder="UUID"
+                  onChange={(e) => setAgreementInput(e.target.value)}
+                />
+              </div>
+              <Button type="submit" variant="secondary">
+                Apply
+              </Button>
+            </form>
           </div>
 
-          <DataTable
-            caption="Calculation results"
-            loading={results.isPending}
-            error={resultsErr}
-            rows={results.data?.data}
-            empty={
-              statusFilter || exceptionCode || manufacturerId || agreementId
-                ? "No matching results."
-                : "No results in this run."
-            }
-            columns={[
-              {
-                header: "Document",
-                cell: (r: ResultOut) => (
-                  <Link to={`/calculations/results/${r.id}`} className="text-brand underline">
-                    {r.document_number}
-                  </Link>
-                ),
-              },
-              { header: "Line", cell: (r) => r.line_number },
-              { header: "Invoice date", cell: (r) => r.invoice_date },
-              { header: "Status", cell: (r) => RESULT_STATUS_LABELS[r.status] ?? r.status },
-              { header: "Exception", cell: (r) => r.exception_code ?? "—" },
-              {
-                header: "Claim amount",
-                cell: (r) => (
-                  <span className="block text-right font-mono">{formatDecimal(r.claim_amount)}</span>
-                ),
-              },
-              {
-                header: "Unit amount",
-                cell: (r) => (
-                  <span className="block text-right font-mono">{formatDecimal(r.claim_unit_amount)}</span>
-                ),
-              },
-              {
-                header: "Eligible qty",
-                cell: (r) => (
-                  <span className="block text-right font-mono">{formatDecimal(r.eligible_quantity)}</span>
-                ),
-              },
-              {
-                header: "Excess qty",
-                cell: (r) => (
-                  <span className="block text-right font-mono">{formatDecimal(r.excess_quantity)}</span>
-                ),
-              },
-              {
-                header: "Flags",
-                cell: (r) => (r.flags.length ? r.flags.join(", ") : "—"),
-              },
-            ]}
-          />
+          {resultsErr ? (
+            <ValidationDetailsAlert error={resultsErr} />
+          ) : (
+            <DataTable
+              caption="Calculation results"
+              loading={results.isPending}
+              error={null}
+              rows={results.data?.data}
+              empty={
+                statusFilter || exceptionCode || manufacturerId || agreementId
+                  ? "No matching results."
+                  : "No results in this run."
+              }
+              columns={[
+                {
+                  header: "Document",
+                  cell: (r: ResultOut) => (
+                    <Link to={`/calculations/results/${r.id}`} className="text-brand underline">
+                      {r.document_number}
+                    </Link>
+                  ),
+                },
+                { header: "Line", cell: (r) => r.line_number },
+                { header: "Invoice date", cell: (r) => r.invoice_date },
+                { header: "Status", cell: (r) => RESULT_STATUS_LABELS[r.status] ?? r.status },
+                { header: "Exception", cell: (r) => r.exception_code ?? "—" },
+                {
+                  header: "Claim amount",
+                  cell: (r) => (
+                    <span className="block text-right font-mono">{formatDecimal(r.claim_amount)}</span>
+                  ),
+                },
+                {
+                  header: "Unit amount",
+                  cell: (r) => (
+                    <span className="block text-right font-mono">{formatDecimal(r.claim_unit_amount)}</span>
+                  ),
+                },
+                {
+                  header: "Eligible qty",
+                  cell: (r) => (
+                    <span className="block text-right font-mono">{formatDecimal(r.eligible_quantity)}</span>
+                  ),
+                },
+                {
+                  header: "Excess qty",
+                  cell: (r) => (
+                    <span className="block text-right font-mono">{formatDecimal(r.excess_quantity)}</span>
+                  ),
+                },
+                {
+                  header: "Flags",
+                  cell: (r) => (r.flags.length ? r.flags.join(", ") : "—"),
+                },
+              ]}
+            />
+          )}
           <PagerControls pager={pager} page={results.data?.page} />
         </Card>
 

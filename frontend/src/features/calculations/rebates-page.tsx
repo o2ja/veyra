@@ -1,18 +1,22 @@
 import { useQuery } from "@tanstack/react-query";
 import { useState } from "react";
-import { Link } from "react-router-dom";
+import { Link, useSearchParams } from "react-router-dom";
 
-import { Card, Empty, ErrorAlert, Field, Loading, PermissionDenied } from "../../components/ui";
+import { Button, Card, Empty, ErrorAlert, Field, Loading, PermissionDenied } from "../../components/ui";
 import { api } from "../../lib/api/client";
 import { ApiError, unwrap } from "../../lib/api/errors";
 import { DataTable, PagerControls, usePager } from "../masterdata/common";
-import { CalculationsNav } from "./common";
+import { CalculationsNav, ValidationDetailsAlert } from "./common";
 import { formatDecimal, type AccrualOut } from "./logic";
 
 export function RebatesPage() {
   const pager = usePager();
-  const [agreementFilter, setAgreementFilter] = useState("");
-  const [runFilter, setRunFilter] = useState("");
+  const [searchParams, setSearchParams] = useSearchParams();
+  const agreementFilter = searchParams.get("agreement_id") ?? "";
+  const runFilter = searchParams.get("run_id") ?? "";
+
+  const [agreementInput, setAgreementInput] = useState(agreementFilter);
+  const [runInput, setRunInput] = useState(runFilter);
 
   const tracker = useQuery({
     queryKey: ["rebate-tracker"],
@@ -51,6 +55,19 @@ export function RebatesPage() {
         <PermissionDenied />
       </>
     );
+  }
+
+  function applyFilters(e: React.FormEvent) {
+    e.preventDefault();
+    const next = new URLSearchParams(searchParams);
+    const ag = agreementInput.trim();
+    const rn = runInput.trim();
+    if (ag) next.set("agreement_id", ag);
+    else next.delete("agreement_id");
+    if (rn) next.set("run_id", rn);
+    else next.delete("run_id");
+    setSearchParams(next, { replace: true });
+    pager.reset();
   }
 
   return (
@@ -180,76 +197,81 @@ export function RebatesPage() {
         </Card>
 
         <Card title="Accrual ledger">
-          <div className="mb-4 grid gap-3 sm:grid-cols-2">
-            <Field
-              label="Agreement ID"
-              value={agreementFilter}
-              placeholder="UUID"
-              onChange={(e) => {
-                setAgreementFilter(e.target.value);
-                pager.reset();
-              }}
-            />
-            <Field
-              label="Run ID"
-              value={runFilter}
-              placeholder="UUID"
-              onChange={(e) => {
-                setRunFilter(e.target.value);
-                pager.reset();
-              }}
-            />
-          </div>
+          <form className="mb-4 flex flex-wrap items-end gap-3" onSubmit={applyFilters}>
+            <div className="min-w-56 flex-1">
+              <Field
+                label="Agreement ID"
+                value={agreementInput}
+                placeholder="UUID"
+                onChange={(e) => setAgreementInput(e.target.value)}
+              />
+            </div>
+            <div className="min-w-56 flex-1">
+              <Field
+                label="Run ID"
+                value={runInput}
+                placeholder="UUID"
+                onChange={(e) => setRunInput(e.target.value)}
+              />
+            </div>
+            <Button type="submit" variant="secondary">
+              Apply
+            </Button>
+          </form>
 
-          <DataTable
-            caption="Rebate accruals"
-            loading={accruals.isPending}
-            error={accrualsErr}
-            rows={accruals.data?.data}
-            empty="No rebate accrual entries."
-            columns={[
-              {
-                header: "Agreement",
-                cell: (a: AccrualOut) => (
-                  <Link to={`/agreements/${a.agreement_id}`} className="text-brand underline">
-                    {a.external_number}
-                  </Link>
-                ),
-              },
-              { header: "As of", cell: (a) => a.as_of_date },
-              { header: "Period", cell: (a) => `${a.period_start} – ${a.period_end}` },
-              {
-                header: "Prior accrued",
-                cell: (a) => (
-                  <span className="block text-right font-mono">
-                    {formatDecimal(a.prior_cumulative_accrued)}
-                  </span>
-                ),
-              },
-              {
-                header: "Delta",
-                cell: (a) => <span className="block text-right font-mono">{formatDecimal(a.delta)}</span>,
-              },
-              {
-                header: "Cumulative earned",
-                cell: (a) => (
-                  <span className="block text-right font-mono">{formatDecimal(a.cumulative_earned)}</span>
-                ),
-              },
-              {
-                header: "Flags",
-                cell: (a) => (a.flags.length ? a.flags.join(", ") : "—"),
-              },
-              {
-                header: "Run",
-                cell: (a) => (
-                  <Link to={`/calculations/${a.run_id}`} className="font-mono text-xs text-brand underline">
-                    {a.run_id.slice(0, 8)}
-                  </Link>
-                ),
-              },
-            ]}
-          />
+          {accrualsErr ? (
+            <ValidationDetailsAlert error={accrualsErr} />
+          ) : (
+            <DataTable
+              caption="Rebate accruals"
+              loading={accruals.isPending}
+              error={null}
+              rows={accruals.data?.data}
+              empty="No rebate accrual entries."
+              columns={[
+                {
+                  header: "Agreement",
+                  cell: (a: AccrualOut) => (
+                    <Link to={`/agreements/${a.agreement_id}`} className="text-brand underline">
+                      {a.external_number}
+                    </Link>
+                  ),
+                },
+                { header: "As of", cell: (a) => a.as_of_date },
+                { header: "Period", cell: (a) => `${a.period_start} – ${a.period_end}` },
+                {
+                  header: "Prior accrued",
+                  cell: (a) => (
+                    <span className="block text-right font-mono">
+                      {formatDecimal(a.prior_cumulative_accrued)}
+                    </span>
+                  ),
+                },
+                {
+                  header: "Delta",
+                  cell: (a) => <span className="block text-right font-mono">{formatDecimal(a.delta)}</span>,
+                },
+                {
+                  header: "Cumulative earned",
+                  cell: (a) => (
+                    <span className="block text-right font-mono">{formatDecimal(a.cumulative_earned)}</span>
+                  ),
+                },
+                {
+                  header: "Flags",
+                  cell: (a) => (a.flags.length ? a.flags.join(", ") : "—"),
+                },
+                {
+                  header: "Run",
+                  cell: (a) => (
+                    <Link to={`/calculations/${a.run_id}`} className="font-mono text-xs text-brand underline">
+                      {a.run_id.slice(0, 8)}
+                    </Link>
+                  ),
+                },
+              ]}
+            />
+          )}
           <PagerControls pager={pager} page={accruals.data?.page} />
         </Card>
       </div>

@@ -5,7 +5,6 @@ import {
   formatEvidenceLocation,
   formatExtractionValue,
   groupAndSortFields,
-  isFieldFlagged,
   parseExtractionResult,
   type ExtractionFieldView,
 } from "./logic";
@@ -36,19 +35,6 @@ test("groupAndSortFields groups critical fields before other fields", () => {
   expect(grouped.other.map((f) => f.key)).toEqual(["notes", "header.priority"]);
 });
 
-test("isFieldFlagged detects reasons and pass status mismatches", () => {
-  expect(isFieldFlagged(field({}))).toBe(false);
-  expect(isFieldFlagged(field({ reasons: ["pass_conflict"] }))).toBe(true);
-  expect(
-    isFieldFlagged(
-      field({
-        pass_a: { status: "matched", value: "A", reasons: [], evidence: null },
-        pass_b: { status: "conflict", value: "B", reasons: ["diff"], evidence: null },
-      }),
-    ),
-  ).toBe(true);
-});
-
 test("formatEvidenceLocation formats page, sheet, and cell", () => {
   expect(formatEvidenceLocation(null)).toBe("");
   expect(formatEvidenceLocation({ page: 3, sheet: null, cell: null })).toBe("Page 3");
@@ -67,9 +53,40 @@ test("confidenceText and formatExtractionValue render plain text", () => {
   expect(formatExtractionValue({ a: 1 })).toBe('{"a":1}');
 });
 
-test("parseExtractionResult validates shape", () => {
+test("parseExtractionResult accepts valid result and rejects malformed shapes", () => {
   expect(parseExtractionResult(null)).toBeNull();
   expect(parseExtractionResult({ foo: "bar" })).toBeNull();
+  expect(
+    parseExtractionResult({
+      fields: [],
+      blocking: [],
+      needs_acknowledgement: [],
+      indicators: [],
+      notes: { a: "not-an-array", b: [] },
+      unresolved: {},
+    }),
+  ).toBeNull();
+  expect(
+    parseExtractionResult({
+      fields: [],
+      blocking: "nope",
+      needs_acknowledgement: [],
+      indicators: [],
+      notes: { a: [], b: [] },
+      unresolved: {},
+    }),
+  ).toBeNull();
+  expect(
+    parseExtractionResult({
+      fields: [],
+      blocking: [],
+      needs_acknowledgement: [],
+      indicators: [],
+      notes: { a: [], b: [] },
+      unresolved: [],
+    }),
+  ).toBeNull();
+
   const valid = parseExtractionResult({
     agreement_type: "spa",
     blocking: [],

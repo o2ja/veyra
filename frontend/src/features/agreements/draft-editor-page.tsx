@@ -37,10 +37,17 @@ import {
   intOrRaw,
 } from "./logic";
 
-/** Disabled controls cannot take focus; focus their label/row wrapper instead so read-only reviewers still land on the field. */
+/** Disabled controls cannot take focus; focus their own label or row instead (never the wrapping fieldset), with temporary tabIndex. */
 function focusEl(el: HTMLElement) {
-  const t = el.matches(":disabled") ? ((el.closest("label, fieldset, tr") as HTMLElement | null) ?? el) : el;
-  if (t !== el) t.tabIndex = -1;
+  let t: HTMLElement = el;
+  if (el.matches(":disabled")) {
+    const label = el.id ? document.querySelector<HTMLElement>(`label[for="${CSS.escape(el.id)}"]`) : null;
+    t = label ?? (el.closest("label, td, tr") as HTMLElement | null) ?? el;
+  }
+  if (t !== el && !t.hasAttribute("tabindex")) {
+    t.tabIndex = -1;
+    t.addEventListener("blur", () => t.removeAttribute("tabindex"), { once: true });
+  }
   t.focus();
   t.scrollIntoView({ block: "center" });
 }
@@ -1156,7 +1163,10 @@ function DraftEditorForm({ initial }: { initial: DraftOut }) {
   const [draft, setDraft] = useState<DraftOut>(initial);
   const [payload, setPayload] = useState<Payload>(() => payloadFromDraft(initial.payload));
   const [changeSummary, setChangeSummary] = useState("");
-  const [dirty, setDirty] = useState(false);
+  const [dirty, setDirty] = useState(() => {
+    const p = payloadFromDraft(initial.payload);
+    return JSON.stringify(p) !== JSON.stringify(viewPayload(p));
+  });
   const [staleConflict, setStaleConflict] = useState(false);
   const [itemsPage, setItemsPage] = useState(1);
   const pendingFocusRef = useRef<string | null>(null);
@@ -1168,6 +1178,7 @@ function DraftEditorForm({ initial }: { initial: DraftOut }) {
 
   const editable = draft.status === "draft" && can("agreement.draft");
   const view = useMemo(() => viewPayload(payload), [payload]);
+  const missingDefaults = useMemo(() => JSON.stringify(payload) !== JSON.stringify(view), [payload, view]);
 
   useEffect(() => {
     if (!dirty || !editable) return;
@@ -1195,9 +1206,10 @@ function DraftEditorForm({ initial }: { initial: DraftOut }) {
   }, [itemsPage]);
 
   function applyServerDraft(fresh: DraftOut) {
+    const nextPayload = payloadFromDraft(fresh.payload);
     setDraft(fresh);
-    setPayload(payloadFromDraft(fresh.payload));
-    setDirty(false);
+    setPayload(nextPayload);
+    setDirty(JSON.stringify(nextPayload) !== JSON.stringify(viewPayload(nextPayload)));
     setStaleConflict(false);
     setAcknowledgedWarnings(new Set());
     approveKeyRef.current = null;
@@ -1226,7 +1238,7 @@ function DraftEditorForm({ initial }: { initial: DraftOut }) {
         api.PUT("/api/v1/agreement-drafts/{draft_id}", {
           params: { path: { draft_id: draftId }, header: { "if-match": `"${draft.revision}"` } },
           body: {
-            payload: payload as unknown as Record<string, unknown>,
+            payload: (missingDefaults ? view : payload) as unknown as Record<string, unknown>,
             change_summary: orNull(changeSummary),
           },
         }),
@@ -1499,6 +1511,11 @@ function DraftEditorForm({ initial }: { initial: DraftOut }) {
                   }}
                 />
               </div>
+              {missingDefaults && (
+                <p className="text-xs text-muted">
+                  Some fields were missing and show defaults; save to store them.
+                </p>
+              )}
               {dirty && (
                 <p className="text-xs text-muted">
                   Save your edits before running Validate or Submit so the server checks the latest values.

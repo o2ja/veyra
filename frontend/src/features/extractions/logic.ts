@@ -20,11 +20,21 @@ export const EXTRACTION_STATUS_LABELS: Record<string, string> = {
   failed: "Failed",
 };
 
+function isPlainObj(v: unknown): v is Record<string, unknown> {
+  return v !== null && typeof v === "object" && !Array.isArray(v);
+}
+
 export function parseExtractionResult(
   raw: Record<string, unknown> | null | undefined,
 ): ExtractionResult | null {
-  if (!raw || typeof raw !== "object" || Array.isArray(raw)) return null;
+  if (!isPlainObj(raw)) return null;
   if (!Array.isArray(raw.fields)) return null;
+  if (!Array.isArray(raw.blocking)) return null;
+  if (!Array.isArray(raw.needs_acknowledgement)) return null;
+  if (!Array.isArray(raw.indicators)) return null;
+  if (!isPlainObj(raw.notes)) return null;
+  if (!Array.isArray(raw.notes.a) || !Array.isArray(raw.notes.b)) return null;
+  if (!isPlainObj(raw.unresolved)) return null;
   return raw as unknown as ExtractionResult;
 }
 
@@ -39,12 +49,6 @@ export function groupAndSortFields(fields: ExtractionFieldView[]): {
     else other.push(f);
   }
   return { critical, other };
-}
-
-export function isFieldFlagged(field: ExtractionFieldView): boolean {
-  if (field.reasons.length > 0) return true;
-  if (field.pass_a && field.pass_b && field.pass_a.status !== field.pass_b.status) return true;
-  return false;
 }
 
 export function confidenceText(confidence: string | null | undefined): string {
