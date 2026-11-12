@@ -20,17 +20,17 @@ from fastapi import FastAPI
 from sqlalchemy import Engine, text
 
 from rebate.core.db import transaction
-from rebate.modules.claims import frozen, persistence, runs
+from rebate.modules.claims import persistence, runs
 from tests.conftest import DbUrls
 from tests.integration.agreements_support import create, member, payload
 from tests.integration.calc_support import (
     SCENARIOS,
-    FixtureClaims,
     activate_all,
     all_settings,
+    claim_and_submit,
     create_run,
     import_sales,
-    line_ids,
+    import_sales_part,
     open_workspace,
     results,
     run,
@@ -45,6 +45,7 @@ NOW = datetime(
 )  # business date 2026-07-10 (America/Chicago): the ground-truth run date
 SPA_NAMES = ("SPA-VOLT-2026-884", "SPA-VOLT-2026-901", "SPA-BRIT-2026-031", "SPA-COPR-2026-107")
 CALC = truth("expected_calculation.json")
+FIX7 = [f"{x['invoice_no']}/{x['line_no']}" for x in truth("claim_batches_fixture.json")["lines"]]
 WINDOW = {"date_from": "2026-01-01", "date_to": "2026-12-31"}
 
 
@@ -74,41 +75,22 @@ def calc(env: Env) -> Scenario:
     ws = open_workspace(env.app, env.stack)
     all_settings(ws)
     versions = activate_all(ws, SPA_NAMES)
-    import_sales(ws)
+    import_sales_part(ws, late=False)
     return Scenario(ws, versions)
 
 
-@pytest.fixture
-def claimed(calc: Scenario, admin_engine: Engine, monkeypatch: pytest.MonkeyPatch) -> FixtureClaims:
-    """The submitted batch CB-VOLT-2026-06 as S7 will provide it (precondition of SC-09r)."""
-    v = calc.versions["SPA-VOLT-2026-884"]
-    source = FixtureClaims(
-        line_ids(admin_engine, calc.ws.tenant_id),
-        agreement_id=v["agreement_id"],
-        version_id=v["id"],
-        manufacturer_id=uuid.UUID(calc.ws.manufacturers["VOLT"]),
-    )
-    monkeypatch.setattr(frozen, "source", source)
-    return source
-
-
 @pytest.fixture(scope="module")
-def baseline(calc: Scenario, admin_engine: Engine) -> dict[str, Any]:
-    """The reference run of the scenario file (run date 2026-07-10), with the claimed batch in place."""
-    v = calc.versions["SPA-VOLT-2026-884"]
-    source = FixtureClaims(
-        line_ids(admin_engine, calc.ws.tenant_id),
-        agreement_id=v["agreement_id"],
-        version_id=v["id"],
-        manufacturer_id=uuid.UUID(calc.ws.manufacturers["VOLT"]),
-    )
-    previous, frozen.source = frozen.source, source
-    try:
-        r = run(calc.ws, **WINDOW)
-        assert r["status"] == "completed", r
-        return {"run": r, "results": results(calc.ws, r["id"])}
-    finally:
-        frozen.source = previous
+def baseline(calc: Scenario) -> dict[str, Any]:
+    """The reference run of the scenario file (run date 2026-07-10), with the ground-truth batch CB-VOLT-2026-06
+    claimed and submitted for real (precondition of SC-09r): a first run finds the claimable lines, the batch
+    freezes them, the second run is the reference."""
+    first = run(calc.ws, **WINDOW)
+    assert first["status"] == "completed", first
+    claim_and_submit(calc.ws, results(calc.ws, first["id"]), FIX7)
+    import_sales_part(calc.ws, late=True)  # CN-5002 arrives after INV-10021/1 was claimed (SC-09r)
+    r = run(calc.ws, **WINDOW)
+    assert r["status"] == "completed", r
+    return {"run": r, "results": results(calc.ws, r["id"]), "first": first}
 
 
 # ---- ground-truth scenarios ---------------------------------------------------------------------------------
@@ -167,7 +149,7 @@ def test_run_resource_pins_inputs_and_totals(baseline: dict[str, Any], calc: Sce
     assert Decimal(totals["adjustment_amount"]) == adjusted == Decimal("-50.00")  # SC-09r
 
 
-def test_rerun_is_byte_identical(baseline: dict[str, Any], calc: Scenario, claimed: FixtureClaims) -> None:
+def test_rerun_is_byte_identical(baseline: dict[str, Any], calc: Scenario) -> None:
     again = run(calc.ws, **WINDOW)
     assert again["id"] != baseline["run"]["id"] and again["status"] == "completed"
     for key in ("input_checksum", "config_hash"):
@@ -186,7 +168,7 @@ def test_rerun_is_byte_identical(baseline: dict[str, Any], calc: Scenario, claim
 
 
 def test_windowed_execution_is_identical_to_a_single_window(
-    baseline: dict[str, Any], calc: Scenario, claimed: FixtureClaims, monkeypatch: pytest.MonkeyPatch
+    baseline: dict[str, Any], calc: Scenario, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """One date per engine call (the memory bound for million-line runs): the cap state is carried between windows, so
     results, trace hashes, totals and the input checksum equal the single-window run (SC-07a/b share a cap)."""
@@ -416,47 +398,6 @@ def test_agreements_with_release_2_rules_cannot_be_activated(calc: Scenario) -> 
         draft = create(calc.ws.api, payload=body)
         errors = {(e["field"], e["code"]) for e in draft["validation"]["errors"]}
         assert (field, "not_supported_until_release_2") in errors, errors
-
-
-# ---- recalculation proposals (S5.3, wired to claim lines in S7) ---------------------------------------------
-
-
-def test_recalculation_proposals_against_frozen_claims(
-    calc: Scenario, admin_engine: Engine, baseline: dict[str, Any], monkeypatch: pytest.MonkeyPatch
-) -> None:
-    ws = calc.ws
-    v = calc.versions["SPA-VOLT-2026-884"]
-    ids = line_ids(admin_engine, ws.tenant_id)
-    source = FixtureClaims(
-        ids,
-        v["agreement_id"],
-        v["id"],
-        uuid.UUID(ws.manufacturers["VOLT"]),
-        amounts={"INV-10001/1": "2300.00"},  # claimed 2300.00 but the run says 2200.00
-        extra={"INV-10002/1": "500.00"},  # claimed 500.00 on a line that is now price_mismatch
-    )
-    monkeypatch.setattr(frozen, "source", source)
-    rid = baseline["run"]["id"]
-    out = ws.api.post(f"/calculation-runs/{rid}/propose-adjustments").json()
-    # BUSINESS_LOGIC §9.3 by hand: eligible and different -> new - frozen = 2200.00 - 2300.00 = -100.00;
-    # now an exception -> -frozen = -500.00; equal amounts (the other claimed lines) -> no action.
-    by_result = {a["calculation_result_id"]: a for a in out["proposed"]}
-    first, second = baseline["results"]["INV-10001/1"]["id"], baseline["results"]["INV-10002/1"]["id"]
-    assert Decimal(by_result[first]["amount"]) == Decimal("-100.00")
-    assert Decimal(by_result[second]["amount"]) == Decimal("-500.00")
-    assert len(out["proposed"]) == 2 and out["compared"] >= 2
-    assert all(
-        a["status"] == "proposed" and a["adjustment_type"] == "agreement_change" for a in out["proposed"]
-    )
-    again = ws.api.post(f"/calculation-runs/{rid}/propose-adjustments").json()
-    assert again["proposed"] == []  # idempotent per (claim line, type, run)
-    monkeypatch.setattr(frozen, "source", frozen.NoFrozenClaims())
-    none = ws.api.post(f"/calculation-runs/{rid}/propose-adjustments").json()
-    assert none == {
-        "run_id": rid,
-        "compared": 0,
-        "proposed": [],
-    }  # until S7: no claim lines, nothing to compare
 
 
 def test_no_floats_in_the_claims_module() -> None:

@@ -6,7 +6,8 @@ DATABASE_SCHEMA.md §3.8; BUSINESS_LOGIC.md §5.5, §7, §9.3. No new table (RLS
   a rebate claim line has an accrual entry, no calculation result.
 - ``claim_adjustments``: composite FK ``claim_line_id -> claim_lines``; new ``rebate_accrual_entry_id`` (composite FK)
   for ``rebate_clawback`` (set exactly for that type, amount negative, one clawback per entry); ``included`` exactly
-  when ``included_in_batch_id`` is set; approved/included carry approver and time. The S5 one-proposal-per-run index
+  when ``included_in_batch_id`` is set; approved/included carry approver and time (a rejection records its actor in the audit log only);
+  return reversals are negative and, like agreement changes, name their claim line. The S5 one-proposal-per-run index
   gains ``calculation_result_id``: several partial returns of one original in one run are separate proposals.
 - Adjustment trigger: ``included`` only from ``approved``, only into a ``draft`` batch of the same manufacturer; an
   included adjustment returns to ``approved`` only when its batch is ``void``. Frozen with a submitted batch.
@@ -16,13 +17,13 @@ DATABASE_SCHEMA.md §3.8; BUSINESS_LOGIC.md §5.5, §7, §9.3. No new table (RLS
 
 Forward-only like the rest of the chain (no downgrade functions).
 
-Revision ID: 20261116_0900_claim_adjustments_wiring
+Revision ID: 20261116_0900_adjustments_wiring
 Revises: 20261115_0920_claim_lines
 """
 
 from alembic import op
 
-revision = "20261116_0900_claim_adjustments_wiring"
+revision = "20261116_0900_adjustments_wiring"
 down_revision = "20261115_0920_claim_lines"
 branch_labels = None
 depends_on = None
@@ -55,7 +56,16 @@ def upgrade() -> None:
     )
     op.execute(
         "ALTER TABLE claim_adjustments ADD CONSTRAINT ck_claim_adjustments_approval CHECK "
-        "((status IN ('approved', 'included')) = (approved_by IS NOT NULL AND approved_at IS NOT NULL))"
+        "(CASE WHEN status IN ('approved', 'included') THEN approved_by IS NOT NULL AND approved_at IS NOT NULL "
+        "WHEN status = 'proposed' THEN approved_by IS NULL AND approved_at IS NULL ELSE true END)"
+    )
+    op.execute(
+        "ALTER TABLE claim_adjustments ADD CONSTRAINT ck_claim_adjustments_claim_line CHECK "
+        "(adjustment_type NOT IN ('return_reversal', 'agreement_change') OR claim_line_id IS NOT NULL)"
+    )
+    op.execute(
+        "ALTER TABLE claim_adjustments ADD CONSTRAINT ck_claim_adjustments_return_negative CHECK "
+        "(adjustment_type <> 'return_reversal' OR amount < 0)"
     )
     op.execute(
         "CREATE UNIQUE INDEX uq_claim_adjustments_clawback ON claim_adjustments (tenant_id, rebate_accrual_entry_id) "

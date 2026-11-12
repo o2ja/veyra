@@ -32,9 +32,14 @@ latest AS (
     ORDER BY r.sales_document_line_id, cr.completed_at DESC, r.id DESC
 )
 """
+# claimed = the line or any earlier version of it (a re-import supersedes the claimed version) is in an active claim
+# line: the new version must not be claimed a second time (BUSINESS_LOGIC.md §9.4); it gets an adjustment instead.
 UNCLAIMED = (
-    "NOT EXISTS (SELECT 1 FROM claim_lines c WHERE c.tenant_id = l.tenant_id "
-    "AND c.sales_document_line_id = l.sales_document_line_id AND c.released_at IS NULL)"
+    "NOT EXISTS (WITH RECURSIVE anc(id) AS (SELECT l.sales_document_line_id "
+    "UNION SELECT p.id FROM sales_document_lines p JOIN anc ON p.superseded_by_id = anc.id "
+    "AND p.tenant_id = l.tenant_id) "
+    "SELECT 1 FROM claim_lines c WHERE c.tenant_id = l.tenant_id "
+    "AND c.sales_document_line_id IN (SELECT id FROM anc) AND c.released_at IS NULL)"
 )
 COLUMNS = (
     "l.id, l.run_id, l.sales_document_line_id, l.document_number, l.line_number, l.invoice_date, "

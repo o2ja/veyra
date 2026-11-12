@@ -17,7 +17,6 @@ from dataclasses import dataclass
 from datetime import UTC, datetime
 from decimal import Decimal
 from typing import Any
-from uuid import UUID
 
 import pytest
 from fastapi import FastAPI
@@ -25,16 +24,13 @@ from openpyxl import load_workbook  # type: ignore[import-untyped]
 from sqlalchemy import Connection, Engine, text
 from sqlalchemy.exc import DBAPIError
 
-from rebate.modules.claims import frozen
 from rebate.modules.files import storage
 from tests.conftest import DbUrls
 from tests.integration.agreements_support import member
 from tests.integration.calc_support import (
-    FixtureClaims,
     activate_all,
     all_settings,
-    import_sales,
-    line_ids,
+    import_sales_part,
     open_workspace,
     results,
     run,
@@ -81,24 +77,12 @@ class Scenario:
 
 @pytest.fixture(scope="module")
 def sc(env: Env, admin_engine: Engine) -> Scenario:
-    """The scenario month, calculated once (the ground-truth batch is the claimed precondition of SC-09r, so the
-    reference run uses the same frozen-claims stand-in as the S5 tests; no ``claim_lines`` exist yet)."""
+    """The scenario month, calculated once, before anything is claimed."""
     ws = open_workspace(env.app, env.stack)
     all_settings(ws)
     versions = activate_all(ws, SPA_NAMES)
-    import_sales(ws)
-    v = versions["SPA-VOLT-2026-884"]
-    source = FixtureClaims(
-        line_ids(admin_engine, ws.tenant_id),
-        agreement_id=v["agreement_id"],
-        version_id=v["id"],
-        manufacturer_id=UUID(ws.manufacturers["VOLT"]),
-    )
-    previous, frozen.source = frozen.source, source
-    try:
-        r = run(ws, **WINDOW)
-    finally:
-        frozen.source = previous
+    import_sales_part(ws, late=False)
+    r = run(ws, **WINDOW)
     assert r["status"] == "completed", r
     res = results(ws, r["id"])
     mfr = {k: x["manufacturer_id"] for k, x in res.items() if x["status"] == "eligible"}

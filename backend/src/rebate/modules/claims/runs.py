@@ -353,6 +353,7 @@ def _calculate(
                     db,
                     tenant_id,
                     ingestion.sales_line_ids(db, tenant_id, group, scope.date_from, scope.date_to, cutoff),
+                    cutoff,
                 )
             )
         for d_from, d_to in windows:
