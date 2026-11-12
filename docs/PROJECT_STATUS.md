@@ -37,9 +37,12 @@ Multi-agent waves (worktree branches, orchestrator merges). Resume point:
 - S4 frontend handed to an external agent (Antigravity/Gemini) on branch `ui/s4` (worktree `D:eyraeyra-ui-s4`):
   brief `docs/reports/notes/ui-brief-s4.md`, prompt `antigravity-prompt-s4.md`, report expected at
   `ui-report-s4.md`. Orchestrator verifies + reviews before merge. (S3 frontend was already merged in #5.)
-- **Resume point (2026-11-12 early):** done: S4 backend #6, S6 backend #8, S5 runs #7 merged (main 5fbce94: 1623
-  passed, isolation 332, negative control OK). Next: S4 UI PR #11 (re-review) and #10 (ExtractionResult schema) →
-  S5/S6 UI hand-off briefs → integration, perf, docs, QA pass → batch report. Owner decisions D1–D3: overnight log.
+- **Resume point (2026-11-12 morning):** merged #10 (ExtractionResult schema) and #11 (S4 UI; e2e per-test client
+  IP fix). D1/D3 documented (BUSINESS_LOGIC §5.3/§12, roadmap Release 2 list). Running: Antigravity on `ui/s5-s6`
+  (worktree `D:/veyra/veyra-ui-s5s6`, prompt `docs/reports/notes/antigravity-prompt-s5-s6.md`); Claude agents E1
+  `e1-d2-spa-lines` (D2), E2 `e2-s3-integration` (S3 gaps + e2e integration + AI-suggest UI), E3 `e3-perf-docs`
+  (briefs `docs/reports/notes/briefs/E*.md`). Next: financial review of E1, merge E1–E3, S3–S6 batch report, then
+  S7 (day 1), S8+S9 (day 2), S10+S11 code (day 3). Deadline 2026-11-15.
 - Claim window (owner 2026-11-11): `month_end` for SPA lines (last day of the claim-date month), `period_end` for
   rebates only (measurement period end); replaces the earlier orchestrator definition.
 - Open engine rules (raise instead of guessing): `cap_scope=per_agreement`, `tier_metric=quantity`,

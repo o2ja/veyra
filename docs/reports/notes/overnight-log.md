@@ -1,14 +1,12 @@
 # Overnight log (2026-11-11/12, unattended)
 
 ## MORNING SUMMARY
-1. Completed and merged: S4 backend (#6, before tonight); #9 amendment-rename guard + CI retry; S6 backend (#8); S5 runs (#7). Main 5fbce94: 1623 passed, isolation 332, negative control OK.
-2. In progress: S4 UI PR #11 (`ui/s4`, fixes after review FAIL, e2e green locally; re-review pending); PR #10 ExtractionResult schema (for the S6 UI).
-3. Blocked / needs decision (rule 4 — not decided by me):
-   - D1 rebate tiers/rates when an amendment splits a measurement period with different terms (BUSINESS_LOGIC §9.2 says pre-amendment lines stay under v1a; how tier volume combines is undefined). Interim: run refused (422 `split_period_terms_need_decision`).
-   - D2 an SPA line that becomes outside_claim_window/cap_exhausted drops out of the rebate SPA-line count (literal §5.4) — intended?
-   - D3 one manufacturer `claim_window_basis` serves SPA; rebates always use period end + days. OK?
-4. Failures/findings: main CI c0dfeae backend job failed on flaky `test_register_timing` (34% > 25%, docs-only commit; same code green at 99dc074) → rerun.
-5. Resume (usage ~97%): (a) PR #11 ui/s4 — review pass 2 serious fixed by me (row add/remove keeps raw rows); needs CI green + a short 3rd look, then merge; minors left: missing keys show defaults but are not stored, read-only focus lands on the fieldset. (b) PR #10 ExtractionResult schema: CI then merge. (c) S5/S6 UI hand-off ready: docs/reports/notes/ui-brief-s5-s6.md + antigravity-prompt-s5-s6.md; create worktree `git worktree add D:/veyra/veyra-ui-s5s6 -b ui/s5-s6 main` after #10/#11 merge. (d) then integration, perf, docs, QA pass, final batch report. Follow-ups: S6 3 minors, sweep re-seed, ManufacturerSettingsIn.variance_tolerance accepts a JSON number (float at a money boundary, S3).
+1. Merged 2026-11-12: #10 ExtractionResult schema, #11 S4 UI (CI e2e fix: per-test client IP; register limit 5/h/IP was hit by the 6th spec).
+2. Owner decisions applied: D1 (refusal kept; Release 2 candidate), D3 (one claim-window setting; Release 2 candidate) in docs; D2 → agent E1.
+3. Running: Antigravity `ui/s5-s6`; E1 D2, E2 S3 gaps + integration, E3 perf + docs.
+4. Logged minors (S4 UI): manual-draft keys missing from a server payload show defaults but are not stored until edited; read-only focus may land on the wrapping fieldset instead of the field label.
+5. D2 MERGED #12 (6371b5e): independent financial review PASS (all GL-R5 + integration values re-derived; no ground-truth change needed). Follow-ups (minor): GL-R5 'mismatch' lines in engine tests carry no SPA result (only the integration test proves price_mismatch is excluded); §14 lists only the first GL-R5 test's values; pre-existing: SPA signals only cover the run's date range while the rebate reads the whole period, so a narrow run can leave in-period SPA lines unsignalled.
+6. Resume: PROJECT_STATUS §3.
 
 ## Log
 - Step 0: ui/s4 WIP committed+pushed (85b3a19). No other worktree had uncommitted work. S4 merged on main (99dc074, CI green); c0dfeae timing flake rerun.
