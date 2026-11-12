@@ -20,11 +20,15 @@ Feature folder `frontend/src/features/agreements/` (merged S4 UI):
 ## Folders
 - **May edit:** `frontend/src/features/calculations/**` and `frontend/src/features/extractions/**` (new),
   `routes.tsx`/`app-layout.tsx` (route + nav lines), the preview panel hook-in inside
-  `features/agreements/draft-editor-page.tsx` (one section, no other changes there), the "Suggest with AI"
-  result handling in `features/imports/import-detail-page.tsx` (that block only),
+  `features/agreements/draft-editor-page.tsx` (one section, no other changes there),,
   `frontend/e2e/calculations*.spec.ts`, `frontend/e2e/extractions*.spec.ts`, `docs/reports/notes/ui-report-s5-s6.md`.
 - **Must not touch:** `backend/`, `migrations/`, `infra/`, `testdata/`, `.github/`, `docs/` (except your report),
   `frontend/src/api/` (generated), `package.json`/lockfile (no new dependencies), other feature folders.
+  `features/imports/**` and `features/masterdata/**` belong to another agent working in parallel (read-only for you).
+- Branch `ui/s5-s6`, worktree `D:eyraeyra-ui-s5s6`, based on main `e152d78` (client in sync with the API;
+  CI `api-contract` green). Another agent will regenerate `frontend/src/api/` on main (import row errors, reason
+  codes: no S5/S6 types change). Never regenerate it yourself; the orchestrator merges main into your branch if needed.
+- e2e: `e2e/support.ts` gives every test its own client IP (per-IP register limit); keep importing it.
 
 ## Rules (CLAUDE.md §10 + project rules)
 1. Generated client and types only; never hand-write API types. Untyped `trace`/`totals`/`scope` objects are
@@ -108,9 +112,7 @@ installed and none may be added): record it as a gap, do not fake it.**
 ### 8. AI usage — `/extractions/usage` (data.read)
 `GET /ai/usage` → `UsageOut{enabled, model, today:UsageToday, daily[UsageDay]}` table.
 
-### 9. Import mapping suggestion — existing "Suggest with AI" button (ai.use)
-On 200 `MappingOut{mapping, model, prompt_version, source}`: show the suggested column mapping for the user to
-apply (button "Apply suggestion"), never auto-save. 409/503 messages as returned.
+### 9. Import mapping suggestion — not yours (moved to the imports owner; same file as their work).
 
 ## Verify (run as you go and all at the end; from `frontend/`)
 - once: `npm ci`; then `npm run lint` · `npm run typecheck` · `npx vitest run src/features/calculations
