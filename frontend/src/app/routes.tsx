@@ -30,6 +30,11 @@ import { ManufacturerDetailPage, ManufacturersPage } from "../features/masterdat
 import { ProductDetailPage, ProductsPage } from "../features/masterdata/products-pages";
 import { UnmappedPage } from "../features/masterdata/unmapped-page";
 import { UomPage } from "../features/masterdata/uom-page";
+import { AgreementsPage } from "../features/agreements/agreements-page";
+import { AgreementDetailPage } from "../features/agreements/agreement-detail-page";
+import { DraftEditorPage } from "../features/agreements/draft-editor-page";
+import { DraftsPage } from "../features/agreements/drafts-page";
+import { VersionDetailPage, VersionDiffPage } from "../features/agreements/version-pages";
 import { AppLayout } from "./app-layout";
 import { RequirePermission, RequireSession } from "./guards";
 import { RouteError } from "./route-error";
@@ -170,6 +175,13 @@ export const routes: RouteObject[] = [
       guarded("master-data/uom", "data.read", <UomPage />),
       guarded("master-data/branches", "data.read", <BranchesPage />),
       guarded("master-data/unmapped", "masterdata.write", <UnmappedPage />),
+      // S4: agreements and drafts
+      guarded("agreements", "data.read", <AgreementsPage />),
+      guarded("agreements/versions/:versionId", "data.read", <VersionDetailPage />),
+      guarded("agreements/versions/:versionId/diff/:otherVersionId", "data.read", <VersionDiffPage />),
+      guarded("agreements/:agreementId", "data.read", <AgreementDetailPage />),
+      guarded("agreement-drafts", "data.read", <DraftsPage />),
+      guarded("agreement-drafts/:draftId", "data.read", <DraftEditorPage />),
     ],
   },
 ];

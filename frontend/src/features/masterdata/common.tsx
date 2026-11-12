@@ -1,5 +1,12 @@
 import { useQuery } from "@tanstack/react-query";
-import { type ReactNode, type SelectHTMLAttributes, useId, useState } from "react";
+import {
+  Children,
+  type ReactElement,
+  type ReactNode,
+  type SelectHTMLAttributes,
+  useId,
+  useState,
+} from "react";
 import { NavLink } from "react-router-dom";
 
 import { Button, Empty, ErrorAlert, Loading } from "../../components/ui";
@@ -112,15 +119,23 @@ export function SelectField({
   children,
   ...props
 }: SelectHTMLAttributes<HTMLSelectElement> & { label: string; children: ReactNode }) {
-  const id = useId();
+  const generated = useId();
+  const id = props.id ?? generated; // a caller's id must also be the label's target
+  const known = Children.toArray(children).map((c) =>
+    String((c as ReactElement<{ value?: unknown }>).props?.value),
+  );
+  const v = props.value;
+  const odd = v !== undefined && v !== null && String(v) !== "" && !known.includes(String(v));
   return (
     <div className="flex flex-col gap-1">
       <label htmlFor={id} className="text-sm font-medium">
         {label}
       </label>
-      <select id={id} className="rounded-md border border-line bg-panel px-3 py-2 text-sm" {...props}>
+      <select className="rounded-md border border-line bg-panel px-3 py-2 text-sm" {...props} id={id}>
+        {odd && <option value={String(v)}>{String(v)}</option>}
         {children}
       </select>
+      {odd && <p className="text-xs text-danger">Unsupported value &quot;{String(v)}&quot; — fix or keep.</p>}
     </div>
   );
 }

@@ -39,7 +39,8 @@ export const Field = forwardRef<HTMLInputElement, FieldProps>(function Field(
   { label, error, hint, ...props },
   ref,
 ) {
-  const id = useId();
+  const generated = useId();
+  const id = props.id ?? generated; // a caller's id must also be the label's target
   const describedBy = [error ? `${id}-error` : null, hint ? `${id}-hint` : null].filter(Boolean).join(" ");
   return (
     <div className="flex flex-col gap-1">
