@@ -8,16 +8,16 @@ import { KeyValueGrid, TraceTree, ValidationDetailsAlert } from "./common";
 import { RESULT_STATUS_LABELS, formatDecimal, type DraftPreviewLine } from "./logic";
 
 export function DraftPreviewPanel({ draftId }: { draftId: string }) {
-  const [limitInput, setLimitInput] = useState("200");
+  const [limitInput, setLimitInput] = useState("");
   const [limitError, setLimitError] = useState<string | null>(null);
   const [expandedLineId, setExpandedLineId] = useState<string | null>(null);
 
   const preview = useMutation({
-    mutationFn: (limit: number) =>
+    mutationFn: (limit: number | undefined) =>
       unwrap(
         api.POST("/api/v1/agreement-drafts/{draft_id}/preview-calculation", {
           params: { path: { draft_id: draftId } },
-          body: { limit },
+          body: limit === undefined ? undefined : { limit },
         }),
       ),
   });
@@ -27,6 +27,11 @@ export function DraftPreviewPanel({ draftId }: { draftId: string }) {
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     const trimmed = limitInput.trim();
+    if (trimmed === "") {
+      setLimitError(null);
+      preview.mutate(undefined); // optional (API_SPECIFICATION): the server applies its own default
+      return;
+    }
     if (!/^-?\d+$/.test(trimmed)) {
       setLimitError("Enter a whole number.");
       return;

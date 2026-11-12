@@ -1175,6 +1175,10 @@ function DraftEditorForm({ initial }: { initial: DraftOut }) {
   const [rejectReason, setRejectReason] = useState("");
   const [actionMsg, setActionMsg] = useState<string | null>(null);
   const approveKeyRef = useRef<{ revision: number; key: string } | null>(null);
+  const draftRevisionRef = useRef(draft.revision);
+  useEffect(() => {
+    draftRevisionRef.current = draft.revision;
+  }, [draft.revision]);
 
   const editable = draft.status === "draft" && can("agreement.draft");
   const view = useMemo(() => viewPayload(payload), [payload]);
@@ -1264,6 +1268,8 @@ function DraftEditorForm({ initial }: { initial: DraftOut }) {
         }),
       ),
     onSuccess: (fresh) => {
+      // a response for an older revision (a save landed while this validate was in flight) must not overwrite the draft
+      if (fresh.revision < draftRevisionRef.current) return;
       setDraft(fresh);
       client.setQueryData(["agreement-drafts", draftId], fresh);
     },
