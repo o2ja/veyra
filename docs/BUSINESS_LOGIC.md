@@ -267,7 +267,7 @@ For each original line the adapter supplies the engine with: `returned_quantity 
 |---|---|---|
 | Original **not yet claimed** | Computed on `q − returned_quantity` (net). Trace shows netting. Fully returned (net ≤ 0) → `not_applicable` / `no_claim_due`, amount 0 | `netted`, amount 0 |
 | Original **claimed** (submitted) | Unchanged (frozen) | `adjustment`: amount `= −(prior_claimed unit amount × |returned qty|)`, rounded per line with the prior claim's `mode`/`scale` (§6); becomes a `return_reversal` adjustment proposal |
-| Original claimed but manufacturer `allow_negative_claims = false` | — | Adjustment is held as `proposed` and flagged "cannot be net-claimed; discuss with manufacturer" |
+| Original claimed but manufacturer `allow_negative_claims = false` | — | Adjustment is held as `proposed` and flagged "cannot be net-claimed; discuss with manufacturer". It is never approved or auto-included (409 `cannot_net_claim`; the manufacturer's current setting decides). A claim batch whose total is ≤ 0 is refused (422 `batch_total_not_positive`) unless the manufacturer has `allow_negative_claims` (owner decision 2026-11-12) |
 | Return exceeds original quantity | — | Exception `return_exceeds_original` |
 
 **Example S8 (claimed, then returned).** Original q=100, claimed 2,200.00; 15 units returned 45 days later → adjustment `−15 × 22.00 = −330.00`. Quantity-cap consumption is reduced by 15.
