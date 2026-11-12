@@ -36,5 +36,4 @@ tolerance read as max(5 %, $5), integer Hungarian weights recorded as decisions.
 - **Owner decision (§10.3 gap):** a confirmed match with `paid = 0` and no rejection code fits no row of the table;
   the package raises `UnclassifiableVariance` (fail closed). Recommendation: `short_paid` for the full amount with
   reason `short_paid_unexplained`.
-- Independent financial review (re-derive the golden values) required before merge.
 - Interface consumer: S8 reconciliation module (remittance ingestion, persistence, workbench API) — next agent.
