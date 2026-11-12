@@ -38,7 +38,11 @@ Multi-agent waves (worktree branches, orchestrator merges). Resume point:
 - S4 frontend handed to an external agent (Antigravity/Gemini) on branch `ui/s4` (worktree `D:eyraeyra-ui-s4`):
   brief `docs/reports/notes/ui-brief-s4.md`, prompt `antigravity-prompt-s4.md`, report expected at
   `ui-report-s4.md`. Orchestrator verifies + reviews before merge. (S3 frontend was already merged in #5.)
-- **Resume point (2026-11-12 cut-off, usage limit):** see `docs/reports/notes/resume-prompt.md` (open PRs #15 S7 core, #16 S5/S6 UI; agents F2/G1/H1 to relaunch from briefs).
+- **S3–S6 batch complete (2026-11-12):** #16 S5/S6 UI merged (c41e448); report `docs/reports/S3_S6_BATCH_REPORT.md`
+  (full suite 1630 passed; S5 sign-off is the owner's).
+- **Resume point (2026-11-12 afternoon):** PR #15 S7 core (gated on F2 `s7-adjustments`, financial review running);
+  PR #17 S8 matching (financial review: no discrepancy; findings fixed); PR #18 S11 ops (CI + security review);
+  S7 UI with Antigravity on `ui/s7` (brief `docs/reports/notes/ui-brief-s7.md` on that branch).
 - Earlier (2026-11-12 midday): merged #12 D2 (financial review PASS), #13 S3 gaps + end-to-end
   integration (all 23 scenarios + GL-R1a/R1b/R2/R3 match ground truth), #14 perf baselines
   (`docs/reports/PERFORMANCE_BASELINES.md`: import 1M 1372 s, calc 1M 762 s, eligible=0 caveat). S5/S6 UI
