@@ -65,6 +65,11 @@ TENANT_TABLES: dict[str, str] = {
     "claim_export_templates": "tenant_id",
     "claim_batches": "tenant_id",
     "claim_lines": "tenant_id",
+    # S8 reconciliation
+    "remittance_documents": "tenant_id",
+    "remittance_lines": "tenant_id",
+    "remittance_extraction_staging": "tenant_id",
+    "reconciliation_matches": "tenant_id",
     # S6 AI extraction
     "document_extractions": "tenant_id",
     "ai_invocations": "tenant_id",
@@ -87,6 +92,7 @@ class TenantData:
     s5: dict[str, UUID] = field(default_factory=dict)  # one row id per S5 tenant table
     s6: dict[str, UUID] = field(default_factory=dict)  # one row id per S6 tenant table
     s7: dict[str, UUID] = field(default_factory=dict)  # one row id per S7 tenant table
+    s8: dict[str, UUID] = field(default_factory=dict)  # one row id per S8 tenant table
 
 
 @dataclass
@@ -148,6 +154,7 @@ def _tenant(conn: Connection, name: str, admin_email: str) -> TenantData:
     data.s5 = _s5_rows(conn, tid, admin, data.s3, data.s4)
     data.s6 = _s6_rows(conn, tid, admin, fid)
     data.s7 = _s7_rows(conn, tid, admin, data.s3, data.s4, data.s5)
+    data.s8 = _s8_rows(conn, tid, admin, fid, data.s3, data.s7)
     data.s5["adj"] = data.s7.pop("adj")  # a proposal needs its claim line (S7.4 FK), so S7 inserts it
     conn.execute(
         text(
@@ -304,6 +311,31 @@ def _s7_rows(
         "INSERT INTO claim_adjustments (tenant_id, id, manufacturer_id, adjustment_type, claim_line_id, "
         "calculation_result_id, run_id, amount, reason) VALUES (:t, :adj, :mfr, 'agreement_change', :line, :res, "
         ":run, -1, 'iso')",
+    ):
+        conn.execute(text(sql), p)
+    return ids
+
+
+def _s8_rows(
+    conn: Connection, t: UUID, user: UUID, file_id: UUID, s3: dict[str, UUID], s7: dict[str, UUID]
+) -> dict[str, UUID]:
+    """One row in each S8 tenant table: an accepted remittance (1.00, one line, one staging row) with a suggested
+    match to the S7 claim line (the document is accepted in the same transaction, as the real flow does)."""
+    ids = {k: new_id() for k in ("doc", "rline", "stg", "match")}
+    p = {"t": t, "u": user, "mfr": s3["mfr"], "file": file_id, "line": s7["line"], **ids}
+    for sql in (
+        "INSERT INTO remittance_documents (tenant_id, id, manufacturer_id, file_id, doc_type, channel, "
+        "document_number, total_amount, created_by) VALUES (:t, :doc, :mfr, :file, 'credit_memo', 'credit_memo', "
+        "'CM-ISO', 1, :u)",
+        "INSERT INTO remittance_extraction_staging (tenant_id, id, remittance_document_id, line_number, "
+        "amount_paid) VALUES (:t, :stg, :doc, 1, 1)",
+        "INSERT INTO remittance_lines (tenant_id, id, remittance_document_id, line_number, amount_paid) "
+        "VALUES (:t, :rline, :doc, 1, 1)",
+        "UPDATE remittance_documents SET status = 'accepted', accepted_by = :u, accepted_at = now() "
+        "WHERE tenant_id = :t AND id = :doc",
+        "INSERT INTO reconciliation_matches (tenant_id, id, match_id, remittance_line_id, claim_line_id, "
+        "allocated_amount, method, evidence, status) VALUES (:t, :match, :match, :rline, :line, 1, 'manual', "
+        "'{}', 'suggested')",
     ):
         conn.execute(text(sql), p)
     return ids
