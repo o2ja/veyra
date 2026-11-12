@@ -100,7 +100,8 @@ def _audit(
 
 
 def view(doc: RemittanceDocument) -> dict[str, Any]:
-    return {
+    """The audited facts of a document; money and dates as text (the audit log is JSON)."""
+    out: dict[str, Any] = {
         "manufacturer_id": doc.manufacturer_id,
         "file_id": doc.file_id,
         "doc_type": doc.doc_type,
@@ -112,6 +113,7 @@ def view(doc: RemittanceDocument) -> dict[str, Any]:
         "status": doc.status,
         "extraction_id": doc.extraction_id,
     }
+    return {k: v if v is None or isinstance(v, str | int) else str(v) for k, v in out.items()}
 
 
 # ---- reads --------------------------------------------------------------------------------------------------

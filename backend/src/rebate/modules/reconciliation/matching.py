@@ -396,10 +396,10 @@ def _doc_of_line(db: Session, tenant_id: UUID, remittance_line_id: UUID) -> UUID
 
 def match_audit(rows: Sequence[ReconciliationMatch], status: str) -> dict[str, Any]:
     return {
-        "remittance_line_id": rows[0].remittance_line_id,
+        "remittance_line_id": str(rows[0].remittance_line_id),
         "method": rows[0].method,
         "status": status,
-        "allocated_amount": sum((r.allocated_amount for r in rows), ZERO),
+        "allocated_amount": str(sum((r.allocated_amount for r in rows), ZERO)),
     }
 
 

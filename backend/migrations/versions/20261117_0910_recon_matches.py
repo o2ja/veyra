@@ -8,7 +8,8 @@ DATABASE_SCHEMA.md §3.9; BUSINESS_LOGIC.md §10.2. Tenant table: composite FKs,
   finalisation), against a claim line / adjustment of the remittance's manufacturer.
 - A ``suggested`` row may become ``confirmed`` or ``rejected`` (once; the actor and time are set with it) and may be
   deleted (a re-run replaces suggestions). ``confirmed`` and ``rejected`` rows never change or go away.
-- Invariant in the database: per remittance line, the confirmed allocations sum to at most ``amount_paid``.
+- Invariant in the database (checked at commit, so a claim and its negative adjustment allocation can be written in
+  any order): per remittance line, the confirmed allocations sum to at most ``amount_paid``.
 
 - ``ai_invocations.purpose`` also allows ``remittance_pass`` and ``remittance_repair`` (the PDF remittance extraction
   calls the same AI gateway; the CHECK is the only change to the extraction tables).
@@ -183,7 +184,8 @@ def upgrade() -> None:
         "FOR EACH ROW EXECUTE FUNCTION fn_reconciliation_match_change()"
     )
     op.execute(
-        "CREATE TRIGGER trg_reconciliation_matches_within_paid AFTER INSERT OR UPDATE ON reconciliation_matches "
+        "CREATE CONSTRAINT TRIGGER trg_reconciliation_matches_within_paid AFTER INSERT OR UPDATE "
+        "ON reconciliation_matches DEFERRABLE INITIALLY DEFERRED "
         "FOR EACH ROW EXECUTE FUNCTION fn_reconciliation_match_within_paid()"
     )
     op.execute(
