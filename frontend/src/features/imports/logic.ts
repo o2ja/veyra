@@ -69,3 +69,14 @@ export function cleanDefaults(mapping: Mapping, defaults: Record<string, string>
 
 /** "unit_price" -> "Unit price". */
 export const label = (field: string) => (field.charAt(0).toUpperCase() + field.slice(1)).replaceAll("_", " ");
+
+/** An AI suggestion limited to this import's fields and the file's real columns (the model may name anything).
+ * It only pre-fills the form; the user still applies and saves it. */
+export function usableSuggestion(fields: FieldOut[], headers: string[], suggested: Mapping): Mapping {
+  return Object.fromEntries(
+    fields.map((f) => {
+      const col = suggested[f.name];
+      return [f.name, col && headers.includes(col) ? col : null];
+    }),
+  );
+}

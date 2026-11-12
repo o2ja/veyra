@@ -33,10 +33,12 @@ def test_one_million_lines_calculation(app: FastAPI, clk: FakeClock, admin_engin
         ws = open_workspace(app, stack)
         all_settings(ws)
         activate_all(ws, ("SPA-VOLT-2026-884",))
+        ti = time.perf_counter()
         batch = start(ws, _seed_clean_file(ws, admin_engine, path), "sales")
         if batch["needs_mapping"]:
             batch = map_suggested(ws, batch)
         done = confirm(ws, batch)
+        print(f"\nPERF import rows={expected} {time.perf_counter() - ti:.1f}s peak_rss={_rss_mb():.0f}MB")
         assert done["status"] == "completed" and done["counts"]["inserted"] == expected, done
         rss0, t0 = _rss_mb(), time.perf_counter()
         r = run(ws, date_from="2000-01-01", date_to="2100-12-31")

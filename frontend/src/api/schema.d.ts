@@ -4052,8 +4052,11 @@ export interface components {
             external_code: string;
             /** External Text */
             external_text?: string | null;
-            /** Reason Code */
-            reason_code: string;
+            /**
+             * Reason Code
+             * @enum {string}
+             */
+            reason_code: "rejected_agreement_expired" | "rejected_customer_ineligible" | "rejected_product_ineligible" | "rejected_price_mismatch" | "rejected_duplicate_claim" | "rejected_outside_claim_window" | "rejected_missing_documentation" | "rejected_quantity_exceeds_authorization" | "rejected_uom_mismatch" | "rejected_other" | "short_paid_unexplained" | "unpaid_no_remittance" | "overpaid" | "unmatched_payment" | "source_changed" | "unknown";
         };
         /** ReasonCodeMappingList */
         ReasonCodeMappingList: {
@@ -4071,8 +4074,11 @@ export interface components {
              * Format: uuid
              */
             id: string;
-            /** Reason Code */
-            reason_code: string;
+            /**
+             * Reason Code
+             * @enum {string}
+             */
+            reason_code: "rejected_agreement_expired" | "rejected_customer_ineligible" | "rejected_product_ineligible" | "rejected_price_mismatch" | "rejected_duplicate_claim" | "rejected_outside_claim_window" | "rejected_missing_documentation" | "rejected_quantity_exceeds_authorization" | "rejected_uom_mismatch" | "rejected_other" | "short_paid_unexplained" | "unpaid_no_remittance" | "overpaid" | "unmatched_payment" | "source_changed" | "unknown";
         };
         /** ReasonCodeMappingsIn */
         ReasonCodeMappingsIn: {
@@ -4321,6 +4327,34 @@ export interface components {
              * @enum {string}
              */
             timing: "per_line" | "per_document";
+        };
+        /** RowErrorList */
+        RowErrorList: {
+            /** Data */
+            data: components["schemas"]["RowErrorOut"][];
+            page: components["schemas"]["Page"];
+        };
+        /** RowErrorOut */
+        RowErrorOut: {
+            /** Code */
+            code: string;
+            /** Column Name */
+            column_name: string | null;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Message */
+            message: string;
+            /** Raw */
+            raw: {
+                [key: string]: string;
+            } | null;
+            /** Row Number */
+            row_number: number | null;
+            /** Severity */
+            severity: string;
         };
         /** RunAccepted */
         RunAccepted: {
@@ -7770,7 +7804,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": unknown;
+                    "application/json": components["schemas"]["RowErrorList"];
                     "text/csv": unknown;
                 };
             };

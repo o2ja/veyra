@@ -270,7 +270,7 @@ Same pipeline as W3: structural validation (headers, required columns), row vali
 
 ### W6 AI extraction
 - WK `extract_agreement`: text extraction → (OCR if no text layer) → AI gateway (two independent passes) → schema validation → evidence verification → deterministic validators → `agreement_drafts` (status `draft`, source `ai_extraction`) + `document_extractions` (full record).
-- AI: structured extraction only. No eligibility or amount decisions.
+- AI: structured extraction only. No eligibility or amount decisions. Built in S6: gateway with per-tenant opt-in and daily cost/token caps, ledger in `ai_invocations`, OCR only for pages without text; import mapping suggestion is a synchronous call, not a job. Provider access is unresolved (OD-2): tests use recorded responses only.
 - Failures: provider outage/timeouts → retry with backoff → `extraction.status = failed`, draft not created, UI offers manual entry; invalid JSON → one repair attempt then fail; hidden-text injection patterns flagged; unverifiable fields left empty and marked `unsupported`.
 
 ### W7 Human review and approval
@@ -280,7 +280,7 @@ Same pipeline as W3: structural validation (headers, required columns), row vali
 
 ### W8 Claims calculation
 - FE: Claims → New run (manufacturer(s), period, as-of). BE: creates `calculation_runs` (status `queued`, pinned inputs recorded) and enqueues `run_calculation`.
-- WK: advisory lock on (tenant, scope) → load lines and active versions as of → call `rebate_engine.calculate_*` per line/agreement group → batch insert `calculation_results` (+ `rebate_accrual_entries`) → mark run `completed`, store totals and checksums.
+- WK: advisory lock on (tenant, scope) → load lines and active versions as of, in invoice-date windows of at most `WINDOW_LINES` (50,000) lines (whole dates, cap state carried between windows; bounds memory) → call `rebate_engine.calculate_*` per window, SPA before rebates → batch insert `calculation_results` (+ `rebate_accrual_entries`) → mark run `completed`, store totals and checksums.
 - Failures: crash mid-run → run `failed`, partial results discarded (results are written in a single run-scoped transaction per chunk and marked `run_status` only at completion; incomplete runs are invisible to claim building); concurrent run → 409.
 
 ### W9 Claim generation

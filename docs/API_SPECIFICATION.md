@@ -116,7 +116,7 @@ Legend: **R** = roles allowed (A admin, P approver, N analyst, V viewer). Writes
 |---|---|
 | `GET/POST /manufacturers`, `GET/PATCH /manufacturers/{id}` | read all; write A P N |
 | `GET/PUT /manufacturers/{id}/settings` (claim window, dispute window, tolerance, conflict policy) | read all; write A P |
-| `GET/PUT /manufacturers/{id}/reason-code-mappings` | A P N |
+| `GET/PUT /manufacturers/{id}/reason-code-mappings` (`reason_code` = published enum of the BUSINESS_LOGIC §10.3 list; unlisted → 422 `mappings.N.reason_code`) | A P N |
 | `GET/POST /customers`, `GET/PATCH /customers/{id}`, `POST /customers/{id}/aliases` | A P N |
 | `GET/POST /products`, `GET/PATCH /products/{id}`, `POST /products/{id}/aliases` | A P N |
 | `GET/POST/PUT/DELETE /uom-conversions` | A P N |
@@ -134,7 +134,7 @@ Legend: **R** = roles allowed (A admin, P approver, N analyst, V viewer). Writes
 | `PUT /imports/{id}/mapping` | Set mapping (optionally save as template) | A P N |
 | `POST /imports/{id}/suggest-mapping` | AI suggestion (needs `ai_processing_enabled`, else 409 `ai_not_enabled`): headers + at most 5 masked sample rows go to the model; synchronous **200** `{mapping, source, model, prompt_version}` with a bounded time budget (503 `ai_unavailable` on any provider failure, 429 `rate_limited` per workspace) | A P N |
 | `POST /imports/{id}/confirm` | Load valid rows `{accept_partial: bool}` → 202 | A P N |
-| `GET /imports/{id}/errors` (+`?format=csv`) | Row errors | all |
+| `GET /imports/{id}/errors` (+`?format=csv`) | Row errors (JSON schema `RowErrorList` published) | all |
 | `GET /imports/{id}/changes` | Changed source rows report | all |
 | `GET /sales-lines`, `GET /sales-lines/{id}` | Browse normalised source lines (filters: manufacturer, customer, date range, claim status) | all |
 | `GET /purchase-lines` | | all |

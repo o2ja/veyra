@@ -245,4 +245,7 @@ jobs:
         run: python3 infra/scripts/check-no-skips.py frontend/junit-e2e.xml
       - name: logs on failure
         if: failure()
-        run: tail -n 200 api.log worker.log vite.log
+        run: |
+          tail -n 200 api.log worker.log vite.log
+          # page snapshot of each failed test (no artifacts are uploaded)
+          find frontend/test-results -name error-context.md -exec sh -c 'echo "== $1"; head -c 20000 "$1"' _ {} \;

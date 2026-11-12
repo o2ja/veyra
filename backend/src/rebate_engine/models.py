@@ -259,6 +259,9 @@ class VolumeLine:
     quantity: Decimal  # signed
     spa_reference: str | None = None
     spa_eligible: bool = False  # eligible under an SPA agreement in the same run (§5.4)
+    spa_exception_signal: bool = (
+        False  # SPA result outside_claim_window / cap_exhausted in the same run (§5.4, D2)
+    )
 
 
 @dataclass(frozen=True, slots=True, kw_only=True)
