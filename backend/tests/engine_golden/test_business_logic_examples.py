@@ -14,10 +14,22 @@ from rebate_engine.models import (
     SpaRunInput,
     Status,
     UomConversion,
+    VolumeLine,
 )
 from rebate_engine.rebate import CLAWBACK, calculate_accrual
 from rebate_engine.spa import PARTIALLY_ELIGIBLE, calculate_spa, propose_recalculation
-from tests.engine_golden.builders import HALF_UP_2, D, item, line, mfr, rebate, spa_rules, version, vline
+from tests.engine_golden.builders import (
+    HALF_UP_2,
+    D,
+    item,
+    line,
+    mfr,
+    rebate,
+    spa_rules,
+    step,
+    version,
+    vline,
+)
 
 RUN = date(2026, 7, 10)
 
@@ -335,6 +347,67 @@ def test_gl_r3_qualify_only_exclude_boundary() -> None:
     b = calculate_accrual(rebate(volume_basis="sales", spa_lines="exclude"), edge, date(2026, 12, 31), D(0))
     assert (b.tier_number, b.earned_cumulative) == (1, D("14999.99"))
     assert b.trace["steps"][1]["step"] == "tier"  # type: ignore[index,call-overload]
+
+
+def _d2_lines() -> list[VolumeLine]:
+    return [
+        vline("plain", "1000000"),
+        vline("late", "100000", spa_exception_signal=True),  # SPA result outside_claim_window
+        vline("capped", "50000", spa_exception_signal=True),  # SPA result cap_exhausted
+        vline("mismatch", "20000"),  # SPA result price_mismatch: no signal, NOT an SPA line
+    ]
+
+
+def test_gl_r5_d2_exception_signals_include_exclude_qualify_only() -> None:
+    """BUSINESS_LOGIC 5.4 (owner decision D2). Tiers 0 -> 1.5%, 1,000,000 -> 2.5%, retroactive, sales basis.
+    SPA lines: late 100,000 + capped 50,000 = 150,000. Non-SPA: plain 1,000,000 + mismatch 20,000 = 1,020,000.
+    include: V_q = V_p = 1,170,000 -> tier 2 -> 1,170,000 x 0.025 = 29,250.00
+    exclude: V_q = V_p = 1,020,000 -> tier 2 -> 1,020,000 x 0.025 = 25,500.00
+    qualify_only: V_q = 1,170,000 -> tier 2; V_p = 1,020,000 -> 1,020,000 x 0.025 = 25,500.00"""
+    asof = date(2026, 12, 31)
+    inc = calculate_accrual(rebate(volume_basis="sales", spa_lines="include"), _d2_lines(), asof, D(0))
+    assert (inc.qualifying_volume, inc.payout_volume, inc.earned_cumulative) == (
+        D(1170000),
+        D(1170000),
+        D("29250.00"),
+    )
+    ex = calculate_accrual(rebate(volume_basis="sales", spa_lines="exclude"), _d2_lines(), asof, D(0))
+    assert (ex.qualifying_volume, ex.payout_volume, ex.earned_cumulative) == (
+        D(1020000),
+        D(1020000),
+        D("25500.00"),
+    )
+    qo = calculate_accrual(rebate(volume_basis="sales", spa_lines="qualify_only"), _d2_lines(), asof, D(0))
+    assert (qo.qualifying_volume, qo.payout_volume, qo.tier_number, qo.earned_cumulative) == (
+        D(1170000),
+        D(1020000),
+        2,
+        D("25500.00"),
+    )
+    signals = {s["line_id"]: s for s in step(ex, "volume")["spa_line_signals"]}
+    assert sorted(signals) == ["capped", "late"]  # price_mismatch line is not recorded as an SPA line
+    assert signals["late"] == {
+        "line_id": "late",
+        "spa_reference": False,
+        "spa_eligible": False,
+        "spa_exception_signal": True,
+    }
+
+
+def test_gl_r5_d2_exception_signal_moves_the_tier() -> None:
+    """Boundary: plain 900,000 + late 100,000 (outside_claim_window). exclude -> V = 900,000 -> tier 1 ->
+    900,000 x 0.015 = 13,500.00; qualify_only -> V_q = 1,000,000 (inclusive bound) -> tier 2, V_p = 900,000 ->
+    900,000 x 0.025 = 22,500.00; a price_mismatch line (no signal) in place of late is plain volume: exclude -> V = 1,000,000 -> tier 2 ->
+    1,000,000 x 0.025 = 25,000.00."""
+    asof = date(2026, 12, 31)
+    lines = [vline("plain", "900000"), vline("late", "100000", spa_exception_signal=True)]
+    ex = calculate_accrual(rebate(volume_basis="sales", spa_lines="exclude"), lines, asof, D(0))
+    assert (ex.tier_number, ex.earned_cumulative) == (1, D("13500.00"))
+    qo = calculate_accrual(rebate(volume_basis="sales", spa_lines="qualify_only"), lines, asof, D(0))
+    assert (qo.tier_number, qo.earned_cumulative) == (2, D("22500.00"))
+    other = [vline("plain", "900000"), vline("mismatch", "100000")]
+    ex2 = calculate_accrual(rebate(volume_basis="sales", spa_lines="exclude"), other, asof, D(0))
+    assert (ex2.tier_number, ex2.earned_cumulative) == (2, D("25000.00"))
 
 
 def test_gl_r4_incremental_vs_retroactive() -> None:
