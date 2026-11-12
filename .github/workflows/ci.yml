@@ -169,6 +169,8 @@ jobs:
       - run: docker build --target static -t rebate-frontend:ci frontend
       - name: production compose file is valid (placeholders only)
         run: docker compose --env-file .env.prod.example -f infra/docker/compose.prod.yml --profile ops config -q
+      - name: trusted proxy IP matches caddy's address on the api network
+        run: python3 infra/scripts/check-proxy-config.py .env.prod.example infra/docker/compose.prod.yml
       - name: Caddyfile is valid
         run: >
           docker run --rm -e APP_DOMAIN=localhost -e S3_DOMAIN=files.localhost -v "$PWD/infra/caddy:/etc/caddy:ro"

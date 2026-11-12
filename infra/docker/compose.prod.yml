@@ -157,9 +157,9 @@ services:
       timeout: 3s
       retries: 3
     networks:
-      internal: {}
-      edge:
-        ipv4_address: 172.30.0.2  # fixed so TRUSTED_PROXY_IPS can name it
+      internal:
+        ipv4_address: 172.30.1.2  # the address the api SEES as TCP peer; TRUSTED_PROXY_IPS must be exactly this
+      edge: {}
 
   # One-off, not part of `up`: `docker compose ... --profile ops run --rm migrate` (owner credentials live only here)
   migrate:
@@ -177,6 +177,9 @@ services:
 networks:
   internal:
     internal: true
+    ipam:
+      config:
+        - subnet: 172.30.1.0/24
   edge:
     ipam:
       config:
