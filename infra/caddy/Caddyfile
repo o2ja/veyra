@@ -15,7 +15,15 @@
 		max_size 60MB
 	}
 	handle /api/* {
-		reverse_proxy api:8000
+		# Client IP (core/clientip.py): Caddy has no trusted_proxies, so it records the TCP peer it saw
+		# (a Cloudflare edge address when the request came through Cloudflare) as the only X-Forwarded-For
+		# hop; any client-sent value is discarded. CF-Connecting-IP passes through unchanged and the API
+		# honours it only when that peer is in CLOUDFLARE_IP_RANGES.
+		# Origin lock (operator step, runbooks/cloudflare-ip-update.md): the host firewall allows 443
+		# only from Cloudflare ranges, and/or Authenticated Origin Pulls (mTLS) is enabled.
+		reverse_proxy api:8000 {
+			header_up X-Forwarded-For {remote_host}
+		}
 	}
 	handle {
 		root * /srv/frontend
