@@ -43,8 +43,10 @@ class BatchTotalNotPositive(ValidationFailed):
     message = "A claim batch must claim a positive amount."
 
 
-def _require_positive(total: Decimal) -> None:
-    if total <= 0:
+def _require_positive(db: Session, tenant_id: UUID, manufacturer_id: UUID, total: Decimal) -> None:
+    """Owner decision 2026-11-12: a batch totalling <= 0 is refused unless the manufacturer accepts negative claims."""
+    rows = masterdata.manufacturer_settings_rows(db, tenant_id, [manufacturer_id])
+    if total <= 0 and not (rows and rows[0].allow_negative_claims):
         raise BatchTotalNotPositive(
             details=[
                 {
@@ -397,7 +399,7 @@ def create(db: Session, who: Who, body: s.BatchIn) -> ClaimBatch:
     )
     lines_total = sum((Decimal(r.delta if rebate else r.claim_amount) for r in rows), Decimal(0))
     total = lines_total + adjustments.total(included)
-    _require_positive(total)
+    _require_positive(db, t, body.manufacturer_id, total)
     now = clock.now()
     batch = ClaimBatch(
         tenant_id=t,
@@ -460,7 +462,6 @@ def submit(db: Session, who: Who, batch_id: UUID, submitted_at: date, external_r
         raise InvalidState("The batch was already submitted with other details.")
     if b.status != "approved":
         raise InvalidState("Only an approved batch can be submitted.")
-    _require_positive(b.total_amount)
     if submitted_at > _today(db, who.tenant_id):
         raise ValidationFailed(
             details=[_problem("submitted_at", "in_future", "The submission date cannot be in the future.")]
