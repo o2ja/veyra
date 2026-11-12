@@ -1,6 +1,6 @@
 # Project Status
 
-> Living document. Updated at the end of every stage and whenever a decision, risk or known issue changes. Last updated: 2026-11-11.
+> Living document. Updated at the end of every stage and whenever a decision, risk or known issue changes. Last updated: 2026-11-12.
 
 ## 1. Current position
 
@@ -63,11 +63,11 @@ S5/S6 UI, then S7 onwards per `DEVELOPMENT_ROADMAP.md` / `IMPLEMENTATION_PLAN.md
 
 | ID | Decision | Status | Needed before |
 |---|---|---|---|
-| OD-1 | First vertical: electrical (recommended, ADR-019) vs HVAC | PROPOSED | S3 (affects UoM/terminology defaults; low switching cost) |
-| OD-2 | LLM provider and data-handling terms (ADR-012) | PROPOSED | S6, and before any real document is processed |
-| OD-3 | Production PostgreSQL hosting (self-managed vs managed Postgres) (ADR-023) | PROPOSED | S11 (earlier if a pilot needs hosting) |
-| OD-4 | Hosting provider and region (ADR-023) | PROPOSED | S11 |
-| OD-5 | Release 2 scope and ordering | UNRESOLVED | After S11 |
+| OD-1 | First vertical: electrical (recommended, ADR-019) vs HVAC | APPROVED (owner 2026-11-12) | S3 (affects UoM/terminology defaults; low switching cost) |
+| OD-2 | LLM provider and data-handling terms (ADR-012) | DEFERRED (owner 2026-11-12: not now; S6/S8 use recorded fixtures) | S6, and before any real document is processed |
+| OD-3 | Production PostgreSQL hosting (self-managed vs managed Postgres) (ADR-023) — PR #18 uses SeaweedFS in prod, ADR-017 limits it to dev/CI; owner to decide | PROPOSED | S11 (earlier if a pilot needs hosting) |
+| OD-4 | Hosting provider and region (ADR-023) — PR #18 uses SeaweedFS in prod, ADR-017 limits it to dev/CI; owner to decide | PROPOSED | S11 |
+| OD-5 | Release 2 scope and ordering | PARTIAL (owner 2026-11-12: 3 validator refusals + split-period tiers = Release 2) | After S11 |
 
 ## 6. Known issues and gaps
 
@@ -115,3 +115,4 @@ Top items only; full list in the analysis and `SECURITY.md` §12.
 | 2026-11-09 | S0 signed off. S1 kickoff approved with D-1..D-8 (negative-control DB, `cryptography`, local breach list, Postgres rate-limit counters, email-change endpoints, no in-app MFA reset + runbook, per-tenant auth audit rows, `segno`). Owner standing delegation recorded in `CLAUDE.md` §18; reviewer subagent `.claude/agents/reviewer.md` |
 | 2026-11-10 | S1 complete: audit shows actor names; runbook operator scripts + dry run (found and fixed a missing EXECUTE grant, migration `20261110_0900`); session-ended message; axe on S1 pages; completion report |
 | 2026-11-10 | S2 complete: job queue (ADR-005 fallback), worker, files module (SeaweedFS + ClamAV, quarantine → clean), Files/Jobs pages; two independent reviews (8 serious findings fixed); K-4, K-9 closed; K-10..K-12 opened |
+| 2026-11-12 | Owner decisions: S5 signed off; OD-1 approved; OD-2 deferred (recorded fixtures); 3 validator refusals + split-period tiers moved to Release 2; `cannot_be_net_claimed` adjustments stay `proposed` and batches <= 0 are refused unless `allow_negative_claims`; unpaid line without rejection code = `short_paid_unexplained` (BUSINESS_LOGIC §10.3) |
