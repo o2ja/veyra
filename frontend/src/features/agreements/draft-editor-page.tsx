@@ -8,6 +8,7 @@ import { ApiError, unwrap } from "../../lib/api/errors";
 import { useSession } from "../../lib/session";
 import { uploadWithProgress } from "../files/files-page";
 import { Checkbox, FormGrid, SelectField, orNull, useManufacturers, utc } from "../masterdata/common";
+import { DraftPreviewPanel } from "../calculations/draft-preview-panel";
 import { AgreementsNav } from "./common";
 import {
   DRAFT_STATUS_LABELS,
@@ -1582,6 +1583,8 @@ function DraftEditorForm({ initial }: { initial: DraftOut }) {
             </div>
           </Card>
         )}
+
+        {can("calculation.run") && <DraftPreviewPanel draftId={draft.id} />}
 
         <div>
           <Link to="/agreement-drafts" className="text-brand underline">

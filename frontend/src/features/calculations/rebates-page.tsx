@@ -1,0 +1,258 @@
+import { useQuery } from "@tanstack/react-query";
+import { useState } from "react";
+import { Link } from "react-router-dom";
+
+import { Card, Empty, ErrorAlert, Field, Loading, PermissionDenied } from "../../components/ui";
+import { api } from "../../lib/api/client";
+import { ApiError, unwrap } from "../../lib/api/errors";
+import { DataTable, PagerControls, usePager } from "../masterdata/common";
+import { CalculationsNav } from "./common";
+import { formatDecimal, type AccrualOut } from "./logic";
+
+export function RebatesPage() {
+  const pager = usePager();
+  const [agreementFilter, setAgreementFilter] = useState("");
+  const [runFilter, setRunFilter] = useState("");
+
+  const tracker = useQuery({
+    queryKey: ["rebate-tracker"],
+    queryFn: () => unwrap(api.GET("/api/v1/rebate-tracker")),
+  });
+
+  const accruals = useQuery({
+    queryKey: ["rebate-accruals", agreementFilter, runFilter, pager.cursor],
+    queryFn: () =>
+      unwrap(
+        api.GET("/api/v1/rebate-accruals", {
+          params: {
+            query: {
+              agreement_id: agreementFilter.trim() || null,
+              run_id: runFilter.trim() || null,
+              limit: 50,
+              cursor: pager.cursor,
+            },
+          },
+        }),
+      ),
+  });
+
+  const trackerErr = tracker.error as ApiError | null;
+  const accrualsErr = accruals.error as ApiError | null;
+
+  if (
+    trackerErr?.status === 403 ||
+    trackerErr?.code === "forbidden" ||
+    accrualsErr?.status === 403 ||
+    accrualsErr?.code === "forbidden"
+  ) {
+    return (
+      <>
+        <CalculationsNav />
+        <PermissionDenied />
+      </>
+    );
+  }
+
+  return (
+    <>
+      <CalculationsNav />
+      <div className="flex flex-col gap-6">
+        <Card title="Rebate tracker">
+          <ErrorAlert error={trackerErr} />
+          {tracker.isPending ? (
+            <Loading />
+          ) : !tracker.data?.data.length ? (
+            <Empty>No active rebate accruals yet.</Empty>
+          ) : (
+            <div className="flex flex-col gap-6">
+              {tracker.data.data.map((row) => (
+                <section
+                  key={`${row.agreement_version_id}-${row.period_start}`}
+                  className="rounded-md border border-line p-4"
+                  aria-label={`${row.external_number} ${row.agreement_name}`}
+                >
+                  <div className="mb-3 flex flex-wrap items-baseline justify-between gap-2">
+                    <h2 className="text-base font-semibold">
+                      <Link to={`/agreements/${row.agreement_id}`} className="text-brand underline">
+                        {row.external_number}
+                      </Link>{" "}
+                      · {row.agreement_name}
+                    </h2>
+                    <div className="flex flex-wrap gap-3 text-xs text-muted">
+                      <span>
+                        Period: {row.period_start} – {row.period_end}
+                      </span>
+                      <span>As of: {row.as_of_date}</span>
+                      <Link
+                        to={`/agreements/versions/${row.agreement_version_id}`}
+                        className="text-brand underline"
+                      >
+                        Agreement version
+                      </Link>
+                    </div>
+                  </div>
+
+                  <dl className="mb-4 grid gap-3 text-sm sm:grid-cols-2 lg:grid-cols-4">
+                    <div>
+                      <dt className="text-muted">Cumulative qualifying</dt>
+                      <dd className="font-mono font-medium">{formatDecimal(row.cumulative_qualifying)}</dd>
+                    </div>
+                    <div>
+                      <dt className="text-muted">Cumulative payout base</dt>
+                      <dd className="font-mono font-medium">{formatDecimal(row.cumulative_payout_base)}</dd>
+                    </div>
+                    <div>
+                      <dt className="text-muted">Cumulative earned</dt>
+                      <dd className="font-mono font-medium">{formatDecimal(row.cumulative_earned)}</dd>
+                    </div>
+                    <div>
+                      <dt className="text-muted">Accrued to date</dt>
+                      <dd className="font-mono font-medium">{formatDecimal(row.accrued_to_date)}</dd>
+                    </div>
+                    <div>
+                      <dt className="text-muted">Current tier</dt>
+                      <dd className="font-medium">
+                        {row.tier_number !== null
+                          ? `Tier ${row.tier_number} (${row.tier_rate ?? "—"})`
+                          : "None"}
+                      </dd>
+                    </div>
+                    <div>
+                      <dt className="text-muted">Next tier lower bound</dt>
+                      <dd className="font-mono">{formatDecimal(row.next_tier_lower_bound)}</dd>
+                    </div>
+                    <div>
+                      <dt className="text-muted">Amount to next tier</dt>
+                      <dd className="font-mono">{formatDecimal(row.amount_to_next_tier)}</dd>
+                    </div>
+                    <div>
+                      <dt className="text-muted">Claim deadline</dt>
+                      <dd>{row.claim_deadline ?? "—"}</dd>
+                    </div>
+                  </dl>
+
+                  {row.tiers.length > 0 && (
+                    <div className="overflow-x-auto">
+                      <table className="w-full text-left text-sm">
+                        <caption className="sr-only">Tiers for {row.external_number}</caption>
+                        <thead className="text-muted">
+                          <tr>
+                            <th scope="col" className="py-1.5 pr-4 font-medium">
+                              Tier
+                            </th>
+                            <th scope="col" className="py-1.5 pr-4 text-right font-medium">
+                              Lower bound
+                            </th>
+                            <th scope="col" className="py-1.5 pr-4 text-right font-medium">
+                              Rate
+                            </th>
+                            <th scope="col" className="py-1.5 pr-4 font-medium">
+                              Status
+                            </th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {row.tiers.map((tier) => {
+                            const isCurrent =
+                              row.tier_number !== null && tier.tier_number === row.tier_number;
+                            return (
+                              <tr
+                                key={tier.tier_number}
+                                className={`border-t border-line ${isCurrent ? "bg-surface font-medium" : ""}`}
+                              >
+                                <td className="py-1.5 pr-4">Tier {tier.tier_number}</td>
+                                <td className="py-1.5 pr-4 text-right font-mono">
+                                  {formatDecimal(tier.lower_bound)}
+                                </td>
+                                <td className="py-1.5 pr-4 text-right font-mono">{tier.rate ?? "—"}</td>
+                                <td className="py-1.5 pr-4">{isCurrent ? "Current tier" : "—"}</td>
+                              </tr>
+                            );
+                          })}
+                        </tbody>
+                      </table>
+                    </div>
+                  )}
+                </section>
+              ))}
+            </div>
+          )}
+        </Card>
+
+        <Card title="Accrual ledger">
+          <div className="mb-4 grid gap-3 sm:grid-cols-2">
+            <Field
+              label="Agreement ID"
+              value={agreementFilter}
+              placeholder="UUID"
+              onChange={(e) => {
+                setAgreementFilter(e.target.value);
+                pager.reset();
+              }}
+            />
+            <Field
+              label="Run ID"
+              value={runFilter}
+              placeholder="UUID"
+              onChange={(e) => {
+                setRunFilter(e.target.value);
+                pager.reset();
+              }}
+            />
+          </div>
+
+          <DataTable
+            caption="Rebate accruals"
+            loading={accruals.isPending}
+            error={accrualsErr}
+            rows={accruals.data?.data}
+            empty="No rebate accrual entries."
+            columns={[
+              {
+                header: "Agreement",
+                cell: (a: AccrualOut) => (
+                  <Link to={`/agreements/${a.agreement_id}`} className="text-brand underline">
+                    {a.external_number}
+                  </Link>
+                ),
+              },
+              { header: "As of", cell: (a) => a.as_of_date },
+              { header: "Period", cell: (a) => `${a.period_start} – ${a.period_end}` },
+              {
+                header: "Prior accrued",
+                cell: (a) => (
+                  <span className="block text-right font-mono">
+                    {formatDecimal(a.prior_cumulative_accrued)}
+                  </span>
+                ),
+              },
+              {
+                header: "Delta",
+                cell: (a) => <span className="block text-right font-mono">{formatDecimal(a.delta)}</span>,
+              },
+              {
+                header: "Cumulative earned",
+                cell: (a) => (
+                  <span className="block text-right font-mono">{formatDecimal(a.cumulative_earned)}</span>
+                ),
+              },
+              {
+                header: "Flags",
+                cell: (a) => (a.flags.length ? a.flags.join(", ") : "—"),
+              },
+              {
+                header: "Run",
+                cell: (a) => (
+                  <Link to={`/calculations/${a.run_id}`} className="font-mono text-xs text-brand underline">
+                    {a.run_id.slice(0, 8)}
+                  </Link>
+                ),
+              },
+            ]}
+          />
+          <PagerControls pager={pager} page={accruals.data?.page} />
+        </Card>
+      </div>
+    </>
+  );
+}
