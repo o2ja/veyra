@@ -2,6 +2,7 @@
 
 DATABASE_SCHEMA.md §3.8; BUSINESS_LOGIC.md §5.5, §7, §9.3. No new table (RLS unchanged), so no new policy.
 
+- ``claim_batches.total_amount > 0`` (owner decision: a batch claims something; adjustments may not cancel it).
 - ``claim_lines.calculation_result_id`` is NULL exactly for ``source_kind = 'rebate_accrual'`` (orchestrator decision):
   a rebate claim line has an accrual entry, no calculation result.
 - ``claim_adjustments``: composite FK ``claim_line_id -> claim_lines``; new ``rebate_accrual_entry_id`` (composite FK)
@@ -32,6 +33,9 @@ depends_on = None
 
 
 def upgrade() -> None:
+    op.execute(
+        "ALTER TABLE claim_batches ADD CONSTRAINT ck_claim_batches_total_positive CHECK (total_amount > 0)"
+    )
     op.execute("ALTER TABLE claim_lines ALTER COLUMN calculation_result_id DROP NOT NULL")
     op.execute(
         "ALTER TABLE claim_lines ADD CONSTRAINT ck_claim_lines_result_source "

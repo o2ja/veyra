@@ -36,6 +36,11 @@ class AdjustmentAlreadyIncluded(Conflict):
     message = "Some of these adjustments are already in a claim batch."
 
 
+class CannotNetClaim(Conflict):
+    code = "cannot_net_claim"
+    message = "This manufacturer does not accept negative claims: the return reversal cannot be net-claimed."
+
+
 class AuditedFourEyesViolation(FourEyesViolation):
     commit = True  # the audit entry of the refused approval must survive the error response
 
@@ -53,6 +58,26 @@ def view(a: ClaimAdjustment) -> dict[str, Any]:
         "status": a.status,
         "included_in_batch_id": a.included_in_batch_id,
     }
+
+
+def require_net_claimable(db: Session, tenant_id: UUID, a: ClaimAdjustment) -> None:
+    """BUSINESS_LOGIC §7: a return reversal of a manufacturer without ``allow_negative_claims`` stays proposed
+    ("cannot be net-claimed; discuss with the manufacturer"): it is neither approved nor included in a batch. The
+    manufacturer's current setting decides, so a withdrawn permission also stops an already approved one."""
+    if a.adjustment_type != "return_reversal" or a.amount >= 0:
+        return
+    rows = masterdata.manufacturer_settings_rows(db, tenant_id, [a.manufacturer_id])
+    if not (rows and rows[0].allow_negative_claims):
+        raise CannotNetClaim(
+            details=[
+                {
+                    "field": "adjustment_id",
+                    "code": "cannot_net_claim",
+                    "message": "Discuss with the manufacturer; it does not accept negative claims.",
+                    "adjustment_id": str(a.id),
+                }
+            ]
+        )
 
 
 def _audit(db: Session, who: Who, action: audit.Action, a: ClaimAdjustment, **kw: Any) -> None:
@@ -133,6 +158,7 @@ def approve(db: Session, who: Who, adjustment_id: UUID) -> ClaimAdjustment:
     a = get(db, who.tenant_id, adjustment_id, lock=True)
     if a.status != "proposed":
         raise InvalidState("Only a proposed adjustment can be approved.")
+    require_net_claimable(db, who.tenant_id, a)
     if (
         tenancy.get_settings(db, who.tenant_id).four_eyes_required
         and a.proposed_by is not None
@@ -200,6 +226,8 @@ def lock_for_inclusion(
                 for a in taken
             ]
         )
+    for a in rows.values():
+        require_net_claimable(db, tenant_id, a)
     return [rows[i] for i in ids]
 
 

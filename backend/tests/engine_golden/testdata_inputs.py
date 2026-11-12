@@ -78,6 +78,7 @@ def manufacturers(**overrides: dict[str, Any]) -> tuple[ManufacturerSettings, ..
             conflict_policy=m["conflict_policy"],
             claim_window_basis=m["claim_window_basis"],
             claim_window_days=m["claim_window_days"],
+            allow_negative_claims=m.get("allow_negative_claims", False),
         )
         out.append(replace(settings, **overrides.get(m["code"], {})))
     return tuple(out)

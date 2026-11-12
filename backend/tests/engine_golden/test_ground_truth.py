@@ -97,12 +97,14 @@ def test_every_scenario_line_is_covered_by_ground_truth() -> None:
 
 
 def test_return_after_claim_is_flagged_when_negative_claims_not_allowed() -> None:
-    # SC-09r: VOLT has no allow_negative_claims in master data -> DB default false (DATABASE_SCHEMA.md)
+    # SC-09r: VOLT accepts negative claims in the ground truth (master_manufacturers.json): -50.00, no flag
     r = _run()["CN-5002/1"]
-    assert r.status is Status.ADJUSTMENT and CANNOT_BE_NET_CLAIMED in r.flags
+    assert r.status is Status.ADJUSTMENT and r.claim_amount == Decimal("-50.00")
+    assert CANNOT_BE_NET_CLAIMED not in r.flags
     assert r.agreement_version_id == "SPA-VOLT-2026-884"
-    allowed = _run(VOLT={"allow_negative_claims": True})["CN-5002/1"]
-    assert allowed.claim_amount == Decimal("-50.00") and CANNOT_BE_NET_CLAIMED not in allowed.flags
+    # a manufacturer without the setting: same amount, flagged "cannot be net-claimed" (BUSINESS_LOGIC §7)
+    blocked = _run(VOLT={"allow_negative_claims": False})["CN-5002/1"]
+    assert blocked.claim_amount == Decimal("-50.00") and CANNOT_BE_NET_CLAIMED in blocked.flags
 
 
 def _variant(vid: str) -> dict[str, Any]:

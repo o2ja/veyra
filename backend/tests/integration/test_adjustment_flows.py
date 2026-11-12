@@ -32,6 +32,7 @@ from tests.integration.calc_support import (
     open_workspace,
     results,
     run,
+    settings,
 )
 from tests.integration.conftest import CSV, Workspace, clean_file, import_file, run_import
 from tests.support import Api, FakeClock, drain, fake_clock, make_app
@@ -211,7 +212,7 @@ def test_sc09r_return_after_claim_is_a_return_reversal_proposal(returned: Return
     assert Decimal(p["amount"]) == Decimal(gt["amount"]) == Decimal("-50.00")
     assert p["status"] == "proposed" and p["claim_line_id"] == original["id"]
     assert p["calculation_result_id"] == r["id"] and p["run_id"] == returned.run_id
-    assert "cannot be net-claimed" in p["reason"]  # VOLT has no allow_negative_claims (master data)
+    assert "cannot be net-claimed" not in p["reason"]  # VOLT allows negative claims (master data)
     (only,) = listing(returned.ws.api, "/claim-adjustments")
     assert only["id"] == p["id"] and only["claim_reference"] == original["claim_reference"]
 
@@ -410,7 +411,7 @@ def test_gl_a1_amendment_recalculation_proposes_minus_1000(env: Env) -> None:
 def test_rebate_accrual_claims_and_the_r2_clawback(env: Env, admin_engine: Engine) -> None:
     """expected_rebates.json: after GL-R1a the ledger shows +14,850.00 and after GL-R1b +10,400.00; the vendor credit
     of GL-R2 gives -10,400.00. Positive deltas are claimed as rebate claim lines, the negative one becomes a
-    rebate_clawback adjustment (never a claim line). Batch 2 = the +10,400.00 line and the clawback = 0.00 (hand)."""
+    rebate_clawback adjustment (never a claim line). Batch 2 = the +14,850.00 line and the clawback = 4,450.00 (hand)."""
     ws = workspace(env, ("REB-VOLT-2026",))
     import_file(ws, "purchases/purchases_VOLT_2026.csv", "purchases")
     volt = ws.manufacturers["VOLT"]
@@ -441,35 +442,45 @@ def test_rebate_accrual_claims_and_the_r2_clawback(env: Env, admin_engine: Engin
     unknown = new_batch(ws.api, volt, accrual_entry_ids=[str(uuid.uuid4())])
     assert unknown.status_code == 422 and unknown.json()["error"]["details"][0]["code"] == "not_found"
 
-    # GL-R1a's +14,850.00 as a rebate claim line
-    one = new_batch(ws.api, volt, accrual_entry_ids=[entries["GL-R1a"]["id"]])
-    assert one.status_code == 201, one.text
-    assert (one.json()["line_count"], Decimal(one.json()["total_amount"])) == (1, Decimal("14850.00"))
-    assert (one.json()["period_from"], one.json()["period_to"]) == ("2026-01-01", "2026-12-31")
-    (line,) = listing(ws.api, f"/claim-batches/{one.json()['id']}/lines")
-    assert line["source_kind"] == "rebate_accrual" and line["calculation_result_id"] is None
-    assert (
-        line["rebate_accrual_entry_id"] == entries["GL-R1a"]["id"] and line["sales_document_line_id"] is None
-    )
-    assert line["agreement_version_id"] == entries["GL-R1a"]["agreement_version_id"]
-    again = new_batch(ws.api, volt, accrual_entry_ids=[entries["GL-R1a"]["id"]])
-    assert again.status_code == 409 and again.json()["error"]["code"] == "already_claimed"
-    assert again.json()["error"]["details"][0]["claim_reference"] == line["claim_reference"]
-
-    # the clawback must be approved before it can be netted against the next rebate claim
+    # the clawback must be approved before it can be netted against a rebate claim
     early = new_batch(
         ws.api, volt, accrual_entry_ids=[entries["GL-R1b"]["id"]], include_adjustment_ids=[claw["id"]]
     )
     assert early.status_code == 422 and early.json()["error"]["details"][0]["code"] == "not_approved"
     assert ws.api.post(f"/claim-adjustments/{claw['id']}/approve").status_code == 200
-    two = new_batch(
+
+    # +10,400.00 - 10,400.00 = 0.00: a batch must claim something (owner decision), nothing is left half-done
+    zero = new_batch(
         ws.api, volt, accrual_entry_ids=[entries["GL-R1b"]["id"]], include_adjustment_ids=[claw["id"]]
     )
+    assert zero.status_code == 422 and zero.json()["error"]["code"] == "batch_total_not_positive", zero.text
+    assert [a["status"] for a in listing(ws.api, "/claim-adjustments")] == ["approved"]
+    assert listing(ws.api, "/claim-batches") == []
+
+    # GL-R1b's +10,400.00 as a rebate claim line
+    one = new_batch(ws.api, volt, accrual_entry_ids=[entries["GL-R1b"]["id"]])
+    assert one.status_code == 201, one.text
+    assert (one.json()["line_count"], Decimal(one.json()["total_amount"])) == (1, Decimal("10400.00"))
+    assert (one.json()["period_from"], one.json()["period_to"]) == ("2026-01-01", "2026-12-31")
+    (line,) = listing(ws.api, f"/claim-batches/{one.json()['id']}/lines")
+    assert line["source_kind"] == "rebate_accrual" and line["calculation_result_id"] is None
+    assert (
+        line["rebate_accrual_entry_id"] == entries["GL-R1b"]["id"] and line["sales_document_line_id"] is None
+    )
+    assert line["agreement_version_id"] == entries["GL-R1b"]["agreement_version_id"]
+    again = new_batch(ws.api, volt, accrual_entry_ids=[entries["GL-R1b"]["id"]])
+    assert again.status_code == 409 and again.json()["error"]["code"] == "already_claimed"
+    assert again.json()["error"]["details"][0]["claim_reference"] == line["claim_reference"]
+
+    # GL-R1a's +14,850.00 carries the clawback: 14,850.00 - 10,400.00 = 4,450.00 (hand)
+    two = new_batch(
+        ws.api, volt, accrual_entry_ids=[entries["GL-R1a"]["id"]], include_adjustment_ids=[claw["id"]]
+    )
     assert two.status_code == 201, two.text
-    assert (two.json()["line_count"], Decimal(two.json()["total_amount"])) == (1, Decimal("0.00"))
+    assert (two.json()["line_count"], Decimal(two.json()["total_amount"])) == (1, Decimal("4450.00"))
     assert ws.api.post(f"/claim-batches/{two.json()['id']}/approve").status_code == 200
     rows = csv_rows(env, admin_engine, ws.api, two.json()["id"])
-    assert sorted(Decimal(r["Claim amount"]) for r in rows) == [Decimal("-10400.00"), Decimal("10400.00")]
+    assert sorted(Decimal(r["Claim amount"]) for r in rows) == [Decimal("-10400.00"), Decimal("14850.00")]
     assert (
         ws.api.post(
             f"/claim-batches/{two.json()['id']}/submit",
@@ -637,3 +648,42 @@ def test_the_database_only_accepts_new_adjustments_as_proposed(
             b=returned.first_batch["id"],
         )
         assert "created as proposed" in got, (status, got)
+
+
+def test_a_manufacturer_without_negative_claims_blocks_the_return_reversal(env: Env) -> None:
+    """BUSINESS_LOGIC §7 as written: with allow_negative_claims = false the reversal stays proposed ("cannot be
+    net-claimed; discuss with the manufacturer"), cannot be approved, and cannot be included in a batch."""
+    ws = workspace(env)
+    settings(ws, "VOLT", allow_negative_claims=False)
+    import_sales_part(ws, late=False)
+    claim_and_submit(ws, results(ws, run(ws, **WINDOW)["id"]), FIX7)
+    import_sales_part(ws, late=True)
+    (adj,) = propose(ws, run(ws, **WINDOW)["id"])["proposed"]
+    assert Decimal(adj["amount"]) == Decimal("-50.00") and "cannot be net-claimed" in adj["reason"]
+    blocked = ws.api.post(f"/claim-adjustments/{adj['id']}/approve")
+    assert blocked.status_code == 409 and blocked.json()["error"]["code"] == "cannot_net_claim", blocked.text
+    assert listing(ws.api, "/claim-adjustments")[0]["status"] == "proposed"
+    # approved while the manufacturer allowed it, then the setting is withdrawn: inclusion is refused all the same
+    settings(ws, "VOLT", allow_negative_claims=True)
+    assert ws.api.post(f"/claim-adjustments/{adj['id']}/approve").status_code == 200
+    settings(ws, "VOLT", allow_negative_claims=False)
+    line = pool(ws.api)["INV-10020/1"]
+    refused = new_batch(
+        ws.api, line["manufacturer_id"], result_ids=[line["id"]], include_adjustment_ids=[adj["id"]]
+    )
+    assert refused.status_code == 409 and refused.json()["error"]["code"] == "cannot_net_claim", refused.text
+    assert listing(ws.api, "/claim-adjustments")[0]["status"] == "approved"
+    assert [b["status"] for b in listing(ws.api, "/claim-batches")] == ["submitted"]
+
+
+def test_the_database_refuses_a_batch_that_claims_nothing(returned: Returned, admin_engine: Engine) -> None:
+    got = outcome(
+        admin_engine,
+        "INSERT INTO claim_batches (tenant_id, id, manufacturer_id, batch_number, line_count, total_amount, "
+        "created_by) VALUES (:t, :id, :m, 'CB-ZERO-1', 1, 0, :u)",
+        t=returned.ws.tenant_id,
+        id=str(uuid.uuid4()),
+        m=returned.proposal["manufacturer_id"],
+        u=returned.proposal["proposed_by"],
+    )
+    assert "ck_claim_batches_total_positive" in got, got
