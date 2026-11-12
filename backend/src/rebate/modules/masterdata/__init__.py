@@ -6,6 +6,7 @@ from rebate.modules.masterdata.calc_reads import (
     existing_manufacturer_ids,
     manufacturer_ids,
     manufacturer_settings_rows,
+    product_alias_rows,
     uom_conversion_rows,
 )
 from rebate.modules.masterdata.pagination import Page, decode_cursor, encode_cursor, keyset, page
@@ -43,6 +44,7 @@ __all__ = [
     "manufacturer_settings_rows",
     "master_index",
     "page",
+    "product_alias_rows",
     "record_unmapped",
     "resolve_matching",
     "router",
