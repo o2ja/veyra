@@ -14,14 +14,20 @@ import sys
 from importlib import metadata
 from pathlib import Path
 
-STRONG = re.compile(r"\b(A?GPL|SSPL|EUPL)\b|GNU (Affero )?General Public", re.I)
-WEAK = re.compile(r"\b(LGPL|MPL|EPL|CDDL|CC-BY-SA)\b|Lesser General Public|Mozilla Public|Eclipse Public", re.I)
+# A name may be glued to a version ("GPLv3", "AGPL3"): match it unless more letters follow, and never inside a
+# longer name (LGPL is weak, not GPL).
+_END = r"(?:v?(?=\d)|(?![a-z]))"
+STRONG = re.compile(rf"(?<![a-z])(A?GPL|SSPL|EUPL){_END}|GNU (Affero )?General Public", re.I)
+WEAK = re.compile(rf"(?<![a-z])(LGPL|MPL|EPL|CDDL|CC-BY-SA){_END}|Lesser General Public|Mozilla Public|Eclipse Public", re.I)
 
 
 def classify(text: str) -> str:
-    alternatives = re.split(r"\s+OR\s+|\s+or\s+|/", text) if re.search(r"\sOR\s|\sor\s", text) else [text]
+    # "or later" is a version qualifier ("GPL v2 or later"), not a choice between licences
+    choice = r"\s+or\s+(?!later)"
+    alternatives = re.split(choice + "|/", text, flags=re.I) if re.search(choice, text, re.I) else [text]
     kinds = {"strong" if STRONG.search(a) else "weak" if WEAK.search(a) else "ok" for a in alternatives}
-    return "ok" if "ok" in kinds else "strong" if "strong" in kinds else "weak"
+    # a choice lets the licensee take the least restrictive alternative
+    return "ok" if "ok" in kinds else "weak" if "weak" in kinds else "strong"
 
 
 def python_licence(name: str) -> str:

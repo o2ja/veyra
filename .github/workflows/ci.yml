@@ -86,6 +86,8 @@ jobs:
         run: |
           uv export --frozen --no-hashes --no-emit-project -o "$RUNNER_TEMP/req.txt" -q
           uv run pip-audit --strict --no-deps --disable-pip -r "$RUNNER_TEMP/req.txt"
+      - name: licence matcher self-check
+        run: python3 ../infra/scripts/ops/test_licence_check.py
       - name: licence check (runtime dependencies; fails on GPL/AGPL/SSPL/unknown, lists weak copyleft)
         run: |
           uv export --frozen --no-dev --no-hashes --no-emit-project -o "$RUNNER_TEMP/req-runtime.txt" -q
