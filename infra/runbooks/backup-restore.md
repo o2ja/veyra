@@ -23,18 +23,22 @@ Operator steps the script does not do (no accounts exist yet):
 3. Object store: the bucket has versioning on; `objects.tar` holds current versions only, so deleted/overwritten
    versions are recovered from the bucket itself, not from this tar.
 
-## Restore (into a FRESH database and bucket; never over the live ones)
+## Restore (into a FRESH database and bucket; the script refuses the live names)
 
 ```sh
 infra/scripts/ops/restore.sh backups/<timestamp> rebate_restored rebate-files-restored
 ```
 
+`restore.sh` refuses a database or bucket name equal to the live one (`REBATE_DB_NAME` / `S3_BUCKET`).
+Only `restore.sh --live ...` allows it, and then asks for a typed confirmation on a terminal. Objects are loaded
+with the `S3_ADMIN_*` identity from `.env.prod` (the app identity cannot create buckets).
 It verifies `SHA256SUMS` (exit 3 on mismatch), creates the database, `pg_restore --exit-on-error`, checks that
 `alembic_version` equals the repository's Alembic head (exit 4), prints row counts and loads the objects.
 Then, before switching traffic:
 1. Run the smoke checks: `file_objects.sha256` spot-check against restored objects; the isolation suite pointed at
    the restored database; a login.
-2. Edit `DATABASE_URL` (database name) and `S3_BUCKET` in `.env.prod`, `docker compose ... up -d api worker`,
+2. Edit `REBATE_DB_NAME` and `S3_BUCKET` in `.env.prod` (the only place the names live; compose builds every
+   database URL from them), `docker compose ... up -d api worker`,
    check `/api/v1/health/ready`.
 3. Keep the damaged database for forensics until the incident is closed; drop it only after sign-off.
 
@@ -88,7 +92,7 @@ Point-in-time restore:
 2. `pgbackrest --stanza=rebate --type=time "--target=2026-01-01 12:00:00+00" --target-action=promote restore`
 3. Start Postgres, wait for recovery to finish, then `restore.sh`-style checks: `alembic_version` equals the image's
    head, row counts plausible, isolation suite, login.
-4. Point `DATABASE_URL` at it, start `api`, `worker`.
+4. Set `REBATE_DB_NAME` in `.env.prod` to it, start `api`, `worker`.
 
 Managed Postgres (OD-3 option b): enable the provider's PITR and keep the nightly `backup.sh` dump as the
 independent copy.

@@ -42,5 +42,17 @@
 	request_body {
 		max_size 60MB
 	}
-	reverse_proxy seaweedfs:8333
+	# Allow-list in front of SeaweedFS (OD-3/OD-4 pending): only signed GET/HEAD on the one bucket. The app issues
+	# nothing else to browsers, so listing, uploads, deletes and the other buckets are unreachable from outside.
+	@allowed {
+		method GET HEAD
+		path /{$S3_BUCKET}/*
+		query X-Amz-Signature=*
+	}
+	handle @allowed {
+		reverse_proxy seaweedfs:8333
+	}
+	handle {
+		respond "forbidden" 403
+	}
 }

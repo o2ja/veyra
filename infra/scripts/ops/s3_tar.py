@@ -3,6 +3,7 @@ boto3 and reads the S3_* settings from its environment. Current object versions 
 
     python -c "$(cat s3_tar.py)" dump         > objects.tar   (tar on stdout, summary JSON on stderr)
     python -c "$(cat s3_tar.py)" load BUCKET  < objects.tar   (creates BUCKET with versioning + SSE-S3)
+    python -c "$(cat s3_tar.py)" init                         (provision S3_BUCKET; run with the S3_ADMIN_* identity)
 """
 
 import json
@@ -46,5 +47,7 @@ if mode == "dump":
     dump(Settings())
 elif mode == "load":
     load(Settings(s3_bucket=sys.argv[2]))
+elif mode == "init":
+    storage.ensure_bucket(Settings())
 else:
-    sys.exit("usage: dump | load BUCKET")
+    sys.exit("usage: dump | init | load BUCKET")

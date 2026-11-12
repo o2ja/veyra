@@ -14,7 +14,11 @@ Status: **written, not executed** (no host exists). Compose file validated in CI
    certificate in Caddy if HTTP-01 is blocked by the origin firewall.
 4. `$C up -d postgres`, then `$C exec -T -e PGUSER=postgres -e REBATE_OWNER_PASSWORD -e REBATE_APP_PASSWORD -e REBATE_AI_WRITER_PASSWORD -e REBATE_READONLY_PASSWORD postgres bash /opt/rebate-scripts/init-db.sh`
    (export those variables from `.env.prod` first; the script reads them from the exec environment).
-5. Continue with "Deploy" below.
+5. Provision the bucket with the separate admin identity (the app identity is limited to the one bucket and cannot
+   create it): `$C up -d seaweedfs`, then
+   `$C run --rm --no-deps -T -e S3_ACCESS_KEY_ID=<S3_ADMIN_ACCESS_KEY_ID> -e S3_SECRET_ACCESS_KEY=<S3_ADMIN_SECRET_ACCESS_KEY> api python -c "$(cat infra/scripts/ops/s3_tar.py)" init`.
+   SeaweedFS in production is an interim choice pending owner decision OD-3/OD-4.
+6. Continue with "Deploy" below.
 
 ## Deploy
 
@@ -35,5 +39,5 @@ Schema changes are expand/contract: the previous release runs on the new schema 
 2. `$C up -d api worker caddy`; run the smoke tests.
 3. If the deploy ran a migration that the old code cannot tolerate (a contract step shipped early), do NOT run
    `alembic downgrade` on production. Either fix forward, or restore the pre-deploy backup into a fresh database
-   (`runbooks/backup-restore.md`) and point `DATABASE_URL` at it. This loses writes made since the backup:
+   (`runbooks/backup-restore.md`) and set `REBATE_DB_NAME` in `.env.prod` to it. This loses writes made since the backup:
    decide with the owner and say so in the incident notes.

@@ -2,8 +2,10 @@
 # env file (`docker compose --env-file .env.prod -f infra/docker/compose.prod.yml ...`); nothing is baked in.
 # Network: `internal` has no route out. Only caddy publishes ports; Postgres/ClamAV/SeaweedFS are unreachable
 # from outside. `edge` (outbound access) is given only to caddy (ACME) and worker (SMTP, optional LLM).
-# SeaweedFS note: its filer IAM gRPC is unauthenticated (DEPLOYMENT.md 2.2); acceptable here only because it
-# lives on the internal network. Swap for a managed S3 by changing S3_* and dropping the service (OD-3/OD-4).
+# SeaweedFS note: PENDING OWNER DECISION (OD-3/OD-4). Its filer IAM gRPC is unauthenticated (DEPLOYMENT.md 2.2) and
+# the SSE key-encryption key sits unwrapped on the filer; this service is an interim measure, mitigated by the
+# internal-only network, a bucket-scoped app identity and a method allow-list in front of it (Caddyfile).
+# Swap for a managed S3 by changing S3_* and dropping the service.
 name: veyra-recover-prod
 
 x-hardened: &hardened
@@ -19,7 +21,7 @@ x-app-env: &app-env
   LOG_LEVEL: ${LOG_LEVEL:-INFO}
   SECRET_KEY: ${SECRET_KEY:?set in env file}
   ENCRYPTION_KEYS: ${ENCRYPTION_KEYS:?set in env file}
-  DATABASE_URL: postgresql+psycopg://rebate_app:${REBATE_APP_PASSWORD:?set in env file}@postgres:5432/rebate
+  DATABASE_URL: postgresql+psycopg://rebate_app:${REBATE_APP_PASSWORD:?set in env file}@postgres:5432/${REBATE_DB_NAME:-rebate}
   PUBLIC_BASE_URL: ${PUBLIC_BASE_URL:?set in env file}
   TRUSTED_PROXY_IPS: ${TRUSTED_PROXY_IPS:?set in env file}
   CLOUDFLARE_IP_RANGES: ${CLOUDFLARE_IP_RANGES:-}
@@ -67,6 +69,9 @@ services:
     environment:
       S3_ACCESS_KEY_ID: ${S3_ACCESS_KEY_ID:?set in env file}
       S3_SECRET_ACCESS_KEY: ${S3_SECRET_ACCESS_KEY:?set in env file}
+      S3_SCOPE_BUCKET: ${S3_BUCKET:-rebate-files}  # app identity limited to this bucket (start.sh)
+      S3_ADMIN_ACCESS_KEY_ID: ${S3_ADMIN_ACCESS_KEY_ID:?set in env file}
+      S3_ADMIN_SECRET_ACCESS_KEY: ${S3_ADMIN_SECRET_ACCESS_KEY:?set in env file}
       WEED_S3_SSE_KEY: ${SEAWEEDFS_SSE_KEY:?set in env file}
     read_only: true
     tmpfs: ["/tmp"]
@@ -116,7 +121,7 @@ services:
     command: ["python", "-m", "rebate.workers"]
     environment:
       <<: *app-env
-      DATABASE_URL_AI: postgresql+psycopg://rebate_ai_writer:${REBATE_AI_WRITER_PASSWORD:?set in env file}@postgres:5432/rebate
+      DATABASE_URL_AI: postgresql+psycopg://rebate_ai_writer:${REBATE_AI_WRITER_PASSWORD:?set in env file}@postgres:5432/${REBATE_DB_NAME:-rebate}
       SMTP_HOST: ${SMTP_HOST:?set in env file}
       SMTP_PORT: ${SMTP_PORT:-587}
       SMTP_STARTTLS: ${SMTP_STARTTLS:-true}
@@ -140,6 +145,7 @@ services:
     environment:
       APP_DOMAIN: ${APP_DOMAIN:?set in env file}
       S3_DOMAIN: ${S3_DOMAIN:?set in env file}
+      S3_BUCKET: ${S3_BUCKET:-rebate-files}
     read_only: true
     cap_add: ["NET_BIND_SERVICE"]
     ports:
@@ -167,7 +173,7 @@ services:
     profiles: ["ops"]
     command: ["sh", "-c", "alembic upgrade head && alembic current"]
     environment:
-      DATABASE_URL_OWNER: postgresql+psycopg://rebate_owner:${REBATE_OWNER_PASSWORD:?set in env file}@postgres:5432/rebate
+      DATABASE_URL_OWNER: postgresql+psycopg://rebate_owner:${REBATE_OWNER_PASSWORD:?set in env file}@postgres:5432/${REBATE_DB_NAME:-rebate}
     read_only: true
     tmpfs: ["/tmp"]
     depends_on:

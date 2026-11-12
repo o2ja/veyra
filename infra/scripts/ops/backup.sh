@@ -11,7 +11,8 @@ here="$(cd "$(dirname "$0")" && pwd)"
 cd "$here/../../.."
 ENV_FILE="${ENV_FILE:-.env.prod}"
 COMPOSE="${COMPOSE:-docker compose --env-file $ENV_FILE -f infra/docker/compose.prod.yml}"
-DB="${DB:-rebate}"
+envval() { sed -n "s/^$1=//p" "$ENV_FILE" 2>/dev/null | tail -1; }
+DB="${DB:-$(envval REBATE_DB_NAME)}"; DB="${DB:-rebate}"
 out="${BACKUP_DIR:-./backups}/$(date -u +%Y%m%dT%H%M%SZ)"
 umask 077
 mkdir -p "$out"
