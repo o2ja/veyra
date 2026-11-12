@@ -7,8 +7,9 @@ strings. Headers and constants of a template are user input and are escaped like
 
 import csv
 import io
+import re
 from collections.abc import Iterable, Mapping, Sequence
-from decimal import ROUND_HALF_UP, Decimal
+from decimal import Decimal
 from typing import Any
 
 from openpyxl import Workbook  # type: ignore[import-untyped]  # no stubs shipped
@@ -69,6 +70,9 @@ CONTENT_TYPES = {
 }
 
 
+MONEY_FIELDS = frozenset({"unit_amount", "claim_amount", "unit_price", "extended_amount"})
+
+
 def column_error(column: Mapping[str, Any]) -> str | None:
     """Why a template column is invalid, or None. Shared by the API validation and the renderer."""
     source, constant, fmt = column.get("source"), column.get("constant"), column.get("format")
@@ -84,17 +88,36 @@ def column_error(column: Mapping[str, Any]) -> str | None:
     if kind == "date" and fmt in DATE_FORMATS:
         return None
     if kind == "decimal" and fmt.startswith("decimal:") and fmt[8:] in ("0", "1", "2", "3", "4", "5", "6"):
+        if source in MONEY_FIELDS and int(fmt[8:]) < 2:
+            return f"Format {fmt!r} would round the money field {source!r}; use decimal:2 or more."
         return None
     return f"Format {fmt!r} does not fit field {source!r}."
 
 
+# XML 1.0 forbids these; openpyxl raises on them, and they have no place in a claim file
+_ILLEGAL = re.compile("[\x00-\x08\x0b\x0c\x0e-\x1f]")
+
+
+class FormatWouldRound(ValueError):
+    """A ``decimal:N`` column would change a stored value; claim files must show the frozen values exactly."""
+
+
 def safe_text(value: str) -> str:
+    value = _ILLEGAL.sub(" ", value)
     return "'" + value if value[:1] in ("=", "+", "-", "@", "\t", "\r") else value
+
+
+def _fixed(value: Decimal, fmt: str) -> Decimal:
+    """Pad to N decimals; never round (the file must tie out to the frozen lines)."""
+    fixed = value.quantize(Decimal(1).scaleb(-int(fmt[8:])))
+    if fixed != value:
+        raise FormatWouldRound(f"value {value} has more decimals than format {fmt}")
+    return fixed
 
 
 def _decimal_text(value: Decimal, fmt: str | None) -> str:
     if fmt is not None:
-        return str(value.quantize(Decimal(1).scaleb(-int(fmt[8:])), rounding=ROUND_HALF_UP))
+        return str(_fixed(value, fmt))
     # exact stored value, at least two decimals, no padding zeros beyond that
     exp = value.normalize().as_tuple().exponent
     return str(value.quantize(Decimal("0.01")) if isinstance(exp, int) and exp > -2 else value.normalize())
@@ -127,7 +150,7 @@ def _xlsx_cell(ws: Any, value: Any, kind: str, fmt: str | None) -> Any:
     elif kind == "decimal":
         cell.number_format = _number_format(fmt)
         if fmt is not None:
-            cell.value = value.quantize(Decimal(1).scaleb(-int(fmt[8:])), rounding=ROUND_HALF_UP)
+            cell.value = _fixed(value, fmt)
     return cell
 
 

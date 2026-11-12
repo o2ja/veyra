@@ -217,7 +217,7 @@ def test_missed_claims_summary_totals_and_exceptions(sc: Scenario) -> None:
         if s["status"] == "exception":
             truth_codes[s["exception_code"]] = truth_codes.get(s["exception_code"], 0) + 1
     for code, n in truth_codes.items():
-        assert by_code.get(code, 0) >= n, code  # every documented scenario exception is reported by code
+        assert by_code.get(code, 0) == n, code  # every documented scenario exception, exactly once
     lost = sum(
         (
             Decimal(s.get("claim_amount", "0"))

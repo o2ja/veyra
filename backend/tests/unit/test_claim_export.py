@@ -98,10 +98,30 @@ def test_money_default_keeps_exact_value_with_two_decimals_minimum() -> None:
         assert out.decode().strip() == text
 
 
-def test_decimal_format_rounds_half_up() -> None:
+def test_decimal_format_pads_but_never_rounds() -> None:
+    """A claim file must show the frozen values exactly, so its total ties out to the batch (review PR #15)."""
+    cols = [{"header": "A", "source": "quantity", "format": "decimal:3"}]
+    out = exporting.render("csv", cols, {"include_header": False}, [{"quantity": Decimal("2.5")}])
+    assert out.decode().strip() == "2.500"
     cols = [{"header": "A", "source": "unit_amount", "format": "decimal:2"}]
-    out = exporting.render("csv", cols, {"include_header": False}, [{"unit_amount": Decimal("0.125")}])
-    assert out.decode().strip() == "0.13"
+    for fmt in ("csv", "xlsx"):
+        with pytest.raises(exporting.FormatWouldRound):
+            exporting.render(fmt, cols, {"include_header": False}, [{"unit_amount": Decimal("0.125")}])
+
+
+@pytest.mark.parametrize("source", ["claim_amount", "unit_amount", "unit_price", "extended_amount"])
+@pytest.mark.parametrize("fmt", ["decimal:0", "decimal:1"])
+def test_money_fields_refuse_formats_below_two_decimals(source: str, fmt: str) -> None:
+    assert exporting.column_error({"header": "x", "source": source, "format": fmt}) is not None
+    assert exporting.column_error({"header": "x", "source": source, "format": "decimal:2"}) is None
+
+
+def test_xml_illegal_control_characters_are_replaced() -> None:
+    cols = [{"header": "Name", "source": "customer_name"}]
+    rows = [{"customer_name": "Acme\x00\x07 Ltd\x1f"}]
+    out = exporting.render("csv", cols, {"include_header": False}, rows)
+    assert out.decode().strip() == "Acme   Ltd"
+    exporting.render("xlsx", cols, {}, rows)  # openpyxl raises IllegalCharacterError without the guard
 
 
 @pytest.mark.parametrize(
