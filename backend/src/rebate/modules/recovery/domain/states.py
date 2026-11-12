@@ -52,18 +52,25 @@ class Actor:
 
 
 def check_transition(
-    current: CaseStatus, target: CaseStatus, actor: Actor, *, write_off_proposed_by: str | None = None
+    current: CaseStatus,
+    target: CaseStatus,
+    actor: Actor,
+    *,
+    write_off_proposed_by: str | None = None,
+    four_eyes: bool = True,
 ) -> None:
-    """Raise unless ``actor`` may move the case. A write-off needs an approver other than its proposer."""
+    """Raise unless ``actor`` may move the case. A write-off needs an approver; with ``four_eyes`` (the workspace
+    setting) it also needs a proposal by a different user."""
     if target not in ALLOWED[current]:
         raise IllegalTransition(f"{current.value} -> {target.value}")
     if target is S.WRITTEN_OFF:
         if not actor.is_approver:
             raise ApproverRequired("write-off requires an approver")
-        if write_off_proposed_by is None:
-            raise WriteOffNotProposed("write-off must be proposed first")
-        if write_off_proposed_by == actor.user_id:
-            raise FourEyesViolation("the approver must differ from the proposer")
+        if four_eyes:
+            if write_off_proposed_by is None:
+                raise WriteOffNotProposed("write-off must be proposed first")
+            if write_off_proposed_by == actor.user_id:
+                raise FourEyesViolation("the approver must differ from the proposer")
 
 
 def apply_recovery(

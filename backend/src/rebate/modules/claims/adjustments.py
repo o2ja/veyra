@@ -292,7 +292,7 @@ def _live_agreement_changes(db: Session, tenant_id: UUID, claim_line_ids: list[U
     }
 
 
-def _insert(db: Session, who: Who, run_id: UUID, **values: Any) -> ClaimAdjustment | None:
+def _insert(db: Session, who: Who, run_id: UUID | None, **values: Any) -> ClaimAdjustment | None:
     return db.execute(
         insert(ClaimAdjustment)
         .values(
@@ -307,6 +307,36 @@ def _insert(db: Session, who: Who, run_id: UUID, **values: Any) -> ClaimAdjustme
         .on_conflict_do_nothing()
         .returning(ClaimAdjustment)
     ).scalar_one_or_none()
+
+
+def propose_recovery_reclaim(
+    db: Session,
+    who: Who,
+    *,
+    manufacturer_id: UUID,
+    claim_line_id: UUID,
+    variance_case_id: UUID,
+    amount: Decimal,
+    reason: str,
+) -> ClaimAdjustment:
+    """S9: a recovery case asks to claim its variance again (BUSINESS_LOGIC 12.1, ``to_reclaim``). Enters the
+    ordinary approve -> batch inclusion flow as a ``recovery_reclaim`` adjustment; the amount is the case's open
+    variance (positive), never recomputed here. One proposed/approved reclaim per case (partial unique index)."""
+    a = _insert(
+        db,
+        who,
+        None,
+        manufacturer_id=manufacturer_id,
+        adjustment_type="recovery_reclaim",
+        claim_line_id=claim_line_id,
+        variance_case_id=variance_case_id,
+        amount=amount,
+        reason=reason,
+    )
+    if a is None:  # the partial unique index uq_claim_adjustments_live_reclaim swallowed the insert
+        raise InvalidState("This case already has a reclaim waiting for approval or inclusion.")
+    _audit(db, who, audit.Action.CLAIM_ADJUSTMENT_PROPOSED, a, after=view(a))
+    return a
 
 
 def propose(

@@ -100,6 +100,16 @@ class Action(StrEnum):
     CLAIM_TEMPLATE_UPDATED = "claim_export_template.updated"
     MISSED_CLAIMS_EXPORT_REQUESTED = "missed_claims.export_requested"
     MISSED_CLAIMS_EXPORTED = "missed_claims.exported"
+    VARIANCE_CASE_CREATED = "variance_case.created"
+    VARIANCE_CASE_STATUS_CHANGED = "variance_case.status_changed"
+    VARIANCE_CASE_ASSIGNED = "variance_case.assigned"
+    VARIANCE_CASE_NOTE_ADDED = "variance_case.note_added"
+    VARIANCE_CASE_ATTACHMENT_ADDED = "variance_case.attachment_added"
+    VARIANCE_CASE_RECLAIM_REQUESTED = "variance_case.reclaim_requested"
+    VARIANCE_CASE_WRITE_OFF_PROPOSED = "variance_case.write_off_proposed"
+    VARIANCE_CASE_WRITTEN_OFF = "variance_case.written_off"
+    VARIANCE_CASE_FOUR_EYES_VIOLATION = "variance_case.four_eyes_violation"
+    VARIANCE_CASE_RECOVERY_RECORDED = "variance_case.recovery_recorded"
     EXTRACTION_REQUESTED = "extraction.requested"
     EXTRACTION_FINISHED = "extraction.finished"
     IMPORT_MAPPING_SUGGESTED = "import.mapping_suggested"
@@ -107,6 +117,22 @@ class Action(StrEnum):
 
 
 AUDITED_FIELDS: dict[str, frozenset[str]] = {
+    "variance_case": frozenset(
+        {
+            "case_type",
+            "reason_code",
+            "status",
+            "claim_line_id",
+            "remittance_line_id",
+            "variance_amount",
+            "recovered_amount",
+            "written_off_amount",
+            "owner_user_id",
+            "deadline_date",
+            "write_off_proposed_by",
+            "revision",
+        }
+    ),
     "ai_invocation": frozenset(
         {"extraction_id", "purpose", "model", "status", "cost_usd", "usage_in", "usage_out", "failure"}
     ),

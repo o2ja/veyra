@@ -173,6 +173,10 @@ def test_write_off_rules() -> None:
     with pytest.raises(FourEyesViolation):
         check_transition(S.SUBMITTED, S.WRITTEN_OFF, PROPOSER, write_off_proposed_by="p1")
     check_transition(S.SUBMITTED, S.WRITTEN_OFF, APPROVER, write_off_proposed_by="p1")
+    # workspace setting off: a single approver may write off, but a non-approver never may
+    check_transition(S.OPEN, S.WRITTEN_OFF, PROPOSER, four_eyes=False)
+    with pytest.raises(ApproverRequired):
+        check_transition(S.OPEN, S.WRITTEN_OFF, USER, four_eyes=False)
 
 
 def test_partial_then_full_recovery() -> None:
