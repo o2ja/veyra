@@ -290,6 +290,27 @@ def propose(
     source = source or frozen.source
     t = who.tenant_id
     run = service.completed_run(db, t, run_id)
+    # one writer at a time per tenant, shared with batch creation (inclusion): proposals are netted against the
+    # corrections that exist, so two concurrent proposals would otherwise both see "nothing yet"
+    db.execute(text("SELECT pg_advisory_xact_lock(hashtextextended(:k, 0))"), {"k": f"claims:{t}"})
+    superseded = db.scalar(
+        text(
+            "SELECT count(*) FROM calculation_results r "
+            "JOIN sales_document_lines s ON s.tenant_id = r.tenant_id AND s.id = r.sales_document_line_id "
+            "WHERE r.tenant_id = :t AND r.run_id = :r "
+            "AND r.status IN ('eligible', 'exception', 'not_applicable', 'adjustment') "
+            "AND (NOT s.is_current OR EXISTS (SELECT 1 FROM calculation_results r2 "
+            "JOIN calculation_runs cr2 ON cr2.tenant_id = r2.tenant_id AND cr2.id = r2.run_id "
+            "AND cr2.status = 'completed' WHERE r2.tenant_id = r.tenant_id "
+            "AND r2.sales_document_line_id = r.sales_document_line_id AND r2.run_id <> r.run_id "
+            "AND (cr2.completed_at > :done OR (cr2.completed_at = :done AND cr2.id > :r))))"
+        ),
+        {"t": t, "r": run_id, "done": run.completed_at},
+    )
+    if superseded:
+        raise InvalidState(
+            f"{superseded} line(s) of this run have a newer calculation; propose adjustments from the latest run."
+        )
     rows = db.execute(
         text(
             "SELECT r.id, r.sales_document_line_id, r.document_number, r.line_number, r.status, r.exception_code, "
@@ -322,10 +343,15 @@ def propose(
         amount = target - already.get(claim.claim_line_id, Decimal(0))
         if amount == 0:
             continue
-        reason = (
-            f"Recalculation {run.id}: now {row.exception_code or row.status}, frozen claim {claim.claim_amount}"
+        done = already.get(claim.claim_line_id, Decimal(0))
+        what = (
+            f"now {row.exception_code or row.status}"
             if row.status != "eligible"
-            else f"Recalculation {run.id}: new amount {row.claim_amount} versus frozen {claim.claim_amount}"
+            else f"new amount {row.claim_amount}"
+        )
+        reason = (
+            f"Recalculation {run.id}: {what}, frozen claim {claim.claim_amount}; correction due {target}, "
+            f"already corrected {done}, proposed {amount}"
         )
         a = _insert(
             db,
@@ -349,17 +375,25 @@ def propose(
         orig = originals.get(row.original_line_id)
         if orig is None:
             continue
-        seen = db.scalar(
+        # the return may be re-imported (new line version): earlier reversals of any version of it count
+        done = db.scalar(
             text(
-                "SELECT 1 FROM claim_adjustments a JOIN calculation_results r2 ON r2.tenant_id = a.tenant_id "
-                "AND r2.id = a.calculation_result_id WHERE a.tenant_id = :t AND a.adjustment_type = 'return_reversal' "
-                "AND a.claim_line_id = :cl AND r2.sales_document_line_id = :ret AND a.status <> 'rejected' LIMIT 1"
+                "WITH RECURSIVE anc(id) AS (SELECT CAST(:ret AS uuid) UNION SELECT p.id FROM sales_document_lines p "
+                "JOIN anc ON p.tenant_id = :t AND p.superseded_by_id = anc.id) "
+                "SELECT COALESCE(sum(a.amount), 0) FROM claim_adjustments a "
+                "JOIN calculation_results r2 ON r2.tenant_id = a.tenant_id AND r2.id = a.calculation_result_id "
+                "WHERE a.tenant_id = :t AND a.adjustment_type = 'return_reversal' AND a.claim_line_id = :cl "
+                "AND a.status <> 'rejected' AND r2.sales_document_line_id IN (SELECT id FROM anc)"
             ),
             {"t": t, "cl": orig.claim_line_id, "ret": row.sales_document_line_id},
         )
-        if seen:
+        amount = row.claim_amount - done
+        if amount == 0:
             continue
-        reason = f"Return {row.document_number}/{row.line_number} after the original was claimed"
+        reason = (
+            f"Return {row.document_number}/{row.line_number} after the original was claimed: "
+            f"reversal due {row.claim_amount}, already proposed {done}, proposed {amount}"
+        )
         if CANNOT_BE_NET_CLAIMED in row.flags:
             reason += "; the manufacturer does not accept negative claims: cannot be net-claimed, discuss with the manufacturer"
         a = _insert(
@@ -370,7 +404,7 @@ def propose(
             adjustment_type="return_reversal",
             claim_line_id=orig.claim_line_id,
             calculation_result_id=row.id,
-            amount=row.claim_amount,
+            amount=amount,
             reason=reason,
         )
         if a is not None:

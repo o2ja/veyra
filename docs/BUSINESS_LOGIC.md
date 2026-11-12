@@ -321,6 +321,8 @@ After activation, the user may start a **recalculation run** over the affected s
 
 Unclaimed lines simply get new results; the "current" result for a line is the one from the latest `completed` run covering it. **Old results are never edited or deleted**, and no frozen claim line changes.
 
+**Repeated recalculation (orchestrator decision, S7.4, pending owner confirmation).** The proposal for a claim line is the amount above *less the corrections already proposed, approved or included* for that line (rejected ones do not count), so a later run that finds the same difference proposes nothing and a run that finds a further difference proposes only the increment; the reason text states the amount due, the amount already corrected and the net proposed. The same netting applies to return reversals across re-imports of the return line (§7). Proposals are accepted only from the latest completed run covering each line (409 `invalid_state` otherwise), so an older run can never reverse an approved correction. Quantity caps count every claim line that is not released, whether its batch is draft, approved or submitted (§4.2).
+
 **Example A1.** v1 pays 22.00/unit; amendment from Jul 1 reduces to 20.00. Lines invoiced Jul 1–Jul 31 already claimed at 22.00 (q=500) → recalculation proposes adjustment `500 × (20.00 − 22.00) = −1,000.00`. Lines before Jul 1 remain 22.00 under `v1a`.
 
 ### 9.4 Duplicate claims

@@ -6,6 +6,7 @@ derivations in the docstrings. Tests of one scenario share a module-scoped works
 
 import csv
 import io
+import threading
 import uuid
 from collections.abc import Iterator
 from contextlib import ExitStack
@@ -304,6 +305,17 @@ def test_batch_with_an_adjustment_ties_out_and_the_adjustment_cannot_be_used_twi
     assert final.status_code == 201, final.text
     fb = final.json()
     assert Decimal(fb["total_amount"]) == Decimal("262.50")
+    other_batch = new_batch(api, volt, result_ids=[spare["id"]])
+    assert other_batch.status_code == 201, other_batch.text
+    rebound = outcome(
+        admin_engine,
+        "UPDATE claim_adjustments SET included_in_batch_id = :b WHERE id = :a",
+        b=other_batch.json()["id"],
+        a=adj["id"],
+    )
+    assert "approval columns change only with the status" in rebound, rebound  # cannot move to another batch
+    gone2 = returned.approver.post(f"/claim-batches/{other_batch.json()['id']}/void", json={"reason": "t"})
+    assert gone2.status_code == 200
     assert returned.approver.post(f"/claim-batches/{fb['id']}/approve").status_code == 200
     body = csv_rows(env, admin_engine, api, fb["id"])
     assert sum(Decimal(r["Claim amount"]) for r in body) == Decimal(
@@ -379,6 +391,11 @@ def test_gl_a1_amendment_recalculation_proposes_minus_1000(env: Env) -> None:
     # ... nor once it has been approved
     assert ws.api.post(f"/claim-adjustments/{adj['id']}/approve").status_code == 200
     assert propose(ws, third["id"])["proposed"] == []
+    # a run that a newer completed run supersedes cannot propose: the pre-amendment run would say +1,000.00
+    # (11,000.00 - 11,000.00 - (-1,000.00)), undoing the approved correction
+    stale = ws.api.post(f"/calculation-runs/{first['id']}/propose-adjustments")
+    assert stale.status_code == 409 and stale.json()["error"]["code"] == "invalid_state", stale.text
+    assert [Decimal(a["amount"]) for a in listing(ws.api, "/claim-adjustments")] == [Decimal("-1000.00")]
     assert [Decimal(a["amount"]) for a in listing(ws.api, "/claim-adjustments")] == [Decimal("-1000.00")]
     # rejecting an approved one is allowed until it is in a batch; then the difference is open again
     assert ws.api.post(f"/claim-adjustments/{adj['id']}/reject").json()["status"] == "rejected"
@@ -534,10 +551,89 @@ def test_a_changed_claimed_line_that_stays_eligible_is_never_offered_again(
     assert res["status"] == "eligible" and Decimal(res["claim_amount"]) == Decimal("1760.00")  # 80 x 22.00
     assert "INV-10001/1" not in pool(ws.api)
     refused = new_batch(ws.api, res["manufacturer_id"], result_ids=[res["id"]])
-    assert refused.status_code in (409, 422), refused.text  # already claimed / not offered
+    assert refused.status_code == 409 and refused.json()["error"]["code"] == "already_claimed", refused.text
+    assert refused.json()["error"]["details"][0]["batch_number"] == batch["batch_number"]
     assert not [b for b in listing(ws.api, "/claim-batches") if b["id"] != batch["id"]]
     (adj,) = propose(ws, run2["id"])["proposed"]
     claim = claim_lines_of(ws, batch["id"])["INV-10001"]
     assert adj["claim_line_id"] == claim["id"] and Decimal(adj["amount"]) == Decimal("-440.00")
     assert run(ws, **WINDOW)["status"] == "completed"
     assert propose(ws, run(ws, **WINDOW)["id"])["proposed"] == []
+
+
+def test_a_changed_return_is_corrected_by_the_difference_not_reversed_twice(env: Env) -> None:
+    """SC-09r, then CN-5002 is re-imported with 5 units instead of 4. The reversal for the first version is -50.00
+    (4 x 12.50); the corrected return is worth -62.50 (5 x 12.50), so exactly one more adjustment of
+    -62.50 - (-50.00) = -12.50 is proposed (hand), not a second -62.50."""
+    ws = workspace(env)
+    import_sales_part(ws, late=False)
+    batch = claim_and_submit(ws, results(ws, run(ws, **WINDOW)["id"]), FIX7)
+    import_sales_part(ws, late=True)
+    (first,) = propose(ws, run(ws, **WINDOW)["id"])["proposed"]
+    assert Decimal(first["amount"]) == Decimal("-50.00")
+    import_text(
+        ws,
+        SALES_HEADER
+        + "CN-5002,1,2026-07-02,2026-07-02,BLUFF,Bluff City Mechanical (SYNTHETIC),BR01,BRK-3P-60A,"
+        "Breaker 3-pole 60A,5,EA,58.00,64.50,290.00,SPA-VOLT-2026-884,,CN,INV-10021,1\n",
+        "cn5002.csv",
+    )
+    run2 = run(ws, **WINDOW)
+    assert Decimal(results(ws, run2["id"])["CN-5002/1"]["claim_amount"]) == Decimal("-62.50")
+    (extra,) = propose(ws, run2["id"])["proposed"]
+    assert extra["adjustment_type"] == "return_reversal" and Decimal(extra["amount"]) == Decimal("-12.50")
+    assert (
+        extra["claim_line_id"] == first["claim_line_id"] == claim_lines_of(ws, batch["id"])["INV-10021"]["id"]
+    )
+    assert "-62.50" in extra["reason"] and "-50.00" in extra["reason"] and "-12.50" in extra["reason"]
+    assert sum(Decimal(a["amount"]) for a in listing(ws.api, "/claim-adjustments")) == Decimal("-62.50")
+    assert propose(ws, run2["id"])["proposed"] == []
+
+
+def test_propose_serialises_with_other_claim_writes(env: Env, admin_engine: Engine) -> None:
+    """Proposals take the per-tenant claims lock (shared with batch creation): while another transaction holds it,
+    a propose waits instead of racing it."""
+    ws = workspace(env)
+    import_sales_part(ws, late=False)
+    claim_and_submit(ws, results(ws, run(ws, **WINDOW)["id"]), FIX7)
+    latest = run(ws, **WINDOW)
+    done = threading.Event()
+
+    def call() -> None:
+        propose(ws, latest["id"])
+        done.set()
+
+    with admin_engine.begin() as conn:
+        conn.execute(
+            text("SELECT pg_advisory_xact_lock(hashtextextended(:k, 0))"), {"k": f"claims:{ws.tenant_id}"}
+        )
+        worker = threading.Thread(target=call)
+        worker.start()
+        assert not done.wait(1.5), "propose ran while the claims lock was held"
+    worker.join(30)
+    assert done.is_set()
+
+
+def test_the_database_only_accepts_new_adjustments_as_proposed(
+    returned: Returned, admin_engine: Engine
+) -> None:
+    """Insert guard: an adjustment cannot be born approved or included, even for the owner."""
+    p = returned.proposal
+    cases = (
+        ("approved", ", approved_by, approved_at", ", :u, now()"),
+        ("proposed", ", included_in_batch_id", ", :b"),
+    )
+    for status, cols, vals in cases:
+        got = outcome(
+            admin_engine,
+            "INSERT INTO claim_adjustments (tenant_id, id, manufacturer_id, adjustment_type, claim_line_id, "
+            f"amount, reason, status{cols}) VALUES (:t, :id, :m, 'agreement_change', :l, -1, 'x', '{status}'"
+            f"{vals})",
+            t=returned.ws.tenant_id,
+            id=str(uuid.uuid4()),
+            m=p["manufacturer_id"],
+            l=p["claim_line_id"],
+            u=p["proposed_by"],
+            b=returned.first_batch["id"],
+        )
+        assert "created as proposed" in got, (status, got)

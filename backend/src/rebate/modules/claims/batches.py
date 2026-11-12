@@ -149,14 +149,20 @@ def _next_number(db: Session, tenant_id: UUID, table: str, column: str, prefix: 
 
 
 def _claimed(db: Session, tenant_id: UUID, line_ids: list[UUID]) -> list[Row[Any]]:
+    """Active claim lines of the lines asked for or of any earlier version of them (BUSINESS_LOGIC §9.4: a re-imported
+    line is the same invoice line). ``sales_document_line_id`` in the rows is the line asked for."""
     return list(
         db.execute(
             text(
-                "SELECT cl.sales_document_line_id, cl.claim_reference, b.batch_number, b.id AS batch_id "
-                "FROM claim_lines cl JOIN claim_batches b ON b.tenant_id = cl.tenant_id AND b.id = cl.batch_id "
-                "WHERE cl.tenant_id = :t AND cl.sales_document_line_id = ANY(:ids) AND cl.released_at IS NULL "
-                "ORDER BY cl.claim_reference"
-            ),
+                "WITH RECURSIVE anc(line_id, source_id) AS ("
+                "SELECT x, x FROM unnest(CAST(:ids AS uuid[])) AS x "
+                "UNION ALL SELECT anc.line_id, s.id FROM anc "
+                "JOIN sales_document_lines s ON s.tenant_id = :t AND s.superseded_by_id = anc.source_id) "
+                "SELECT anc.line_id AS sales_document_line_id, cl.claim_reference, b.batch_number, b.id AS batch_id "
+                "FROM anc JOIN claim_lines cl ON cl.tenant_id = :t AND cl.sales_document_line_id = anc.source_id "
+                "JOIN claim_batches b ON b.tenant_id = cl.tenant_id AND b.id = cl.batch_id "
+                "WHERE cl.released_at IS NULL ORDER BY cl.claim_reference"
+            ),  # nosec B608 (module constants, bound values)
             {"t": tenant_id, "ids": line_ids},
         )
     )

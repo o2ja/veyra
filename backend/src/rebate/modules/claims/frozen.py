@@ -1,5 +1,5 @@
 # ruff: noqa: S608  # SQL assembled from module constants only; every value is a bound parameter
-"""Frozen (submitted) claims as the calculation needs them (BUSINESS_LOGIC.md §4.2, §7, §9.3).
+"""Frozen (submitted) claims, and the live claims that use up caps, as the calculation needs them (BUSINESS_LOGIC.md §4.2, §7, §9.3).
 
 Reads ``claim_lines`` of submitted batches that are not released. A re-imported source line is a new version
 (``superseded_by_id``); a claim stays attached to the version it was made on, so every lookup by the *current* line
@@ -68,6 +68,8 @@ _ANCESTRY = (
     "JOIN sales_document_lines s ON s.tenant_id = :t AND s.superseded_by_id = anc.source_id) "
 )
 _ACTIVE = "c.released_at IS NULL AND c.frozen_at IS NOT NULL AND c.source_kind = 'sales_line'"
+# the cap counts every live claim line (draft, approved or submitted batch), BUSINESS_LOGIC §4.2
+_LIVE = "c.released_at IS NULL AND c.source_kind = 'sales_line'"
 
 
 class SqlFrozenClaims:
@@ -82,7 +84,7 @@ class SqlFrozenClaims:
                     "c.agreement_version_id, r.agreement_id, r.claim_uom, r.manufacturer_id "
                     "FROM anc JOIN claim_lines c ON c.tenant_id = :t AND c.sales_document_line_id = anc.source_id "
                     "JOIN calculation_results r ON r.tenant_id = c.tenant_id AND r.id = c.calculation_result_id "
-                    "WHERE " + _ACTIVE
+                    "WHERE " + _LIVE
                 ),
                 {"t": tenant_id, "ids": list(line_ids)},
             )
@@ -131,7 +133,7 @@ class SqlFrozenClaims:
             text(
                 "WITH RECURSIVE ch(claim_id, line_id) AS ("  # nosec B608 (module constants, bound values)
                 "SELECT c.id, c.sales_document_line_id FROM claim_lines c WHERE c.tenant_id = :t AND "
-                + _ACTIVE
+                + _LIVE
                 + " UNION ALL SELECT ch.claim_id, s.superseded_by_id FROM ch "  # nosec B608 (module constants, bound values)
                 "JOIN sales_document_lines s ON s.tenant_id = :t AND s.id = ch.line_id "
                 "WHERE s.superseded_by_id IS NOT NULL) "
@@ -148,7 +150,7 @@ class SqlFrozenClaims:
                 "AND r.id = c.calculation_result_id "
                 "JOIN sales_document_lines o ON o.tenant_id = c.tenant_id AND o.id = c.sales_document_line_id "
                 "WHERE c.tenant_id = :t AND "
-                + _ACTIVE
+                + _LIVE
                 + " AND c.id NOT IN (SELECT claim_id FROM ch WHERE line_id = ANY(CAST(:ex AS uuid[]))) "  # nosec B608 (module constants, bound values)
                 "AND o.product_id IS NOT NULL"
             ),

@@ -3,6 +3,7 @@
 Expected values come from ``testdata/generated/ground_truth`` (``expected_calculation.json``,
 ``claim_batches_fixture.json``, ``expected_changed_rows.json``) or from the hand derivations in the docstrings."""
 
+import uuid
 from collections.abc import Iterator
 from contextlib import ExitStack
 from dataclasses import dataclass
@@ -76,3 +77,26 @@ def test_cap_consumption_of_a_submitted_claim_survives_a_narrower_run_scope(env:
     assert b["status"] == "eligible" and Decimal(b["eligible_quantity"]) == Decimal("40")
     assert Decimal(b["claim_amount"]) == Decimal("2080.00")
     assert "INV-10010/1" not in results(ws, later["id"])  # the claimed line is outside this run's scope
+
+
+def test_cap_consumption_counts_a_claim_in_a_draft_batch(env: Env) -> None:
+    """BUSINESS_LOGIC §4.2: claim lines of any live (not released) batch use up the cap, not only submitted ones.
+    A (60 units) sits in a draft batch; the later run excluding A still gives B 100 - 60 = 40 units = 2,080.00."""
+    ws = workspace(env)
+    import_sales_part(ws, late=False)
+    a = results(ws, run(ws, **WINDOW)["id"])["INV-10010/1"]
+    r = ws.api.post(
+        "/claim-batches",
+        json={"manufacturer_id": a["manufacturer_id"], "result_ids": [a["id"]]},
+        headers={"Idempotency-Key": str(uuid.uuid4())},
+    )
+    assert r.status_code == 201 and r.json()["status"] == "draft", r.text
+    later = run(ws, manufacturer_ids=[], date_from="2026-05-13", date_to="2026-05-31")
+    b = results(ws, later["id"])["INV-10011/1"]
+    assert Decimal(b["eligible_quantity"]) == Decimal("40") and Decimal(b["claim_amount"]) == Decimal(
+        "2080.00"
+    )
+    # released again (void), the units are free: B is back to 60 x 52.00
+    assert ws.api.post(f"/claim-batches/{r.json()['id']}/void", json={"reason": "t"}).status_code == 200
+    again = run(ws, manufacturer_ids=[], date_from="2026-05-13", date_to="2026-05-31")
+    assert Decimal(results(ws, again["id"])["INV-10011/1"]["claim_amount"]) == Decimal("3120.00")

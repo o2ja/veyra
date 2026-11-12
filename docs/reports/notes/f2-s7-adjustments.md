@@ -44,9 +44,10 @@ the batch tie-out trigger (lines + signed included adjustments = `total_amount`,
    agreement_change on that claim line)`; nothing when that is 0. Without this a second recalculation run re-proposes
    the same difference after the first was approved and included. §9.3 gives `new - frozen` for the first proposal; the
    netting only matters from the second run on. A rejected proposal drops out of the sum, so the difference reappears.
-2. **Return reversals** are proposed once per return line and claim line (not rejected). A return line that changes
-   after its reversal was approved is not corrected automatically (it is not a claimed line, so no `source_changed`);
-   a `manual_correction` is the way. Not implemented here.
+2. **Return reversals** are netted along the return line's version chain (review fix): a re-imported return proposes
+   only the difference to what earlier non-rejected reversals of any version already cover (CN-5002 4 -> 5 units:
+   one extra -12.50, not a second -62.50). The sign of a return correction is free (a corrected return can reduce an
+   earlier reversal), so the migration has no sign CHECK for `return_reversal`.
 3. **`cannot_be_net_claimed`** (manufacturer without `allow_negative_claims`, §7): the flag is carried in the proposal's
    reason; approval is *not* blocked. The ground truth includes ADJ-2026-0001 in a batch although VOLT has no
    `allow_negative_claims`, so "held as proposed" is read as "needs a human decision".
@@ -55,9 +56,11 @@ the batch tie-out trigger (lines + signed included adjustments = `total_amount`,
    unit amount); `agreement_version_id` is the entry's. Negative deltas are refused (422 `not_claimable`).
 6. **Source change**: "claimed" for the hook means a non-released claim line (draft, approved or submitted batch) on the
    line or any earlier version, so a changed line in a draft batch is flagged too. The new version is treated as
-   claimed everywhere (prior claim, frozen claim, missed-claims scan, 409), and gets an adjustment proposal from the
-   next run instead of a second claim. The `source_changed` *variance case* is S9 (`variance_cases` does not exist yet).
-7. **Cap consumption** (`SqlFrozenClaims.consumption`): claimed quantity (claim UoM) minus returns imported by the run's
+   claimed everywhere (prior claim, frozen claim, missed-claims scan), and gets an adjustment proposal from the
+   next run instead of a second claim. Offering it again in `POST /claim-batches` is 409 `already_claimed` exactly
+   (`batches._claimed` follows the version chain; review fix, earlier text said 409 or 422). The `source_changed` *variance case* is S9 (`variance_cases` does not exist yet).
+7. **Cap consumption** (`SqlFrozenClaims.consumption`) counts every non-released claim line (draft, approved or
+   submitted batch; BUSINESS_LOGIC §4.2, review fix), while prior/frozen claims stay submitted-only: claimed quantity (claim UoM) minus returns imported by the run's
    data cutoff (converted with the UoM table), per (agreement, product), claims of the run's own lines excluded. Returns
    are those linked to the claimed version itself.
 8. The included adjustment of a *submitted* batch is frozen (trigger); a *draft/approved* batch voided gives it back
@@ -109,3 +112,13 @@ Evidence at the end of this file.
   gitleaks on the full tree were not run (only the pre-commit gitleaks hook on staged changes).
 - Not tested: concurrency of simultaneous inclusion of one adjustment into two batches (row locks
   `FOR UPDATE` in `lock_for_inclusion` plus the DB trigger; no threaded test); 1M-line cost of `consumption`.
+
+## Review fixes (second round)
+
+Stale-run protection (409 `invalid_state` unless the run is the latest completed one for each of its lines and the
+lines are current versions); netting of return reversals along the version chain; caps count live claim lines;
+`_claimed` follows the version chain (409 exactly); `propose` takes the per-tenant `claims:` advisory lock (shared with
+batch creation); `BEFORE INSERT` guard `fn_claim_adjustment_insert` (amended into the unmerged migration); reasons state
+due / already corrected / proposed; owner-SQL test that an included adjustment cannot be re-bound (the S5 trigger
+already refused it; the test pins it); API_SPECIFICATION §2.8, DATABASE_SCHEMA §3.8 and BUSINESS_LOGIC §9.3 (netting
+rule, marked orchestrator decision pending owner confirmation) updated. `cannot_be_net_claimed` behaviour unchanged.
