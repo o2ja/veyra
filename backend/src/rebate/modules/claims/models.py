@@ -180,7 +180,6 @@ class ClaimAdjustment(Base):
         ),
         Index("ix_claim_adjustments_tenant_id_status", "tenant_id", "status", "id"),
         _fk("claim_adjustments", "included_in_batch_id", "claim_batches"),
-        _fk("claim_adjustments", "claim_line_id", "claim_lines"),
     )
 
     tenant_id: Mapped[UUID] = mapped_column(_tenant_fk("claim_adjustments"))

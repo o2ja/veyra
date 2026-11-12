@@ -12,7 +12,7 @@ Deviations, ADR text and doc deltas for the orchestrator to merge. Nothing here 
   - batches: insert only as `draft`; update limited to workflow columns; transitions `draft->approved->submitted`, `draft|approved->void` each may set only its own columns (+ export link); `submitted` changes only `external_reference`; `void` never changes; no delete/truncate.
   - lines: insert only into a `draft` batch; afterwards only `frozen_at` (only while the batch is `submitted`) and `released_at` (once, only while the batch is `draft|approved|void`) can be set; frozen lines never change; no delete/truncate.
   - Deferred constraint trigger on batches **and** lines (once per batch and transaction): `line_count`/`total_amount` equal the lines, lines are frozen exactly when the batch is `submitted`, released exactly when it is `void`. Totals therefore tie out in the database at commit.
-- `claim_adjustments.claim_line_id` and `.included_in_batch_id` now have composite FKs (placeholders since S5).
+- `claim_adjustments.included_in_batch_id` now has a composite FK. `claim_adjustments.claim_line_id` deliberately stays a plain uuid: the S5 proposal tests (`FixtureClaims`) insert adjustments for stand-in line ids; S7.4 adds the FK when it replaces the stand-in with real claim lines.
 
 ### API_SPECIFICATION.md §2.8
 - `GET /missed-claims` filters: `manufacturer_id`, `agreement_id`, `invoice_from`, `invoice_to`, `limit`, `cursor`, `format=csv|xlsx` (202 export job). Rows are the **newest result per sales line across completed runs** that is `eligible` and has no active claim line; `id` is the calculation result id (pass it as `result_ids`). `GET /missed-claims/summary`: `totals`, `groups` (manufacturer x agreement), `exceptions` by code, `lost_to_expiry`.

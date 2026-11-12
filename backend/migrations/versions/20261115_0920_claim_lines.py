@@ -8,7 +8,8 @@ DATABASE_SCHEMA.md §3.8, §7. Tenant table: composite FKs, RLS ENABLE + FORCE v
   once: ``frozen_at`` only while the parent batch is ``submitted``; ``released_at`` only while it is
   ``draft``/``approved``/``void`` (in practice the void transaction). A frozen line never changes or goes away.
 - Never deleted (privileges revoked + trigger).
-- ``claim_adjustments.claim_line_id`` gets its composite FK here (placeholder since S5).
+- ``claim_adjustments.claim_line_id`` stays a plain uuid: its FK arrives with S7.4, together with replacing the
+  S5 test stand-in for claim lines (the S5 proposal tests insert adjustments for stand-in line ids).
 
 Forward-only like the rest of the chain (no downgrade functions).
 
@@ -159,8 +160,3 @@ def upgrade() -> None:
     op.execute("REVOKE UPDATE, DELETE, TRUNCATE ON claim_lines FROM rebate_app")
     op.execute("GRANT UPDATE (frozen_at, released_at) ON claim_lines TO rebate_app")
     enable_tenant_rls("claim_lines")
-
-    op.execute(
-        "ALTER TABLE claim_adjustments ADD CONSTRAINT fk_claim_adjustments_claim_lines "
-        "FOREIGN KEY (tenant_id, claim_line_id) REFERENCES claim_lines (tenant_id, id)"
-    )
