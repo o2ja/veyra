@@ -168,7 +168,7 @@ Structured JSON to stdout (collected by Docker); fields: `timestamp`, `level`, `
 
 | Scenario | Steps (summary) |
 |---|---|
-| Restore DB to a point in time | Provision clean Postgres → restore base backup → replay WAL to target → verify with row counts and `alembic current` → run isolation/golden smoke tests → switch `DATABASE_URL` |
+| Restore DB to a point in time | Provision clean Postgres → restore base backup → replay WAL to target → verify with row counts and `alembic current` → run isolation/golden smoke tests → set `REBATE_DB_NAME` / `S3_BUCKET` (runbooks/backup-restore.md) |
 | Lost host | Provision new host → install Docker → pull images by tag → restore secrets → attach/restore DB → point DNS → smoke test |
 | Corrupt object store | Restore versions or from the secondary bucket; verify `file_objects.sha256` against restored objects |
 | Failed deployment | Roll back image tag; if a migration ran, assess forward-fix vs restore |

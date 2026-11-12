@@ -3,7 +3,7 @@
 # Usage: backup.sh            (run from anywhere on the Docker host; it cds to the repo root)
 # Env:   COMPOSE   compose invocation (default: production stack with ENV_FILE=.env.prod)
 #        RUN_ARGS extra args for the one-off api container (e.g. "-e S3_BUCKET=other")
-#        BACKUP_DIR output root (default ./backups)      DB database name (default rebate)
+#        BACKUP_DIR output root (default /var/backups/veyra, outside the checkout)      DB database name (default rebate)
 # Output: $BACKUP_DIR/<UTC timestamp>/{db.dump,objects.tar,SHA256SUMS}. Encrypt and ship off-host afterwards
 # (runbooks/backup-restore.md). The dump holds ALL tenants: treat it as the most sensitive file you own.
 set -euo pipefail
@@ -13,7 +13,7 @@ ENV_FILE="${ENV_FILE:-.env.prod}"
 COMPOSE="${COMPOSE:-docker compose --env-file $ENV_FILE -f infra/docker/compose.prod.yml}"
 envval() { sed -n "s/^$1=//p" "$ENV_FILE" 2>/dev/null | tail -1; }
 DB="${DB:-$(envval REBATE_DB_NAME)}"; DB="${DB:-rebate}"
-out="${BACKUP_DIR:-./backups}/$(date -u +%Y%m%dT%H%M%SZ)"
+out="${BACKUP_DIR:-/var/backups/veyra}/$(date -u +%Y%m%dT%H%M%SZ)"
 umask 077
 mkdir -p "$out"
 trap 'echo "backup FAILED, removing partial $out" >&2; rm -rf "$out"' ERR

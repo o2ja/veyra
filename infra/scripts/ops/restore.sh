@@ -15,9 +15,12 @@ live=0; [[ "${1:-}" == "--live" ]] && { live=1; shift; }
 dir="${1:?backup dir}"; newdb="${2:?new database name}"; newbucket="${3:?new bucket name}"
 ENV_FILE="${ENV_FILE:-.env.prod}"
 COMPOSE="${COMPOSE:-docker compose --env-file $ENV_FILE -f infra/docker/compose.prod.yml}"
+# live names as compose resolves them (quotes, comments, overrides), not raw env-file lines
+cfg="$($COMPOSE config 2>/dev/null)"
+livedb="$(sed -n 's#^ *DATABASE_URL: .*/##p' <<< "$cfg" | head -1 | tr -d '"')"
+livebucket="$(sed -n 's#^ *S3_BUCKET: ##p' <<< "$cfg" | head -1 | tr -d '"')"
+[[ -n "$livedb" && -n "$livebucket" ]] || { echo "cannot read the live database/bucket names from '$COMPOSE config'" >&2; exit 2; }
 envval() { sed -n "s/^$1=//p" "$ENV_FILE" 2>/dev/null | tail -1; }
-livedb="$(envval REBATE_DB_NAME)"; livedb="${livedb:-rebate}"
-livebucket="$(envval S3_BUCKET)"; livebucket="${livebucket:-rebate-files}"
 case "$newdb" in postgres|template0|template1) echo "refusing target database '$newdb'" >&2; exit 2;; esac
 if [[ "$newdb" == "$livedb" || "$newbucket" == "$livebucket" ]]; then
   [[ $live -eq 1 ]] || { echo "refusing: '$newdb'/'$newbucket' is (or overlaps) the LIVE database/bucket '$livedb'/'$livebucket'; use fresh names, or --live" >&2; exit 2; }
@@ -55,7 +58,8 @@ psql -d "$newdb" -At -c "SELECT 'tenants', count(*) FROM tenants UNION ALL SELEC
 
 admin_id="${S3_ADMIN_ACCESS_KEY_ID:-$(envval S3_ADMIN_ACCESS_KEY_ID)}"
 admin_secret="${S3_ADMIN_SECRET_ACCESS_KEY:-$(envval S3_ADMIN_SECRET_ACCESS_KEY)}"
-admin_args=(); [[ -z "$admin_id" ]] || admin_args=(-e "S3_ACCESS_KEY_ID=$admin_id" -e "S3_SECRET_ACCESS_KEY=$admin_secret")
+# secrets are passed by NAME (-e NAME), never as values on a command line
+admin_args=(); [[ -z "$admin_id" ]] || { export S3_ACCESS_KEY_ID="$admin_id" S3_SECRET_ACCESS_KEY="$admin_secret"; admin_args=(-e S3_ACCESS_KEY_ID -e S3_SECRET_ACCESS_KEY); }
 $COMPOSE run --rm --no-deps -T ${RUN_ARGS:-} "${admin_args[@]}" api python -c "$(cat "$here/s3_tar.py")" load "$newbucket" < "$dir/objects.tar" \
   || { echo "object load failed" >&2; exit 5; }
 step "objects loaded into $newbucket"

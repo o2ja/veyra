@@ -5,8 +5,8 @@ Status: **written, not executed** (no host exists). Compose file validated in CI
 
 ## First-time host setup (operator, once)
 
-1. Host: Docker + Compose, firewall default-deny, 80/443 allowed only from Cloudflare ranges
-   (`runbooks/cloudflare-ip-update.md`), SSH key-only, unattended security updates.
+1. Host: Docker + Compose, 80/443 allowed only from Cloudflare ranges at the provider firewall or in the
+   `DOCKER-USER` iptables chain (ufw does NOT filter Docker-published ports; `runbooks/cloudflare-ip-update.md`), SSH key-only, unattended security updates.
 2. `cp .env.prod.example .env.prod; chmod 0600 .env.prod`; fill every `replace-me` with generated, URL-safe values.
    Set `CLOUDFLARE_IP_RANGES` from the current Cloudflare lists. Owner keeps an offline copy of `ENCRYPTION_KEYS`.
 3. Cloudflare (dashboard, operator): proxy `APP_DOMAIN` and `S3_DOMAIN`, SSL mode Full (strict), optionally
@@ -16,12 +16,14 @@ Status: **written, not executed** (no host exists). Compose file validated in CI
    (export those variables from `.env.prod` first; the script reads them from the exec environment).
 5. Provision the bucket with the separate admin identity (the app identity is limited to the one bucket and cannot
    create it): `$C up -d seaweedfs`, then
-   `$C run --rm --no-deps -T -e S3_ACCESS_KEY_ID=<S3_ADMIN_ACCESS_KEY_ID> -e S3_SECRET_ACCESS_KEY=<S3_ADMIN_SECRET_ACCESS_KEY> api python -c "$(cat infra/scripts/ops/s3_tar.py)" init`.
+   `S3_ACCESS_KEY_ID=<S3_ADMIN_ACCESS_KEY_ID> S3_SECRET_ACCESS_KEY=<S3_ADMIN_SECRET_ACCESS_KEY> $C run --rm --no-deps -T -e S3_ACCESS_KEY_ID -e S3_SECRET_ACCESS_KEY api python -c "$(cat infra/scripts/ops/s3_tar.py)" init`.
    SeaweedFS in production is an interim choice pending owner decision OD-3/OD-4.
 6. Continue with "Deploy" below.
 
 ## Deploy
 
+0. `python3 infra/scripts/check-proxy-config.py .env.prod infra/docker/compose.prod.yml` must print OK (the
+   trusted proxy IP must equal Caddy's fixed internal address); never `up` without it.
 1. Take a backup first: `infra/scripts/ops/backup.sh`. Note the currently running tag: `grep REBATE_IMAGE_TAG .env.prod`.
 2. Build images from the release commit (`git checkout <sha>`), set `REBATE_IMAGE_TAG=<sha>` in `.env.prod`,
    `$C build api caddy` (worker uses the api image).

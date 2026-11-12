@@ -24,6 +24,12 @@ CASES = {
     "LGPLv3": "weak",
     "GNU Lesser General Public License v3 or later (LGPLv3+)": "weak",
     "MPL-2.0": "weak",
+    "Dual Licensed - GNU AFFERO GPL 3.0 or Artifex Commercial License | GNU Affero General Public License v3 | Other/Proprietary License": "strong",
+    "AGPL-3.0 or commercial": "unknown",
+    "Commercial": "unknown",
+    "UNLICENSED": "unknown",
+    "SEE LICENSE IN LICENSE.txt": "unknown",
+    "MIT | Other/Proprietary License": "unknown",
     "GPL-3.0-only OR LGPL-3.0": "weak",
 }
 bad = {k: (v, classify(k)) for k, v in CASES.items() if classify(k) != v}

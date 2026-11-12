@@ -21,7 +21,7 @@ in Cloudflare's changelog.
    `{ curl -fsS https://www.cloudflare.com/ips-v4; echo; curl -fsS https://www.cloudflare.com/ips-v6; } | grep -v '^$' | paste -sd, -`
 3. Put the result in `CLOUDFLARE_IP_RANGES` in `.env.prod`. A malformed entry makes the API refuse to start
    (validated at startup), which is the intended fail-loud behaviour.
-4. Apply the same list to the origin firewall (allow 80/443 only from these ranges; `ufw`/`nftables`/provider firewall).
+4. Apply the same list to the origin firewall (allow 80/443 only from these ranges at the provider firewall or in the `DOCKER-USER` iptables chain; ufw/nftables INPUT rules do not filter Docker-published ports).
 5. `docker compose --env-file .env.prod -f infra/docker/compose.prod.yml up -d api worker`; check
    `/api/v1/health/ready`.
 6. Verify: make a request through Cloudflare, then confirm in the `audit_log` (or a failed-login row) that `ip` is

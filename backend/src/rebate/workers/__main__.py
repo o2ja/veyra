@@ -25,7 +25,11 @@ def main() -> None:
     configure_logging(settings.log_level)
     engine = make_engine(settings.database_url.get_secret_value())
     assert_safe_role(engine)
-    storage.ensure_bucket(settings)
+    if settings.app_env not in (
+        "staging",
+        "production",
+    ):  # hosted: bucket is provisioned out of band (s3_tar.py init)
+        storage.ensure_bucket(settings)
     stop = False
 
     def request_stop(*_: object) -> None:

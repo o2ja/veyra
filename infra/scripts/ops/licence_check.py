@@ -21,13 +21,23 @@ STRONG = re.compile(rf"(?<![a-z])(A?GPL|SSPL|EUPL){_END}|GNU (Affero )?General P
 WEAK = re.compile(rf"(?<![a-z])(LGPL|MPL|EPL|CDDL|CC-BY-SA){_END}|Lesser General Public|Mozilla Public|Eclipse Public", re.I)
 
 
+UNKNOWN = re.compile(r"proprietary|commercial|unlicensed|see licen[cs]e", re.I)
+RANK = ["strong", "unknown", "weak", "ok"]  # worst first
+
+
 def classify(text: str) -> str:
-    # "or later" is a version qualifier ("GPL v2 or later"), not a choice between licences
-    choice = r"\s+or\s+(?!later)"
-    alternatives = re.split(choice + "|/", text, flags=re.I) if re.search(choice, text, re.I) else [text]
-    kinds = {"strong" if STRONG.search(a) else "weak" if WEAK.search(a) else "ok" for a in alternatives}
-    # a choice lets the licensee take the least restrictive alternative
-    return "ok" if "ok" in kinds else "weak" if "weak" in kinds else "strong"
+    """Metadata parts (joined by " | ") describe one package: the worst part wins. Inside a part, " OR " is a
+    choice (least restrictive wins) but "or later" is a version qualifier; "/" is never a separator.
+    Proprietary/commercial/UNLICENSED/SEE LICENSE count as unknown, which blocks, even as one alternative."""
+    verdicts = []
+    for part in text.split(" | "):
+        alts = re.split(r"\s+or\s+(?!later)", part, flags=re.I)
+        kinds = {
+            "unknown" if UNKNOWN.search(a) else "strong" if STRONG.search(a) else "weak" if WEAK.search(a) else "ok"
+            for a in alts
+        }
+        verdicts.append("unknown" if "unknown" in kinds else max(kinds, key=RANK.index))
+    return min(verdicts, key=RANK.index)
 
 
 def python_licence(name: str) -> str:

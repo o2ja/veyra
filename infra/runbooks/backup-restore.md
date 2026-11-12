@@ -9,7 +9,7 @@ no production host exists, so it has never run.
 On the host, from the repo root, with `.env.prod` present:
 
 ```sh
-infra/scripts/ops/backup.sh            # writes ./backups/<UTC timestamp>/{db.dump,objects.tar,SHA256SUMS}
+infra/scripts/ops/backup.sh            # writes /var/backups/veyra/<UTC timestamp> (BACKUP_DIR)/{db.dump,objects.tar,SHA256SUMS}
 ```
 
 `db.dump` is `pg_dump --format=custom` of the whole `rebate` database (all tenants); `objects.tar` is every current
@@ -26,7 +26,7 @@ Operator steps the script does not do (no accounts exist yet):
 ## Restore (into a FRESH database and bucket; the script refuses the live names)
 
 ```sh
-infra/scripts/ops/restore.sh backups/<timestamp> rebate_restored rebate-files-restored
+infra/scripts/ops/restore.sh /var/backups/veyra/<timestamp> rebate_restored rebate-files-restored
 ```
 
 `restore.sh` refuses a database or bucket name equal to the live one (`REBATE_DB_NAME` / `S3_BUCKET`).
@@ -38,8 +38,9 @@ Then, before switching traffic:
 1. Run the smoke checks: `file_objects.sha256` spot-check against restored objects; the isolation suite pointed at
    the restored database; a login.
 2. Edit `REBATE_DB_NAME` and `S3_BUCKET` in `.env.prod` (the only place the names live; compose builds every
-   database URL from them), `docker compose ... up -d api worker`,
-   check `/api/v1/health/ready`.
+   database URL from them), `docker compose ... up -d seaweedfs caddy api worker` (SeaweedFS and Caddy bake the bucket name into the app identity and the
+   download allow-list, so they must restart too),
+   check `/api/v1/health/ready`, then open one file download (a 403 means seaweedfs/caddy still have the old bucket).
 3. Keep the damaged database for forensics until the incident is closed; drop it only after sign-off.
 
 Roles are cluster-wide: on a brand-new host run `infra/scripts/init-db.sh` first (it creates roles, an empty

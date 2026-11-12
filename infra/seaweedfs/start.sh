@@ -1,19 +1,19 @@
 #!/bin/sh
-# Dev/CI SeaweedFS (ADR-017): one S3 identity from the environment, SSE-S3 key via WEED_S3_SSE_KEY.
+# SeaweedFS (ADR-017): dev/CI one Admin identity; production (S3_SCOPE_BUCKET) a bucket-scoped app identity + ops identity. SSE-S3 key via WEED_S3_SSE_KEY.
 set -eu
 : "${S3_ACCESS_KEY_ID:?}" "${S3_SECRET_ACCESS_KEY:?}" "${WEED_S3_SSE_KEY:?}"
 umask 077
 # Dev/CI (S3_SCOPE_BUCKET unset): one identity with Admin so the worker can create the bucket.
-# Production (S3_SCOPE_BUCKET=<bucket>): the app identity is confined to that bucket (Admin:<bucket> only covers
-# versioning/encryption of it; it cannot create or delete other buckets or touch their objects), and a separate
-# admin identity (S3_ADMIN_*) exists for out-of-band provisioning and restores. Verified against SeaweedFS 4.50.
+# Production (S3_SCOPE_BUCKET=<bucket>): the app identity is confined to object Read/Write/List/Tagging on that
+# bucket (no Admin: the worker does not ensure_bucket when hosted), and a separate admin identity (S3_ADMIN_*)
+# exists for out-of-band provisioning (s3_tar.py init) and restores.
 if [ -n "${S3_SCOPE_BUCKET:-}" ]; then
   : "${S3_ADMIN_ACCESS_KEY_ID:?}" "${S3_ADMIN_SECRET_ACCESS_KEY:?}"
   b="$S3_SCOPE_BUCKET"
   cat > /tmp/s3.json <<JSON
 {"identities":[
  {"name":"app","credentials":[{"accessKey":"${S3_ACCESS_KEY_ID}","secretKey":"${S3_SECRET_ACCESS_KEY}"}],
-  "actions":["Admin:$b","Read:$b","Write:$b","List:$b","Tagging:$b"]},
+  "actions":["Read:$b","Write:$b","List:$b","Tagging:$b"]},
  {"name":"ops","credentials":[{"accessKey":"${S3_ADMIN_ACCESS_KEY_ID}","secretKey":"${S3_ADMIN_SECRET_ACCESS_KEY}"}],
   "actions":["Admin","Read","Write","List","Tagging"]}]}
 JSON

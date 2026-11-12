@@ -16,7 +16,11 @@ def check(cfg: dict, trusted: set[str]) -> list[str]:
     expected = set()
     for n in shared:
         addr = (svc["caddy"]["networks"][n] or {}).get("ipv4_address")
-        subnets = [c["subnet"] for c in nets[n].get("ipam", {}).get("config", [])]
+        ipam = nets[n].get("ipam", {}).get("config", [])
+        subnets = [c["subnet"] for c in ipam]
+        ranges = [c.get("ip_range") for c in ipam]
+        if not all(ranges) or any(ipaddress.ip_address(addr or "0.0.0.0") in ipaddress.ip_network(r) for r in ranges if r):
+            return [f"network '{n}' needs ip_range that excludes caddy's fixed address (Docker does not reserve it)"]
         if not addr or not any(ipaddress.ip_address(addr) in ipaddress.ip_network(s) for s in subnets):
             return [f"caddy has no fixed ipv4_address inside a declared subnet on shared network '{n}'"]
         expected.add(addr)
