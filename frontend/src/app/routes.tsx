@@ -35,6 +35,13 @@ import { AgreementDetailPage } from "../features/agreements/agreement-detail-pag
 import { DraftEditorPage } from "../features/agreements/draft-editor-page";
 import { DraftsPage } from "../features/agreements/drafts-page";
 import { VersionDetailPage, VersionDiffPage } from "../features/agreements/version-pages";
+import { RebatesPage } from "../features/calculations/rebates-page";
+import { ResultDetailPage } from "../features/calculations/result-detail-page";
+import { RunDetailPage } from "../features/calculations/run-detail-page";
+import { RunsPage } from "../features/calculations/runs-page";
+import { AiUsagePage } from "../features/extractions/ai-usage-page";
+import { ExtractionDetailPage } from "../features/extractions/extraction-detail-page";
+import { ExtractionsPage } from "../features/extractions/extractions-page";
 import { AppLayout } from "./app-layout";
 import { RequirePermission, RequireSession } from "./guards";
 import { RouteError } from "./route-error";
@@ -182,6 +189,15 @@ export const routes: RouteObject[] = [
       guarded("agreements/:agreementId", "data.read", <AgreementDetailPage />),
       guarded("agreement-drafts", "data.read", <DraftsPage />),
       guarded("agreement-drafts/:draftId", "data.read", <DraftEditorPage />),
+      // S5: calculations and rebate tracker
+      guarded("calculations", "data.read", <RunsPage />),
+      guarded("calculations/rebates", "data.read", <RebatesPage />),
+      guarded("calculations/results/:resultId", "data.read", <ResultDetailPage />),
+      guarded("calculations/:runId", "data.read", <RunDetailPage />),
+      // S6: AI document extractions and usage
+      guarded("extractions", "data.read", <ExtractionsPage />),
+      guarded("extractions/usage", "data.read", <AiUsagePage />),
+      guarded("extractions/:extractionId", "data.read", <ExtractionDetailPage />),
     ],
   },
 ];

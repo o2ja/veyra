@@ -2,9 +2,9 @@ import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 
 import AxeBuilder from "@axe-core/playwright";
-import { expect, test, type Page } from "@playwright/test";
+import { expect, type Page } from "@playwright/test";
 
-import { PASSWORD, enrolMfa, signIn, tokenFromMail, uniqueEmail } from "./support";
+import { PASSWORD, enrolMfa, signIn, test, tokenFromMail, uniqueEmail } from "./support";
 
 // S3 import wizard against the real stack (API, worker, ClamAV, SeaweedFS). Expected counts come from
 // testdata/generated/ground_truth/expected_import_results.json and the backend's hand-derived layout-A
