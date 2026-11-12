@@ -3,9 +3,9 @@ import { useState } from "react";
 import { Link } from "react-router-dom";
 
 import type { paths } from "../../api/schema";
-import { Card } from "../../components/ui";
+import { Card, PermissionDenied } from "../../components/ui";
 import { api } from "../../lib/api/client";
-import { unwrap } from "../../lib/api/errors";
+import { ApiError, unwrap } from "../../lib/api/errors";
 import { useSession } from "../../lib/session";
 import { DataTable, PagerControls, SelectField, usePager, utc } from "../masterdata/common";
 import { STATUS_TEXT, TYPE_TEXT, isBusy } from "./logic";
@@ -30,6 +30,8 @@ export function ImportsPage() {
       ),
     refetchInterval: (q) => (q.state.data?.data.some(isBusy) ? 2000 : false),
   });
+  if ((list.error as ApiError)?.status === 403) return <PermissionDenied />;
+
   return (
     <Card
       title="Imports"
