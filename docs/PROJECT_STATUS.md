@@ -7,8 +7,8 @@
 | Item | State |
 |---|---|
 | Phase | **Release 1 build** |
-| Current stage | **S3–S6 batch in progress** (S2 approved 2026-11-10); see §3 |
-| Application code | S0 skeleton + S1: identity, tenancy, audit modules; auth/MFA/sessions/CSRF; admin UI; isolation suite with negative control |
+| Current stage | **S3–S6 batch in progress** (S2 approved 2026-11-10); S3–S6 backends merged, UI for S5/S6 pending; see §3 |
+| Application code | S0 skeleton + S1 (identity, tenancy, audit, auth/MFA/sessions/CSRF, isolation suite with negative control); S2 files + job queue; S3 ingestion; S4 agreements; S5 calculation runs; S6 AI extraction (backends; S3/S4 UI) |
 | Synthetic test data | Generated and self-checked (`testdata/`) |
 
 ## 2. Completed
@@ -18,6 +18,7 @@
 - [x] Documentation package (`docs/`, `CLAUDE.md`, `README.md`)
 - [x] Synthetic dataset generator and ground truth (`testdata/generate.py`)
 - [x] S0 Foundation and tooling (signed off 2026-11-09)
+- [x] S1 and S2 (signed off 2026-11-10); S3, S4, S5, S6 backends merged to `main` (UI for S5/S6 pending); 1M-row baselines in `reports/PERFORMANCE_BASELINES.md`
 - [x] Independent check of every worked example in `BUSINESS_LOGIC.md` (`testdata/verify_business_logic_examples.py`, passes)
 
 ## 3. In progress
@@ -47,7 +48,7 @@ Multi-agent waves (worktree branches, orchestrator merges). Resume point:
 
 ## 4. Pending
 
-Stages S0–S11 per `DEVELOPMENT_ROADMAP.md` / `IMPLEMENTATION_PLAN.md`. Release 2 candidates are listed in the roadmap and are not scheduled.
+S5/S6 UI, then S7 onwards per `DEVELOPMENT_ROADMAP.md` / `IMPLEMENTATION_PLAN.md`. NFR-04 evidence (shared dev VM, one run each): 1M-row import 22.9 min (target < 30), 1M-line calculation 12.7 min (target < 15), both on a file where no line is eligible; list-endpoint p95 on 5M lines not measured. Release 2 candidates are listed in the roadmap and are not scheduled.
 
 ## 5. Decisions outstanding
 
