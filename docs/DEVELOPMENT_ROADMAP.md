@@ -168,3 +168,5 @@ Ordering depends on pilot feedback; each needs owner approval and its own kickof
 | SSO/SCIM, SOC 2 programme, per-tenant encryption keys, per-tenant restore tooling | Enterprise/scale requirements |
 | Multi-currency | Assumption A-08 |
 | Additional verticals' adapters/templates | After the first vertical is proven |
+| Rebate tiers across a mid-period amendment with different terms (today the run is refused, `split_period_terms_need_decision`; owner D1) | Needs a rule for combining tier volume across versions; validate against real agreements |
+| Separate manufacturer claim-window setting for rebates (today rebates use period end + the SPA `claim_window_days`; owner D3) | One setting is enough for Release 1 |
