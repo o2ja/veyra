@@ -89,3 +89,18 @@ export async function signIn(page: Page, email: string, password = PASSWORD): Pr
   await page.getByLabel("Password").fill(password);
   await page.getByRole("button", { name: "Sign in" }).click();
 }
+
+export async function noViolations(page: Page, name: string): Promise<void> {
+  const AxeBuilder = (await import("@axe-core/playwright")).default;
+  const result = await new AxeBuilder({ page })
+    .withTags(["wcag2a", "wcag2aa", "wcag21a", "wcag21aa"])
+    .analyze();
+  const summary = result.violations.map(
+    (v) =>
+      `${v.id} (${v.nodes.length}): ${v.nodes
+        .slice(0, 3)
+        .map((n) => n.target.join(" "))
+        .join(" | ")}`,
+  );
+  expect(summary, `${name}: ${summary.join(", ")}`).toEqual([]);
+}
