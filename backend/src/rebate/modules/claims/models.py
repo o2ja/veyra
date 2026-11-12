@@ -169,14 +169,30 @@ class ClaimAdjustment(Base):
         _fk("claim_adjustments", "manufacturer_id", "manufacturers"),
         _fk("claim_adjustments", "calculation_result_id", "calculation_results"),
         _fk("claim_adjustments", "run_id", "calculation_runs"),
+        _fk("claim_adjustments", "claim_line_id", "claim_lines"),
+        _fk("claim_adjustments", "rebate_accrual_entry_id", "rebate_accrual_entries"),
         Index(
             "uq_claim_adjustments_proposal",
             "tenant_id",
             "claim_line_id",
             "adjustment_type",
             "run_id",
+            "calculation_result_id",
             unique=True,
             postgresql_where=text("claim_line_id IS NOT NULL"),
+        ),
+        Index(
+            "uq_claim_adjustments_clawback",
+            "tenant_id",
+            "rebate_accrual_entry_id",
+            unique=True,
+            postgresql_where=text("rebate_accrual_entry_id IS NOT NULL"),
+        ),
+        Index(
+            "ix_claim_adjustments_tenant_id_included_in_batch_id",
+            "tenant_id",
+            "included_in_batch_id",
+            postgresql_where=text("included_in_batch_id IS NOT NULL"),
         ),
         Index("ix_claim_adjustments_tenant_id_status", "tenant_id", "status", "id"),
         _fk("claim_adjustments", "included_in_batch_id", "claim_batches"),
@@ -186,7 +202,8 @@ class ClaimAdjustment(Base):
     id: Mapped[UUID] = mapped_column(primary_key=True)
     manufacturer_id: Mapped[UUID] = mapped_column()
     adjustment_type: Mapped[str] = mapped_column(Text)
-    claim_line_id: Mapped[UUID | None] = mapped_column()  # FK to claim_lines arrives with S7
+    claim_line_id: Mapped[UUID | None] = mapped_column()
+    rebate_accrual_entry_id: Mapped[UUID | None] = mapped_column()
     calculation_result_id: Mapped[UUID | None] = mapped_column()
     variance_case_id: Mapped[UUID | None] = mapped_column()  # FK to variance_cases arrives with S9
     run_id: Mapped[UUID | None] = mapped_column()
@@ -308,7 +325,7 @@ class ClaimLine(Base):
     source_kind: Mapped[str] = mapped_column(Text)
     sales_document_line_id: Mapped[UUID | None] = mapped_column()
     rebate_accrual_entry_id: Mapped[UUID | None] = mapped_column()
-    calculation_result_id: Mapped[UUID] = mapped_column()
+    calculation_result_id: Mapped[UUID | None] = mapped_column()  # NULL only for rebate_accrual lines
     agreement_version_id: Mapped[UUID] = mapped_column()
     quantity: Mapped[Decimal | None] = mapped_column(Numeric(18, 6))
     unit_amount: Mapped[Decimal | None] = mapped_column(Numeric(18, 6))
