@@ -83,6 +83,17 @@ class Action(StrEnum):
     CALCULATION_RUN_COMPLETED = "calculation_run.completed"
     CALCULATION_RUN_FAILED = "calculation_run.failed"
     CALCULATION_ADJUSTMENTS_PROPOSED = "calculation_run.adjustments_proposed"
+    CLAIM_BATCH_CREATED = "claim_batch.created"
+    CLAIM_BATCH_APPROVED = "claim_batch.approved"
+    CLAIM_BATCH_FOUR_EYES_VIOLATION = "claim_batch.four_eyes_violation"
+    CLAIM_BATCH_EXPORT_REQUESTED = "claim_batch.export_requested"
+    CLAIM_BATCH_EXPORTED = "claim_batch.exported"
+    CLAIM_BATCH_SUBMITTED = "claim_batch.submitted"
+    CLAIM_BATCH_VOIDED = "claim_batch.voided"
+    CLAIM_TEMPLATE_CREATED = "claim_export_template.created"
+    CLAIM_TEMPLATE_UPDATED = "claim_export_template.updated"
+    MISSED_CLAIMS_EXPORT_REQUESTED = "missed_claims.export_requested"
+    MISSED_CLAIMS_EXPORTED = "missed_claims.exported"
     EXTRACTION_REQUESTED = "extraction.requested"
     EXTRACTION_FINISHED = "extraction.finished"
     IMPORT_MAPPING_SUGGESTED = "import.mapping_suggested"
@@ -219,4 +230,24 @@ AUDITED_FIELDS: dict[str, frozenset[str]] = {
             "proposed",
         }
     ),
+    "claim_batch": frozenset(
+        {
+            "manufacturer_id",
+            "batch_number",
+            "status",
+            "line_count",
+            "total_amount",
+            "period_from",
+            "period_to",
+            "export_template_id",
+            "exported_file_id",
+            "submitted_at",
+            "external_reference",
+            "void_reason",
+        }
+    ),
+    "claim_export_template": frozenset(
+        {"manufacturer_id", "name", "format", "columns", "options", "active", "revision"}
+    ),
+    "missed_claims_export": frozenset({"format", "filter"}),
 }

@@ -726,6 +726,161 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/claim-batches": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List Batches */
+        get: operations["claim_batch_list"];
+        put?: never;
+        /** Create Batch */
+        post: operations["claim_batch_create"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/claim-batches/{batch_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Batch */
+        get: operations["claim_batch_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/claim-batches/{batch_id}/approve": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Approve Batch */
+        post: operations["claim_batch_approve"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/claim-batches/{batch_id}/export": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Export Batch */
+        post: operations["claim_batch_export"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/claim-batches/{batch_id}/lines": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List Batch Lines */
+        get: operations["claim_batch_line_list"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/claim-batches/{batch_id}/submit": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Submit Batch */
+        post: operations["claim_batch_submit"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/claim-batches/{batch_id}/void": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Void Batch */
+        post: operations["claim_batch_void"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/claim-export-templates": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List Templates */
+        get: operations["claim_export_template_list"];
+        put?: never;
+        /** Create Template */
+        post: operations["claim_export_template_create"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/claim-export-templates/{export_template_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /** Replace Template */
+        put: operations["claim_export_template_replace"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/customers": {
         parameters: {
             query?: never;
@@ -1252,6 +1407,40 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/missed-claims": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List Missed */
+        get: operations["missed_claim_list"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/missed-claims/summary": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Missed Summary */
+        get: operations["missed_claim_summary"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/products": {
         parameters: {
             query?: never;
@@ -1723,6 +1912,108 @@ export interface components {
             data: components["schemas"]["AuditEntry"][];
             page: components["schemas"]["Page"];
         };
+        /** BatchExportIn */
+        BatchExportIn: {
+            /** Template Id */
+            template_id?: string | null;
+        };
+        /** BatchFilter */
+        BatchFilter: {
+            /** Agreement Id */
+            agreement_id?: string | null;
+            /** Invoice From */
+            invoice_from?: string | null;
+            /** Invoice To */
+            invoice_to?: string | null;
+        };
+        /** BatchIn */
+        BatchIn: {
+            filter?: components["schemas"]["BatchFilter"] | null;
+            /**
+             * Manufacturer Id
+             * Format: uuid
+             */
+            manufacturer_id: string;
+            /** Result Ids */
+            result_ids?: string[] | null;
+        };
+        /** BatchList */
+        BatchList: {
+            /** Data */
+            data: components["schemas"]["BatchOut"][];
+            page: components["schemas"]["Page"];
+        };
+        /** BatchOut */
+        BatchOut: {
+            /** Approved At */
+            approved_at: string | null;
+            /** Approved By */
+            approved_by: string | null;
+            /** Batch Number */
+            batch_number: string;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /**
+             * Created By
+             * Format: uuid
+             */
+            created_by: string;
+            /** Export Template Id */
+            export_template_id: string | null;
+            /** Exported File Id */
+            exported_file_id: string | null;
+            /** External Reference */
+            external_reference: string | null;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Line Count */
+            line_count: number;
+            /**
+             * Manufacturer Id
+             * Format: uuid
+             */
+            manufacturer_id: string;
+            /** Period From */
+            period_from: string | null;
+            /** Period To */
+            period_to: string | null;
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "draft" | "approved" | "submitted" | "void";
+            /** Submitted At */
+            submitted_at: string | null;
+            /** Submitted By */
+            submitted_by: string | null;
+            /** Total Amount */
+            total_amount: string;
+            /** Void Reason */
+            void_reason: string | null;
+            /** Voided At */
+            voided_at: string | null;
+        };
+        /** BatchSubmitIn */
+        BatchSubmitIn: {
+            /** External Reference */
+            external_reference: string;
+            /**
+             * Submitted At
+             * Format: date
+             */
+            submitted_at: string;
+        };
+        /** BatchVoidIn */
+        BatchVoidIn: {
+            /** Reason */
+            reason: string;
+        };
         /** Body_file_upload */
         Body_file_upload: {
             /** File */
@@ -1832,6 +2123,17 @@ export interface components {
             source_row_number: number;
             /** Version */
             version: number;
+        };
+        /** ColumnIn */
+        ColumnIn: {
+            /** Constant */
+            constant?: string | null;
+            /** Format */
+            format?: string | null;
+            /** Header */
+            header: string;
+            /** Source */
+            source?: string | null;
         };
         /** ConfirmIn */
         ConfirmIn: {
@@ -2247,6 +2549,109 @@ export interface components {
             new_email: string;
             /** Password */
             password: string;
+        };
+        /** ExportAccepted */
+        ExportAccepted: {
+            /**
+             * File Id
+             * Format: uuid
+             */
+            file_id: string;
+            job: components["schemas"]["RunJobRef"];
+        };
+        /** ExportTemplateBody */
+        ExportTemplateBody: {
+            /**
+             * Active
+             * @default true
+             */
+            active: boolean;
+            /** Columns */
+            columns: components["schemas"]["ColumnIn"][];
+            /**
+             * Format
+             * @enum {string}
+             */
+            format: "csv" | "xlsx";
+            /** Name */
+            name: string;
+            options?: components["schemas"]["OptionsIn"];
+        };
+        /** ExportTemplateCreate */
+        ExportTemplateCreate: {
+            /**
+             * Active
+             * @default true
+             */
+            active: boolean;
+            /** Columns */
+            columns: components["schemas"]["ColumnIn"][];
+            /**
+             * Format
+             * @enum {string}
+             */
+            format: "csv" | "xlsx";
+            /**
+             * Manufacturer Id
+             * Format: uuid
+             */
+            manufacturer_id: string;
+            /** Name */
+            name: string;
+            options?: components["schemas"]["OptionsIn"];
+        };
+        /** ExportTemplateList */
+        ExportTemplateList: {
+            /** Data */
+            data: components["schemas"]["ExportTemplateOut"][];
+            page: components["schemas"]["Page"];
+        };
+        /** ExportTemplateOut */
+        ExportTemplateOut: {
+            /** Active */
+            active: boolean;
+            /** Columns */
+            columns: {
+                [key: string]: unknown;
+            }[];
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /**
+             * Created By
+             * Format: uuid
+             */
+            created_by: string;
+            /**
+             * Format
+             * @enum {string}
+             */
+            format: "csv" | "xlsx";
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /**
+             * Manufacturer Id
+             * Format: uuid
+             */
+            manufacturer_id: string;
+            /** Name */
+            name: string;
+            /** Options */
+            options: {
+                [key: string]: unknown;
+            };
+            /** Revision */
+            revision: number;
+            /**
+             * Updated At
+             * Format: date-time
+             */
+            updated_at: string;
         };
         /**
          * ExtractionDetail
@@ -2902,6 +3307,67 @@ export interface components {
             /** Status */
             status: string;
         };
+        /** LineList */
+        LineList: {
+            /** Data */
+            data: components["schemas"]["LineOut"][];
+            page: components["schemas"]["Page"];
+        };
+        /** LineOut */
+        LineOut: {
+            /**
+             * Agreement Version Id
+             * Format: uuid
+             */
+            agreement_version_id: string;
+            /**
+             * Batch Id
+             * Format: uuid
+             */
+            batch_id: string;
+            /**
+             * Calculation Result Id
+             * Format: uuid
+             */
+            calculation_result_id: string;
+            /** Claim Amount */
+            claim_amount: string;
+            /** Claim Reference */
+            claim_reference: string;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /** Document Number */
+            document_number: string | null;
+            /** Frozen At */
+            frozen_at: string | null;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Invoice Date */
+            invoice_date: string | null;
+            /** Line Number */
+            line_number: number | null;
+            /** Quantity */
+            quantity: string | null;
+            /** Rebate Accrual Entry Id */
+            rebate_accrual_entry_id: string | null;
+            /** Released At */
+            released_at: string | null;
+            /** Sales Document Line Id */
+            sales_document_line_id: string | null;
+            /**
+             * Source Kind
+             * @enum {string}
+             */
+            source_kind: "sales_line" | "rebate_accrual";
+            /** Unit Amount */
+            unit_amount: string | null;
+        };
         /** Lineage */
         Lineage: {
             /**
@@ -2939,6 +3405,13 @@ export interface components {
              * @enum {string}
              */
             status: "signed_in" | "mfa_required";
+        };
+        /** LostToExpiry */
+        LostToExpiry: {
+            /** Amount */
+            amount: string;
+            /** Lines */
+            lines: number;
         };
         /** ManufacturerIn */
         ManufacturerIn: {
@@ -3177,6 +3650,64 @@ export interface components {
             /** Qr Svg Data Uri */
             qr_svg_data_uri: string;
         };
+        /** MissedList */
+        MissedList: {
+            /** Data */
+            data: components["schemas"]["MissedOut"][];
+            page: components["schemas"]["Page"];
+        };
+        /** MissedOut */
+        MissedOut: {
+            /** Agreement Id */
+            agreement_id: string | null;
+            /** Agreement Version Id */
+            agreement_version_id: string | null;
+            /** Claim Amount */
+            claim_amount: string;
+            /** Claim Unit Amount */
+            claim_unit_amount: string | null;
+            /** Claim Uom */
+            claim_uom: string | null;
+            /** Document Number */
+            document_number: string;
+            /** Eligible Quantity */
+            eligible_quantity: string | null;
+            /** Flags */
+            flags: string[];
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /**
+             * Invoice Date
+             * Format: date
+             */
+            invoice_date: string;
+            /** Line Number */
+            line_number: number;
+            /** Manufacturer Id */
+            manufacturer_id: string | null;
+            /**
+             * Run Id
+             * Format: uuid
+             */
+            run_id: string;
+            /**
+             * Sales Document Line Id
+             * Format: uuid
+             */
+            sales_document_line_id: string;
+        };
+        /** MissedSummary */
+        MissedSummary: {
+            /** Exceptions */
+            exceptions: components["schemas"]["SummaryException"][];
+            /** Groups */
+            groups: components["schemas"]["SummaryGroup"][];
+            lost_to_expiry: components["schemas"]["LostToExpiry"];
+            totals: components["schemas"]["SummaryTotals"];
+        };
         /** Ok */
         Ok: {
             /**
@@ -3185,6 +3716,25 @@ export interface components {
              * @constant
              */
             status: "ok";
+        };
+        /** OptionsIn */
+        OptionsIn: {
+            /**
+             * Delimiter
+             * @default ,
+             * @enum {string}
+             */
+            delimiter: "," | ";" | "\t" | "|";
+            /**
+             * Include Header
+             * @default true
+             */
+            include_header: boolean;
+            /**
+             * Sheet Name
+             * @default Claims
+             */
+            sheet_name: string;
         };
         /** Page */
         Page: {
@@ -4093,6 +4643,39 @@ export interface components {
              * @default []
              */
             acknowledged_warnings: string[];
+        };
+        /** SummaryException */
+        SummaryException: {
+            /** Code */
+            code: string | null;
+            /** Lines */
+            lines: number;
+            /** Stored Amount */
+            stored_amount: string;
+        };
+        /** SummaryGroup */
+        SummaryGroup: {
+            /** Agreement Id */
+            agreement_id: string | null;
+            /** Agreement Number */
+            agreement_number: string | null;
+            /** Amount */
+            amount: string;
+            /** Lines */
+            lines: number;
+            /** Manufacturer Code */
+            manufacturer_code: string | null;
+            /** Manufacturer Id */
+            manufacturer_id: string | null;
+            /** Manufacturer Name */
+            manufacturer_name: string | null;
+        };
+        /** SummaryTotals */
+        SummaryTotals: {
+            /** Amount */
+            amount: string;
+            /** Lines */
+            lines: number;
         };
         /** SwitchIn */
         SwitchIn: {
@@ -6169,6 +6752,382 @@ export interface operations {
             };
         };
     };
+    claim_batch_list: {
+        parameters: {
+            query?: {
+                status?: ("draft" | "approved" | "submitted" | "void") | null;
+                manufacturer_id?: string | null;
+                limit?: number;
+                cursor?: string | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BatchList"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    claim_batch_create: {
+        parameters: {
+            query?: never;
+            header?: {
+                "idempotency-key"?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["BatchIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BatchOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    claim_batch_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                batch_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BatchOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    claim_batch_approve: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                batch_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BatchOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    claim_batch_export: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                batch_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["BatchExportIn"] | null;
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    claim_batch_line_list: {
+        parameters: {
+            query?: {
+                limit?: number;
+                cursor?: string | null;
+            };
+            header?: never;
+            path: {
+                batch_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LineList"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    claim_batch_submit: {
+        parameters: {
+            query?: never;
+            header?: {
+                "idempotency-key"?: string | null;
+            };
+            path: {
+                batch_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["BatchSubmitIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BatchOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    claim_batch_void: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                batch_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["BatchVoidIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BatchOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    claim_export_template_list: {
+        parameters: {
+            query?: {
+                manufacturer_id?: string | null;
+                active?: boolean | null;
+                limit?: number;
+                cursor?: string | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ExportTemplateList"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    claim_export_template_create: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ExportTemplateCreate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ExportTemplateOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    claim_export_template_replace: {
+        parameters: {
+            query?: never;
+            header?: {
+                "if-match"?: string | null;
+            };
+            path: {
+                export_template_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ExportTemplateBody"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ExportTemplateOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     customer_list: {
         parameters: {
             query?: {
@@ -7577,6 +8536,86 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    missed_claim_list: {
+        parameters: {
+            query?: {
+                manufacturer_id?: string | null;
+                agreement_id?: string | null;
+                invoice_from?: string | null;
+                invoice_to?: string | null;
+                format?: ("csv" | "xlsx") | null;
+                limit?: number;
+                cursor?: string | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MissedList"];
+                };
+            };
+            /** @description Accepted */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ExportAccepted"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    missed_claim_summary: {
+        parameters: {
+            query?: {
+                manufacturer_id?: string | null;
+                agreement_id?: string | null;
+                invoice_from?: string | null;
+                invoice_to?: string | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MissedSummary"];
+                };
             };
             /** @description Validation Error */
             422: {

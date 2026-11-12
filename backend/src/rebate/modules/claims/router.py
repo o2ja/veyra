@@ -11,11 +11,12 @@ from rebate.core.access import require, tenant_of
 from rebate.core.query import only_query_params
 from rebate.core.request import Principal, ctx
 from rebate.modules import ingestion
+from rebate.modules.claims import batch_router, service
 from rebate.modules.claims import schemas as s
-from rebate.modules.claims import service
 from rebate.modules.masterdata import Who, page
 
 router = APIRouter(tags=["calculation"])
+router.routes.extend(batch_router.router.routes)  # missed claims, export templates, claim batches (S7)
 
 READ = "data.read"
 RUN = "calculation.run"

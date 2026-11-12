@@ -172,6 +172,9 @@ def upgrade() -> None:
         """
         CREATE FUNCTION fn_claim_batch_ties_out() RETURNS trigger LANGUAGE plpgsql AS $$
         DECLARE
+            bid uuid;
+            marker text;
+            b claim_batches%ROWTYPE;
             n integer;
             total numeric;
             unfrozen integer;
@@ -179,20 +182,32 @@ def upgrade() -> None:
             unreleased integer;
             released integer;
         BEGIN
+            -- fired for batch rows and (see claim_lines) for line rows; checks the parent batch once per transaction
+            bid := (CASE WHEN TG_TABLE_NAME = 'claim_batches' THEN to_jsonb(NEW) ->> 'id'
+                         ELSE to_jsonb(NEW) ->> 'batch_id' END)::uuid;
+            marker := 'rebate.claim_check_' || replace(bid::text, '-', '_');
+            IF current_setting(marker, true) = 'done' THEN
+                RETURN NULL;
+            END IF;
+            PERFORM set_config(marker, 'done', true);
+            SELECT * INTO b FROM claim_batches WHERE tenant_id = NEW.tenant_id AND id = bid;
+            IF NOT FOUND THEN
+                RETURN NULL;
+            END IF;
             SELECT count(*), COALESCE(sum(claim_amount), 0),
                    count(*) FILTER (WHERE frozen_at IS NULL), count(*) FILTER (WHERE frozen_at IS NOT NULL),
                    count(*) FILTER (WHERE released_at IS NULL), count(*) FILTER (WHERE released_at IS NOT NULL)
               INTO n, total, unfrozen, frozen, unreleased, released
-              FROM claim_lines WHERE tenant_id = NEW.tenant_id AND batch_id = NEW.id;
-            IF n <> NEW.line_count OR total <> NEW.total_amount THEN
+              FROM claim_lines WHERE tenant_id = b.tenant_id AND batch_id = b.id;
+            IF n <> b.line_count OR total <> b.total_amount THEN
                 RAISE EXCEPTION 'claim_batches: line_count/total_amount (%/%) differ from the lines (%/%)',
-                    NEW.line_count, NEW.total_amount, n, total USING ERRCODE = 'check_violation';
+                    b.line_count, b.total_amount, n, total USING ERRCODE = 'check_violation';
             END IF;
-            IF (NEW.status = 'submitted' AND unfrozen > 0) OR (NEW.status <> 'submitted' AND frozen > 0) THEN
+            IF (b.status = 'submitted' AND unfrozen > 0) OR (b.status <> 'submitted' AND frozen > 0) THEN
                 RAISE EXCEPTION 'claim_batches: lines are frozen exactly when the batch is submitted'
                     USING ERRCODE = 'check_violation';
             END IF;
-            IF (NEW.status = 'void' AND unreleased > 0) OR (NEW.status <> 'void' AND released > 0) THEN
+            IF (b.status = 'void' AND unreleased > 0) OR (b.status <> 'void' AND released > 0) THEN
                 RAISE EXCEPTION 'claim_batches: lines are released exactly when the batch is void'
                     USING ERRCODE = 'check_violation';
             END IF;

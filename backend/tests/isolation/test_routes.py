@@ -36,6 +36,7 @@ class Side:
     s4: dict[str, str] = field(default_factory=dict)  # S4 path parameter -> one id of this tenant
     s5: dict[str, str] = field(default_factory=dict)  # S5 path parameter -> one id of this tenant
     s6: dict[str, str] = field(default_factory=dict)  # S6 path parameter -> one id of this tenant
+    s7: dict[str, str] = field(default_factory=dict)  # S7 path parameter -> one id of this tenant
 
 
 @pytest.fixture(scope="module")
@@ -66,6 +67,7 @@ def sides(migrated_db: DbUrls) -> Iterator[tuple[Side, Side]]:
             side.s4 = _seed_s4(api)
             side.s5 = _seed_s5(app, api, side.s3)
             side.s6 = _seed_s6(api)
+            side.s7 = _seed_s7(api, side.s3)
             out.append(side)
         yield out[0], out[1]
 
@@ -154,7 +156,42 @@ def _seed_s6(api: Api) -> dict[str, str]:
     return {"extraction_id": r.json()["id"]}
 
 
+def _seed_s7(api: Api, s3: dict[str, str]) -> dict[str, str]:
+    """An export template and a draft claim batch of the tenant (one eligible line stays unclaimed for the scan)."""
+    tpl = api.post(
+        "/claim-export-templates",
+        json={
+            "manufacturer_id": s3["manufacturer_id"],
+            "name": "iso template",
+            "format": "csv",
+            "columns": [{"header": "Ref", "source": "claim_reference"}],
+        },
+    )
+    assert tpl.status_code == 201, tpl.text
+    eligible = api.get("/missed-claims", params={"manufacturer_id": s3["manufacturer_id"]}).json()["data"]
+    assert eligible, "the isolation fixture needs an eligible line"
+    batch = api.post(
+        "/claim-batches",
+        json={"manufacturer_id": s3["manufacturer_id"], "result_ids": [eligible[0]["id"]]},
+        headers={"Idempotency-Key": str(uuid.uuid4())},
+    )
+    assert batch.status_code == 201, batch.text
+    # voided again: the batch row stays (history) and the line goes back to the scan, so lists of both are non-empty
+    assert (
+        api.post(
+            f"/claim-batches/{batch.json()['id']}/void", json={"reason": "isolation fixture"}
+        ).status_code
+        == 200
+    )
+    return {
+        "batch_id": batch.json()["id"],
+        "export_template_id": tpl.json()["id"],
+        "claimed_result_id": eligible[0]["id"],
+    }
+
+
 S6_PARAMS = ("extraction_id",)
+S7_PARAMS = ("batch_id", "export_template_id")
 S4_PARAMS = ("agreement_id", "draft_id", "version_id", "other_version_id")
 S3_PARAMS = ("manufacturer_id", "customer_id", "product_id", "conversion_id", "entry_id", "import_id",
              "template_id", "line_id")  # fmt: skip
@@ -169,6 +206,7 @@ PARAM_SOURCES = {
     **{p: f"s4.{p}" for p in S4_PARAMS},
     **{p: f"s5.{p}" for p in S5_PARAMS},
     **{p: f"s6.{p}" for p in S6_PARAMS},
+    **{p: f"s7.{p}" for p in S7_PARAMS},
 }
 
 
@@ -178,6 +216,8 @@ def _attack_value(side: Side, param: str) -> str:
         return side.s3[param]
     if source.startswith("s5."):
         return side.s5[param]
+    if source.startswith("s7."):
+        return side.s7[param]
     if source.startswith("s6."):
         return side.s6[param]
     return side.s4[param] if source.startswith("s4.") else str(getattr(side, source))
@@ -229,6 +269,14 @@ BODIES: dict[str, Any] = {
     "/agreement-drafts/{draft_id}/submit": {"acknowledged_warnings": []},
     "/agreement-drafts/{draft_id}/return": {"comment": "x"},
     "/agreement-drafts/{draft_id}/reject": {"reason": "x"},
+    "/claim-export-templates/{export_template_id}": {
+        "name": "x",
+        "format": "csv",
+        "columns": [{"header": "Ref", "source": "claim_reference"}],
+    },
+    "/claim-batches/{batch_id}/submit": {"submitted_at": "2026-01-01", "external_reference": "x"},
+    "/claim-batches/{batch_id}/void": {"reason": "x"},
+    "/claim-batches/{batch_id}/export": {},
 }
 
 
@@ -322,7 +370,7 @@ def test_settings_are_the_callers_own(sides: tuple[Side, Side]) -> None:
 S3_LISTS = (
     "/manufacturers", "/customers", "/products", "/branches", "/uom-conversions", "/unmapped-entities",
     "/imports", "/mapping-templates", "/sales-lines", "/purchase-lines", "/agreements", "/agreement-drafts",
-    "/calculation-runs", "/rebate-accruals",
+    "/calculation-runs", "/rebate-accruals", "/claim-batches", "/claim-export-templates", "/missed-claims",
 )  # fmt: skip
 
 
@@ -398,6 +446,65 @@ def test_r3_s4_foreign_mutations_leave_the_other_tenant_unchanged(sides: tuple[S
     assert b.api.get(f"/agreements/{agreement}").json()["cancelled_at"] is None
     r = a.api.get(f"/agreement-versions/{a.s4['version_id']}/diff/{version}")
     assert r.status_code == 404, r.text  # one own and one foreign version
+
+
+def test_s7_foreign_results_templates_and_batches_are_unreachable(sides: tuple[Side, Side]) -> None:
+    a, b = sides
+    foreign_result = b.s7["claimed_result_id"]
+    mfr = a.s3["manufacturer_id"]
+    missing = {"manufacturer_id": mfr, "result_ids": ["00000000-0000-7000-8000-000000000000"]}
+    r_missing = a.api.post("/claim-batches", json=missing, headers={"Idempotency-Key": str(uuid.uuid4())})
+    r = a.api.post(
+        "/claim-batches",
+        json={"manufacturer_id": mfr, "result_ids": [foreign_result]},
+        headers={"Idempotency-Key": str(uuid.uuid4())},
+    )
+    assert r.status_code == r_missing.status_code == 422
+    assert (
+        r.json()["error"]["details"][0]["code"]
+        == r_missing.json()["error"]["details"][0]["code"]
+        == "not_found"
+    )
+    # a foreign manufacturer id looks like an unknown one
+    r = a.api.post(
+        "/claim-batches",
+        json={"manufacturer_id": b.s3["manufacturer_id"], "result_ids": [a.s7["claimed_result_id"]]},
+        headers={"Idempotency-Key": str(uuid.uuid4())},
+    )
+    assert r.status_code == 422
+    # a foreign template cannot be used for an export, a foreign manufacturer cannot get a template
+    own = a.api.post(
+        "/claim-batches",
+        json={"manufacturer_id": mfr, "result_ids": [a.s7["claimed_result_id"]]},
+        headers={"Idempotency-Key": str(uuid.uuid4())},
+    ).json()
+    assert a.api.post(f"/claim-batches/{own['id']}/approve").status_code == 200
+    r = a.api.post(f"/claim-batches/{own['id']}/export", json={"template_id": b.s7["export_template_id"]})
+    assert r.status_code == 404 and r.json()["error"]["code"] == "not_found"
+    assert a.api.post(f"/claim-batches/{own['id']}/void", json={"reason": "cleanup"}).status_code == 200
+    r = a.api.post(
+        "/claim-export-templates",
+        json={
+            "manufacturer_id": b.s3["manufacturer_id"],
+            "name": "x",
+            "format": "csv",
+            "columns": [{"header": "Ref", "source": "claim_reference"}],
+        },
+    )
+    assert r.status_code == 422
+    # the other tenant's batch and template are untouched
+    assert b.api.get(f"/claim-batches/{b.s7['batch_id']}").json()["status"] == "void"
+    assert b.api.get("/claim-export-templates").json()["data"][0]["revision"] == 1
+    # filters by a foreign id match nothing
+    for path, params in (
+        ("/claim-batches", {"manufacturer_id": b.s3["manufacturer_id"]}),
+        ("/missed-claims", {"manufacturer_id": b.s3["manufacturer_id"]}),
+        ("/claim-export-templates", {"manufacturer_id": b.s3["manufacturer_id"]}),
+    ):
+        got = a.api.get(path, params=params)
+        assert got.status_code == 200 and got.json()["data"] == [], path
+    summary = a.api.get("/missed-claims/summary", params={"manufacturer_id": b.s3["manufacturer_id"]}).json()
+    assert summary["totals"] == {"lines": 0, "amount": "0"} and summary["groups"] == []
 
 
 def test_s5_tracker_and_run_filters_never_show_the_other_tenant(sides: tuple[Side, Side]) -> None:

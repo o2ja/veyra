@@ -142,6 +142,12 @@ def upgrade() -> None:
         "CREATE TRIGGER trg_claim_lines_update BEFORE UPDATE ON claim_lines "
         "FOR EACH ROW EXECUTE FUNCTION fn_claim_line_update()"
     )
+    # same deferred check as on the batch row (once per batch and transaction): line changes cannot leave a batch
+    # untied (a released line in a live batch, a missing frozen_at in a submitted one, a changed total)
+    op.execute(
+        "CREATE CONSTRAINT TRIGGER trg_claim_lines_batch_ties_out AFTER INSERT OR UPDATE ON claim_lines "
+        "DEFERRABLE INITIALLY DEFERRED FOR EACH ROW EXECUTE FUNCTION fn_claim_batch_ties_out()"
+    )
     op.execute(
         "CREATE TRIGGER trg_claim_lines_no_delete BEFORE DELETE ON claim_lines "
         "FOR EACH ROW EXECUTE FUNCTION fn_forbid_mutation()"
