@@ -15,7 +15,10 @@ from rebate.modules.extraction.documents import (
     extract_xlsx,
 )
 from rebate.modules.extraction.injection import Indicator, IndicatorKind, detect
-from rebate.modules.extraction.router import router
+from rebate.modules.extraction.router import (
+    ExtractionResult,
+    router,
+)
 from rebate.modules.extraction.verification import (
     CandidateField,
     CandidateFormatError,
@@ -34,6 +37,7 @@ __all__ = [
     "Confidence",
     "Evidence",
     "ExtractionFailure",
+    "ExtractionResult",
     "FailureReason",
     "Indicator",
     "IndicatorKind",

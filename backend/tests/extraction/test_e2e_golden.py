@@ -7,6 +7,7 @@ from typing import Any
 
 import pytest
 
+from rebate.modules.extraction import ExtractionResult
 from tests.extraction.evaluate import score
 from tests.extraction.golden import ground_truth
 from tests.extraction.replay import Replay
@@ -34,6 +35,7 @@ def test_golden_document_through_the_full_job(enabled: Workspace, stem: str) -> 
     assert ex["prompt_version"] == "agreement-v1" and ex["model"] == "claude-sonnet-5-5"
     draft = draft_of(ws, ex)
     assert draft["source"] == "ai_extraction" and draft["status"] == "draft"
+    ExtractionResult.model_validate(ex["result"])  # the published OpenAPI shape is the stored shape
     s = score(truth, draft["payload"], ex["result"])
     assert s["wrong"] == {}, f"{stem}: values contradict the ground truth: {s['wrong']}"
     if stem in FULL_COVERAGE:

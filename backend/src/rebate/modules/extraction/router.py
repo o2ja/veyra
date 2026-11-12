@@ -29,6 +29,65 @@ READ = "data.read"
 DRAFT = "agreement.draft"
 
 
+# ---- result view (``ExtractionDetail.result``): published in OpenAPI for the review UI --------------------
+# forbid: the stored view must match these models exactly (a test validates every golden result).
+
+
+class _View(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+
+class ExtractionEvidence(_View):
+    page: int | None
+    sheet: str | None
+    cell: str | None
+    quote: str
+    start: int
+    end: int
+    boxes: list[list[float]]
+
+
+class ExtractionPassView(_View):
+    status: str
+    value: Any
+    reasons: list[str]
+    evidence: ExtractionEvidence | None
+
+
+class ExtractionFieldView(_View):
+    key: str
+    critical: bool
+    value: Any
+    confidence: str
+    reasons: list[str]
+    evidence: ExtractionEvidence | None
+    pass_a: ExtractionPassView | None
+    pass_b: ExtractionPassView | None
+
+
+class ExtractionIndicator(_View):
+    kind: str
+    excerpt: str
+    page: int | None
+    sheet: str | None
+    cell: str | None
+    start: int | None
+    end: int | None
+
+
+class ExtractionResult(_View):
+    schema_version: int
+    agreement_type: str | None
+    payload: dict[str, Any]
+    fields: list[ExtractionFieldView]
+    blocking: list[str]
+    needs_acknowledgement: list[str]
+    indicators: list[ExtractionIndicator]
+    draft_id: str
+    notes: dict[str, list[str]]
+    unresolved: dict[str, Any]
+
+
 class ExtractionStart(BaseModel):
     model_config = STRICT
     file_id: JsonUUID
