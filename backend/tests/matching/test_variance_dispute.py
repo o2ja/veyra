@@ -9,7 +9,6 @@ from rebate_matching.dispute import DisputeFacts, assess_dispute
 from rebate_matching.engine import confirm_suggestion, reconcile
 from rebate_matching.models import ClaimLine, RemittanceLine, Status
 from rebate_matching.variance import (
-    UnclassifiableVariance,
     classify_claim_line,
     classify_unmatched_payment,
 )
@@ -124,9 +123,16 @@ def test_variance_table(
         )
 
 
-def test_zero_paid_without_code_is_a_spec_gap_and_fails_loudly() -> None:
-    with pytest.raises(UnclassifiableVariance):
-        _single("100.00", "0.00")
+def test_zero_paid_without_code_is_short_paid_unexplained() -> None:
+    """Owner decision 2026-11-12 (BUSINESS_LOGIC §10.3): fully unpaid, no rejection code -> short_paid for the full
+    claimed amount (hand derivation: diff = 100.00 - 0.00 = 100.00), reason short_paid_unexplained."""
+    case = _single("100.00", "0.00")
+    assert case is not None
+    assert (case.case_type, case.amount, case.reason_code) == (
+        "short_paid",
+        D("100.00"),
+        "short_paid_unexplained",
+    )
 
 
 @pytest.mark.parametrize(
