@@ -14,7 +14,7 @@ State at cut-off:
   re-bind test, §9.3 netting doc). If F2 died: relaunch from brief F2 + "apply the financial-review fix list in the
   PR #15 / notes" (list above), then 2nd-pass financial review on the fix diff, then merge s7-adjustments into
   s7-claims and merge #15.
-- OWNER DECISION to ask (financial integrity): `cannot_be_net_claimed` adjustments — BUSINESS_LOGIC §7 says held as
+- RESOLVED (owner 2026-11-12, see overnight-log MORNING SUMMARY):  `cannot_be_net_claimed` adjustments — BUSINESS_LOGIC §7 says held as
   `proposed`; ground truth `claim_batches_fixture.json` includes ADJ-2026-0001 in the VOLT batch (no
   allow_negative_claims). Recommendation: follow ground truth only if the owner confirms; otherwise block inclusion
   and negative batch totals.
@@ -29,3 +29,12 @@ State at cut-off:
   persistence of matches, workbench API) using `rebate_matching` (interfaces: docs/reports/notes/g1-s8-matching.md);
   brief not written yet (read IMPLEMENTATION_PLAN S8 section). Then S9, day 3 S10 + S11.
 - Local e2e: stop veyra-recover-frontend-1 when running vite from a worktree, restart after.
+
+## Update (96 % usage, owner decisions 2026-11-12)
+- Owner decisions: (1) cannot_be_net_claimed stays proposed (§7), batches <= 0 refused, VOLT allow_negative_claims=true
+  in master_manufacturers.json + test with a manufacturer without it → sent to F2 (s7-adjustments). (2) paid=0 without
+  rejection code = short_paid / short_paid_unexplained → PR #19 (s8-unpaid-rule, §10.3 + test; merge when CI green).
+  (3) S5 signed off; OD-1 confirmed; 3 validator refusals + split-period = Release 2; OD-2 not now (recorded fixtures).
+  → still to write into PROJECT_STATUS (decision table) + IMPLEMENTATION_PLAN if not done.
+- PR #18 security review: 1 blocker + 4 serious (see PR comment) → relaunch H1 from brief with that list; SeaweedFS in
+  prod is an owner decision (OD-3/OD-4) — keep as flagged, least-privilege + Caddy method allow-list meanwhile.
