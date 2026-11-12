@@ -114,7 +114,10 @@ def cases(env: Env, admin_engine: Engine) -> Cases:
         story,
         member(env.stack, env.app, story.ws.api, "approver"),
         member(env.stack, env.app, story.ws.api, "analyst"),
-        *ids,
+        ids[0],
+        ids[1],
+        ids[2],
+        ids[3],
         doc,
         rl,
     )
@@ -541,7 +544,10 @@ def test_database_refuses_what_the_service_never_does(env: Env, cases: Cases, ad
                      remittance_line_id=rl[0], claimed=D("1000.00"), paid=D("900.00")),)),
     )  # fmt: skip
     t = s.tenant
-    run = lambda sql, **p: db_error(env.engine, t, sql, **p)  # noqa: E731
+
+    def run(sql: str, **p: Any) -> str:
+        return db_error(env.engine, t, sql, **p)
+
     bump = "revision = revision + 1"
     assert "not a case transition" in run(
         f"UPDATE variance_cases SET status = 'recovered', {bump} WHERE id = :c", c=cid
