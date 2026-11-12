@@ -104,6 +104,8 @@ flowchart LR
 - Network: only Caddy exposes 80/443; Postgres/ClamAV/object storage are not exposed publicly; host firewall default-deny; SSH key-only, no root login, fail2ban; automatic security updates.
 - Scale-up path: bigger instance → move worker to its own host → managed/dedicated Postgres with a read replica for reporting → multiple API replicas behind Caddy/load balancer. Kubernetes only with an ADR and a measured need.
 
+**Implemented (S11):** `infra/docker/compose.prod.yml` + `.env.prod.example` (single host behind Cloudflare; internal-only network, read-only filesystems, healthchecks, `restart: unless-stopped`, owner credentials only in the one-off `migrate` service under profile `ops`). Validated in CI with `docker compose config`; never run against a real host in S11. Runbooks: `infra/runbooks/`.
+
 ### 3.1 Reverse proxy and SSL (Caddy)
 
 `infra/caddy/Caddyfile` (sketch; final values set in S0/S11):

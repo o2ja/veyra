@@ -1,0 +1,191 @@
+# Production/staging stack on ONE Docker host (DEPLOYMENT.md section 3). Secrets come only from the
+# env file (`docker compose --env-file .env.prod -f infra/docker/compose.prod.yml ...`); nothing is baked in.
+# Network: `internal` has no route out. Only caddy publishes ports; Postgres/ClamAV/SeaweedFS are unreachable
+# from outside. `edge` (outbound access) is given only to caddy (ACME) and worker (SMTP, optional LLM).
+# SeaweedFS note: its filer IAM gRPC is unauthenticated (DEPLOYMENT.md 2.2); acceptable here only because it
+# lives on the internal network. Swap for a managed S3 by changing S3_* and dropping the service (OD-3/OD-4).
+name: veyra-recover-prod
+
+x-hardened: &hardened
+  restart: unless-stopped
+  security_opt: ["no-new-privileges:true"]
+  cap_drop: ["ALL"]
+  logging:
+    driver: json-file
+    options: {max-size: "20m", max-file: "5"}
+
+x-app-env: &app-env
+  APP_ENV: ${APP_ENV:?set in env file}
+  LOG_LEVEL: ${LOG_LEVEL:-INFO}
+  SECRET_KEY: ${SECRET_KEY:?set in env file}
+  ENCRYPTION_KEYS: ${ENCRYPTION_KEYS:?set in env file}
+  DATABASE_URL: postgresql+psycopg://rebate_app:${REBATE_APP_PASSWORD:?set in env file}@postgres:5432/rebate
+  PUBLIC_BASE_URL: ${PUBLIC_BASE_URL:?set in env file}
+  TRUSTED_PROXY_IPS: ${TRUSTED_PROXY_IPS:?set in env file}
+  CLOUDFLARE_IP_RANGES: ${CLOUDFLARE_IP_RANGES:-}
+  S3_ENDPOINT_URL: http://seaweedfs:8333
+  S3_PUBLIC_ENDPOINT_URL: ${S3_PUBLIC_ENDPOINT_URL:?set in env file}
+  S3_BUCKET: ${S3_BUCKET:-rebate-files}
+  S3_ACCESS_KEY_ID: ${S3_ACCESS_KEY_ID:?set in env file}
+  S3_SECRET_ACCESS_KEY: ${S3_SECRET_ACCESS_KEY:?set in env file}
+  CLAMD_HOST: clamav
+  CLAMD_PORT: "3310"
+
+x-app-image: &app-image
+  image: rebate-api:${REBATE_IMAGE_TAG:?set in env file}
+  build:
+    context: ../../backend
+    target: runtime
+
+services:
+  postgres:
+    <<: *hardened
+    image: postgres:16.15-trixie@sha256:f9a7b9ebf6f56201f949db745e47bc423c0f0f8294bafe991cc10bf74b029657
+    # no `ports:` -- the database is not reachable from the host network
+    environment:
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set in env file}
+    read_only: true
+    tmpfs: ["/tmp", "/run/postgresql"]
+    cap_drop: ["ALL"]
+    cap_add: ["CHOWN", "DAC_OVERRIDE", "FOWNER", "SETGID", "SETUID"]
+    shm_size: 256m
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      - ../scripts:/opt/rebate-scripts:ro
+      - backups:/backups
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 10s
+      timeout: 3s
+      retries: 6
+    networks: [internal]
+
+  seaweedfs:
+    <<: *hardened
+    image: chrislusf/seaweedfs:4.50@sha256:c2658820e763294a9e9de7b36c81e59b879e3459148351aee4e31a126ca64860
+    entrypoint: ["sh", "/opt/seaweedfs/start.sh"]
+    environment:
+      S3_ACCESS_KEY_ID: ${S3_ACCESS_KEY_ID:?set in env file}
+      S3_SECRET_ACCESS_KEY: ${S3_SECRET_ACCESS_KEY:?set in env file}
+      WEED_S3_SSE_KEY: ${SEAWEEDFS_SSE_KEY:?set in env file}
+    read_only: true
+    tmpfs: ["/tmp"]
+    cap_drop: ["ALL"]
+    volumes:
+      - seaweeddata:/data
+      - ../seaweedfs:/opt/seaweedfs:ro
+    healthcheck:
+      test: ["CMD-SHELL", "nc -z $$(hostname -i) 8333"]
+      interval: 10s
+      timeout: 3s
+      retries: 6
+    networks: [internal]
+
+  clamav:
+    <<: *hardened
+    image: clamav/clamav:1.4.6-debian13-slim@sha256:aedee9daad6b069b26adad61af7ec50a41efe33fd8eff7f985c1f31e3a6ae9de
+    # signatures are refreshed daily by freshclamd, which needs outbound access: join `edge` (egress only)
+    volumes:
+      - ../clamav/clamd.conf:/etc/clamav/clamd.conf:ro
+      - clamdb:/var/lib/clamav
+    healthcheck:
+      test: ["CMD-SHELL", "clamdcheck.sh"]
+      interval: 30s
+      timeout: 5s
+      retries: 6
+    networks: [internal, edge]
+
+  api:
+    <<: [*hardened, *app-image]
+    command: ["gunicorn", "rebate.api.asgi:app", "-k", "uvicorn.workers.UvicornWorker", "--bind", "0.0.0.0:8000", "--workers", "2"]
+    environment: *app-env
+    read_only: true
+    tmpfs: ["/tmp"]
+    depends_on:
+      postgres: {condition: service_healthy}
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/api/v1/health/ready', timeout=2)"]
+      interval: 15s
+      timeout: 3s
+      retries: 5
+      start_period: 20s
+    networks: [internal]
+
+  worker:
+    <<: [*hardened, *app-image]
+    command: ["python", "-m", "rebate.workers"]
+    environment:
+      <<: *app-env
+      DATABASE_URL_AI: postgresql+psycopg://rebate_ai_writer:${REBATE_AI_WRITER_PASSWORD:?set in env file}@postgres:5432/rebate
+      SMTP_HOST: ${SMTP_HOST:?set in env file}
+      SMTP_PORT: ${SMTP_PORT:-587}
+      SMTP_STARTTLS: ${SMTP_STARTTLS:-true}
+      SMTP_USER: ${SMTP_USER:-}
+      SMTP_PASSWORD: ${SMTP_PASSWORD:-}
+      MAIL_FROM: ${MAIL_FROM:?set in env file}
+    read_only: true
+    tmpfs: ["/tmp:size=2g"]  # OCR / spreadsheet scratch space
+    depends_on:
+      postgres: {condition: service_healthy}
+      seaweedfs: {condition: service_healthy}
+      clamav: {condition: service_healthy}
+    networks: [internal, edge]
+
+  caddy:
+    <<: *hardened
+    image: rebate-frontend:${REBATE_IMAGE_TAG:?set in env file}
+    build:
+      context: ../../frontend
+      target: static
+    environment:
+      APP_DOMAIN: ${APP_DOMAIN:?set in env file}
+      S3_DOMAIN: ${S3_DOMAIN:?set in env file}
+    read_only: true
+    cap_add: ["NET_BIND_SERVICE"]
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ../caddy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on:
+      api: {condition: service_healthy}
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1:2019/config/"]
+      interval: 30s
+      timeout: 3s
+      retries: 3
+    networks:
+      internal: {}
+      edge:
+        ipv4_address: 172.30.0.2  # fixed so TRUSTED_PROXY_IPS can name it
+
+  # One-off, not part of `up`: `docker compose ... --profile ops run --rm migrate` (owner credentials live only here)
+  migrate:
+    <<: *app-image
+    profiles: ["ops"]
+    command: ["sh", "-c", "alembic upgrade head && alembic current"]
+    environment:
+      DATABASE_URL_OWNER: postgresql+psycopg://rebate_owner:${REBATE_OWNER_PASSWORD:?set in env file}@postgres:5432/rebate
+    read_only: true
+    tmpfs: ["/tmp"]
+    depends_on:
+      postgres: {condition: service_healthy}
+    networks: [internal]
+
+networks:
+  internal:
+    internal: true
+  edge:
+    ipam:
+      config:
+        - subnet: 172.30.0.0/24
+
+volumes:
+  pgdata:
+  seaweeddata:
+  clamdb:
+  caddy_data:
+  caddy_config:
+  backups:

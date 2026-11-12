@@ -31,3 +31,16 @@
 		file_server
 	}
 }
+
+# Presigned object URLs (S3_PUBLIC_ENDPOINT_URL). The Host header is preserved: S3 signatures cover it.
+{$S3_DOMAIN} {
+	header {
+		Strict-Transport-Security "max-age=31536000; includeSubDomains"
+		X-Content-Type-Options nosniff
+		-Server
+	}
+	request_body {
+		max_size 60MB
+	}
+	reverse_proxy seaweedfs:8333
+}
