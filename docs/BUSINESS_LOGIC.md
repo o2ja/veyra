@@ -361,6 +361,7 @@ After a remittance document is finalised (no `suggested` matches left unresolved
 | `|diff| ≤ tol` | no case |
 | `paid = 0` and the remittance line carries a rejection code | `rejected` |
 | `0 < paid < claimed − tol` | `short_paid` |
+| `paid = 0` and no rejection code on the remittance line (owner decision 2026-11-12) | `short_paid` (full `diff`, reason `short_paid_unexplained`) |
 | `paid > claimed + tol` | `overpaid` |
 | Remittance line with no accepted match | `unmatched_payment` |
 | Submitted claim line, no remittance after `submitted_at + payment_lag_days_expected` (if configured) | `unpaid` |
