@@ -14,6 +14,7 @@ from rebate_engine.models import (
     SpaRunInput,
     Status,
     UomConversion,
+    VolumeLine,
 )
 from rebate_engine.rebate import CLAWBACK, calculate_accrual
 from rebate_engine.spa import PARTIALLY_ELIGIBLE, calculate_spa, propose_recalculation
@@ -348,7 +349,7 @@ def test_gl_r3_qualify_only_exclude_boundary() -> None:
     assert b.trace["steps"][1]["step"] == "tier"  # type: ignore[index,call-overload]
 
 
-def _d2_lines() -> list:
+def _d2_lines() -> list[VolumeLine]:
     return [
         vline("plain", "1000000"),
         vline("late", "100000", spa_exception_signal=True),  # SPA result outside_claim_window
