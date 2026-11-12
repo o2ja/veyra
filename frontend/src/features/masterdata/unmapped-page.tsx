@@ -3,7 +3,7 @@ import { useState } from "react";
 import { Link } from "react-router-dom";
 
 import type { components } from "../../api/schema";
-import { Alert, Button, Card, ErrorAlert } from "../../components/ui";
+import { Alert, Button, Card, ErrorAlert, PermissionDenied } from "../../components/ui";
 import { api } from "../../lib/api/client";
 import { ApiError, unwrap } from "../../lib/api/errors";
 import { DataTable, EntityPicker, MasterDataNav, PagerControls, SelectField, usePager, utc } from "./common";
@@ -71,6 +71,15 @@ export function UnmappedPage() {
         }),
       ),
   });
+  if ((list.error as ApiError)?.status === 403) {
+    return (
+      <>
+        <MasterDataNav />
+        <PermissionDenied />
+      </>
+    );
+  }
+
   return (
     <>
       <MasterDataNav />
