@@ -148,6 +148,7 @@ def _tenant(conn: Connection, name: str, admin_email: str) -> TenantData:
     data.s5 = _s5_rows(conn, tid, admin, data.s3, data.s4)
     data.s6 = _s6_rows(conn, tid, admin, fid)
     data.s7 = _s7_rows(conn, tid, admin, data.s3, data.s4, data.s5)
+    data.s5["adj"] = data.s7.pop("adj")  # a proposal needs its claim line (S7.4 FK), so S7 inserts it
     conn.execute(
         text(
             "INSERT INTO audit_log (tenant_id, occurred_at, actor_type, actor_user_id, action, "
@@ -241,8 +242,9 @@ def _s4_rows(conn: Connection, t: UUID, user: UUID, s3: dict[str, UUID]) -> dict
 def _s5_rows(
     conn: Connection, t: UUID, user: UUID, s3: dict[str, UUID], s4: dict[str, UUID]
 ) -> dict[str, UUID]:
-    """One row in every S5 tenant table (a completed run with one result, one ledger entry, one proposal)."""
-    ids = {k: new_id() for k in ("run", "res", "acc", "adj")}
+    """One row in every S5 tenant table (a completed run with one result and one ledger entry; the proposal that
+    needs a claim line is created with the S7 rows)."""
+    ids = {k: new_id() for k in ("run", "res", "acc")}
     p = {"t": t, "u": user, "mfr": s3["mfr"], "sline": s3["sline"], "ver": s4["ver"], "agr": s4["agr"], **ids}
     for sql in (
         "INSERT INTO calculation_runs (tenant_id, id, scope, scope_hash, as_of, data_cutoff, run_date, "
@@ -256,8 +258,6 @@ def _s5_rows(
         "manufacturer_id, external_number, agreement_name, tiers, period_start, period_end, as_of_date, cumulative_qualifying, cumulative_payout_base, cumulative_earned, "
         "prior_cumulative_accrued, delta, trace, inputs_hash) VALUES (:t, :acc, :run, :agr, :ver, :mfr, "
         "'SPA-ISO', 'Iso SPA', '[]', '2026-01-01', '2026-12-31', '2026-06-01', 1, 1, 1, 0, 1, '{}', 'h')",
-        "INSERT INTO claim_adjustments (tenant_id, id, manufacturer_id, adjustment_type, calculation_result_id, "
-        "run_id, amount, reason) VALUES (:t, :adj, :mfr, 'agreement_change', :res, :run, -1, 'iso')",
     ):
         conn.execute(text(sql), p)
     return ids
@@ -281,9 +281,18 @@ def _s7_rows(
     conn: Connection, t: UUID, user: UUID, s3: dict[str, UUID], s4: dict[str, UUID], s5: dict[str, UUID]
 ) -> dict[str, UUID]:
     """One row in each S7 tenant table: a template, a draft batch and its single claim line (one transaction:
-    the batch/line totals are checked at commit)."""
-    ids = {k: new_id() for k in ("tpl", "batch", "line")}
-    p = {"t": t, "u": user, "mfr": s3["mfr"], "sline": s3["sline"], "ver": s4["ver"], "res": s5["res"], **ids}
+    the batch/line totals are checked at commit), plus the S5 proposal against that line (returned as ``adj``)."""
+    ids = {k: new_id() for k in ("tpl", "batch", "line", "adj")}
+    p = {
+        "t": t,
+        "u": user,
+        "mfr": s3["mfr"],
+        "sline": s3["sline"],
+        "ver": s4["ver"],
+        "res": s5["res"],
+        "run": s5["run"],
+        **ids,
+    }
     for sql in (
         "INSERT INTO claim_export_templates (tenant_id, id, manufacturer_id, name, format, columns, created_by) "
         'VALUES (:t, :tpl, :mfr, \'iso\', \'csv\', \'[{"header": "Ref", "source": "claim_reference"}]\', :u)',
@@ -292,6 +301,9 @@ def _s7_rows(
         "INSERT INTO claim_lines (tenant_id, id, batch_id, claim_reference, source_kind, sales_document_line_id, "
         "calculation_result_id, agreement_version_id, claim_amount) VALUES (:t, :line, :batch, 'CL-ISO-000001', "
         "'sales_line', :sline, :res, :ver, 1)",
+        "INSERT INTO claim_adjustments (tenant_id, id, manufacturer_id, adjustment_type, claim_line_id, "
+        "calculation_result_id, run_id, amount, reason) VALUES (:t, :adj, :mfr, 'agreement_change', :line, :res, "
+        ":run, -1, 'iso')",
     ):
         conn.execute(text(sql), p)
     return ids
