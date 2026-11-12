@@ -673,3 +673,49 @@ def test_a_manufacturer_without_negative_claims_blocks_the_return_reversal(env: 
     assert refused.status_code == 409 and refused.json()["error"]["code"] == "cannot_net_claim", refused.text
     assert listing(ws.api, "/claim-adjustments")[0]["status"] == "approved"
     assert [b["status"] for b in listing(ws.api, "/claim-batches")] == ["submitted"]
+
+
+def test_a_draft_batch_is_not_a_frozen_claim(env: Env) -> None:
+    """INV-10021/1 (20 x 12.50 = 250.00) sits in a DRAFT batch when CN-5002 returns 4 units. Hand: nothing is frozen,
+    so the return nets the line (16 x 12.50 = 200.00) and no reversal is proposed. After the draft is voided the
+    line is claimed at 200.00, not 250.00 - 50.00 netted twice (150.00)."""
+    ws = workspace(env)
+    import_sales_part(ws, late=False)
+    first = results(ws, run(ws, **WINDOW)["id"])["INV-10021/1"]
+    draft = new_batch(ws.api, first["manufacturer_id"], result_ids=[first["id"]])
+    assert draft.status_code == 201 and Decimal(draft.json()["total_amount"]) == Decimal("250.00"), draft.text
+    import_sales_part(ws, late=True)
+    second = run(ws, **WINDOW)
+    assert Decimal(results(ws, second["id"])["INV-10021/1"]["claim_amount"]) == Decimal("200.00")
+    assert propose(ws, second["id"])["proposed"] == []
+    assert (
+        ws.api.post(f"/claim-batches/{draft.json()['id']}/void", json={"reason": "test"}).status_code == 200
+    )
+    third = results(ws, run(ws, **WINDOW)["id"])["INV-10021/1"]
+    assert Decimal(third["claim_amount"]) == Decimal("200.00")
+    again = new_batch(ws.api, third["manufacturer_id"], result_ids=[third["id"]])
+    assert again.status_code == 201 and Decimal(again.json()["total_amount"]) == Decimal("200.00"), again.text
+
+
+def test_the_database_enforces_negative_claims(env: Env, admin_engine: Engine) -> None:
+    """Owner decision 1 below the service: a batch totalling 0.00 (hand: 0 <= 0; refused before the line tie-out) and a negative
+    return reversal's approval are refused while the manufacturer's allow_negative_claims is false, and accepted
+    (positive control) once it is true."""
+    ws = workspace(env)
+    settings(ws, "VOLT", allow_negative_claims=False)
+    import_sales_part(ws, late=False)
+    claim_and_submit(ws, results(ws, run(ws, **WINDOW)["id"]), FIX7)
+    import_sales_part(ws, late=True)
+    (adj,) = propose(ws, run(ws, **WINDOW)["id"])["proposed"]
+    user = adj["proposed_by"]
+    batch = (
+        "INSERT INTO claim_batches (tenant_id, id, manufacturer_id, batch_number, line_count, total_amount, "
+        "created_by) VALUES (:t, gen_random_uuid(), :m, :n, 1, 0, :u)"
+    )
+    approve_sql = "UPDATE claim_adjustments SET status = 'approved', approved_by = :u, approved_at = now() WHERE id = :a"
+    args = {"t": ws.tenant_id, "m": adj["manufacturer_id"], "u": user, "a": adj["id"]}
+    assert "allows negative claims" in outcome(admin_engine, batch, n="CB-ZERO-1", **args)
+    assert "does not accept negative claims" in outcome(admin_engine, approve_sql, **args)
+    settings(ws, "VOLT", allow_negative_claims=True)
+    assert "allows negative claims" not in outcome(admin_engine, batch, n="CB-ZERO-2", **args)
+    assert outcome(admin_engine, approve_sql, **args) == "ok"

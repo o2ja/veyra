@@ -136,3 +136,16 @@ trigger, re-bind test, API 2.8 and 9.3 docs: all present with tests, no gap foun
 Tests: `test_a_manufacturer_without_negative_claims_blocks_the_return_reversal` (-50.00 stays proposed, approve and
 inclusion 409), the zero-batch refusal inside `test_rebate_accrual_claims_and_the_r2_clawback`, engine golden
 SC-09r (VOLT -50.00 unflagged; setting off flags). No ground-truth vs BUSINESS_LOGIC money discrepancy found.
+
+## Second financial review fixes
+
+- B1: `frozen._rows` (prior and frozen claims) is back on `_ACTIVE` (frozen, not released); only `consumption` uses `_LIVE`.
+  Test `test_a_draft_batch_is_not_a_frozen_claim` (draft 250.00 + return of 4 -> 200.00, no reversal, 200.00 after void).
+- S1: migration `20261117_0900_neg_claims_guard` (revises `20261116_0900_adjustments_wiring`; new head): the batch tie-out
+  trigger refuses a non-void batch with total <= 0 unless `allow_negative_claims`; the adjustment trigger refuses a
+  negative `return_reversal` moving to approved/included without the setting, and inclusion of an adjustment whose claim
+  line is not frozen or is released. Test `test_the_database_enforces_negative_claims` (owner SQL; positive control).
+  The frozen-line guard has no direct DB test (a frozen/released line state cannot be reached by owner SQL without
+  breaking other triggers).
+- M1: `approve` and `submit` re-check the setting. M2: `frozen.py` docstrings. M3: the proposal reason says "when proposed"
+  (it records the state at proposal; the live setting is enforced at approve and inclusion). M4: JSON line endings restored.

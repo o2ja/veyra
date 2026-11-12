@@ -1,7 +1,7 @@
 # ruff: noqa: S608  # SQL assembled from module constants only; every value is a bound parameter
-"""Frozen (submitted) claims, and the live claims that use up caps, as the calculation needs them (BUSINESS_LOGIC.md §4.2, §7, §9.3).
+"""Frozen claims (``frozen_at`` set, not released), and the live claims (any batch status) that use up caps, as the calculation needs them (BUSINESS_LOGIC.md §4.2, §7, §9.3).
 
-Reads ``claim_lines`` of submitted batches that are not released. A re-imported source line is a new version
+``prior_claims`` and ``frozen_claims`` read frozen lines only (draft lines are not claims yet); ``consumption`` reads every live line. A re-imported source line is a new version
 (``superseded_by_id``); a claim stays attached to the version it was made on, so every lookup by the *current* line
 id follows the version chain back to the claimed version. ``frozen_claims`` therefore answers for the changed line
 too, which is what turns a source change into a recalculation proposal instead of a second claim.
@@ -27,7 +27,7 @@ ZERO = Decimal(0)
 
 @dataclass(frozen=True)
 class FrozenClaim:
-    """The active (submitted, not released) claim line of a source sales line."""
+    """The frozen (not released) claim line of a source sales line."""
 
     claim_line_id: UUID
     sales_line_id: UUID
@@ -84,7 +84,7 @@ class SqlFrozenClaims:
                     "c.agreement_version_id, r.agreement_id, r.claim_uom, r.manufacturer_id "
                     "FROM anc JOIN claim_lines c ON c.tenant_id = :t AND c.sales_document_line_id = anc.source_id "
                     "JOIN calculation_results r ON r.tenant_id = c.tenant_id AND r.id = c.calculation_result_id "
-                    "WHERE " + _LIVE
+                    "WHERE " + _ACTIVE
                 ),
                 {"t": tenant_id, "ids": list(line_ids)},
             )
@@ -127,7 +127,7 @@ class SqlFrozenClaims:
         exclude_line_ids: Collection[UUID],
         data_cutoff: datetime | None = None,
     ) -> Mapping[tuple[str, str], Decimal]:
-        # ponytail: one scan of the tenant's submitted claims per manufacturer window; add a cap-state projection
+        # ponytail: one scan of the tenant's live claims per manufacturer window; add a cap-state projection
         # if S11 measures it slow. Returns are those linked to the claimed version itself.
         rows = db.execute(
             text(

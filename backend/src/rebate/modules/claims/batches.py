@@ -446,6 +446,7 @@ def approve(db: Session, who: Who, batch_id: UUID) -> ClaimBatch:
     if tenancy.get_settings(db, who.tenant_id).four_eyes_required and who.user_id == b.created_by:
         _audit(db, who, audit.Action.CLAIM_BATCH_FOUR_EYES_VIOLATION, b, after=_view(b))
         raise AuditedFourEyesViolation()
+    _require_positive(db, who.tenant_id, b.manufacturer_id, b.total_amount)
     before = _view(b)
     b.status, b.approved_by, b.approved_at = "approved", who.user_id, clock.now()
     db.flush()
@@ -466,6 +467,7 @@ def submit(db: Session, who: Who, batch_id: UUID, submitted_at: date, external_r
         raise ValidationFailed(
             details=[_problem("submitted_at", "in_future", "The submission date cannot be in the future.")]
         )
+    _require_positive(db, who.tenant_id, b.manufacturer_id, b.total_amount)
     before = _view(b)
     b.status, b.submitted_at, b.submitted_by, b.external_reference = (
         "submitted",
