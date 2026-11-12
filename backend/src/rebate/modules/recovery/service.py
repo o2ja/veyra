@@ -212,7 +212,8 @@ def _case_deadline(
         return None, None
     base: date | None
     if s.dispute_window_basis == "remittance_date":
-        base = rem.document_date
+        # a finding without a remittance line (``unpaid``) has no remittance to count from: deadline unknown
+        base = rem.document_date if f.remittance_line_id is not None else None
     else:
         base = db.scalar(
             text(

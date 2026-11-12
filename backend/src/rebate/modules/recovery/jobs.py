@@ -67,7 +67,7 @@ def recovery_sweep(db: Session, ctx: JobContext) -> None:
         .order_by(VarianceCase.id)
     ).all()
     names: dict[UUID, str] = dict(
-        db.execute(text("SELECT id, name FROM manufacturers WHERE tenant_id = :t"), {"t": tenant}).tuples()
+        db.execute(text("SELECT id, name FROM manufacturers WHERE tenant_id = :t"), {"t": tenant}).all()
     )
     for c in cases:
         manufacturer = names[c.manufacturer_id]
