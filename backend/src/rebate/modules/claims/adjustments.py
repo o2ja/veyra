@@ -346,7 +346,9 @@ def propose_recovery_reclaim(
 
 def retire_recovery_reclaims(db: Session, who: Who, variance_case_id: UUID) -> None:
     """S9 write-off: the case no longer asks for its money. Reject its proposed/approved reclaim adjustments (so they
-    cannot be batched later); 409 ``reclaim_included`` while one sits in a live batch."""
+    cannot be batched later); 409 ``reclaim_included`` while one sits in a batch that can still be voided (draft or
+    approved). An adjustment in a submitted batch has been claimed: it stays (nothing can undo it), and the case may
+    be written off for what is still outstanding."""
     rows = list(
         db.scalars(
             select(ClaimAdjustment)
@@ -360,10 +362,18 @@ def retire_recovery_reclaims(db: Session, who: Who, variance_case_id: UUID) -> N
             .with_for_update()
         )
     )
-    if any(a.status == "included" for a in rows):
+    voidable = db.scalars(
+        text(
+            "SELECT b.id FROM claim_batches b WHERE b.tenant_id = :t AND b.status IN ('draft', 'approved') "
+            "AND b.id = ANY(CAST(:ids AS uuid[]))"
+        ),
+        {"t": who.tenant_id, "ids": [a.included_in_batch_id for a in rows if a.status == "included"]},
+    ).all()
+    if voidable:
         raise ReclaimIncluded()
     for a in rows:
-        reject(db, who, a.id)
+        if a.status != "included":
+            reject(db, who, a.id)
 
 
 def propose(

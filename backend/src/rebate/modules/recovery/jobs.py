@@ -56,7 +56,7 @@ def _recipients(db: Session, tenant: UUID, owner: UUID | None) -> list[UUID]:
 
 def _title(case_type: str, amount: object, manufacturer: str, days: int) -> str:
     when = "today" if days == 0 else "tomorrow" if days == 1 else f"in {days} days"
-    return f"{case_type.replace('_', ' ').capitalize()} {amount} ({manufacturer}): deadline {when}"
+    return f"{case_type.replace('_', ' ').capitalize()} {amount:.2f} ({manufacturer}): deadline {when}"
 
 
 @job(service.SWEEP_JOB, tenant_scoped=True, on_dead=lambda db, ctx: _sweep_died(db, ctx))

@@ -612,6 +612,7 @@ def write_off(db: Session, who: Who, case_id: UUID, reason: str, revision: int) 
         db, who, c, st.CaseStatus.WRITTEN_OFF, reason,
         written_off_by=who.user_id, written_off_at=clock.now(),
         written_off_amount=c.variance_amount - c.recovered_amount,
+        **({"write_off_reason": reason} if c.write_off_reason is None else {}),  # four-eyes off: no proposal made it
     )  # fmt: skip
     _audit(db, who, audit.Action.VARIANCE_CASE_WRITTEN_OFF, c, after=view(c))
     return c
