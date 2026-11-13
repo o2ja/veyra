@@ -1,6 +1,6 @@
 # Project Status
 
-> Living document. Updated at the end of every stage and whenever a decision, risk or known issue changes. Last updated: 2026-11-12.
+> Living document. Updated at the end of every stage and whenever a decision, risk or known issue changes. Last updated: 2026-11-13.
 
 ## 1. Current position
 
@@ -24,6 +24,8 @@
 ## 3. In progress
 
 S1 signed off by the owner 2026-11-10. Evidence and open points: `docs/reports/S1_COMPLETION_REPORT.md`. CI green on `main` (jobs: backend incl. isolation negative control, frontend, e2e (Playwright W1–W2 + axe), api-contract, secrets, images).
+
+**CI and merging (owner, 2026-11-13):** GitHub Actions is unpaid; the merge gate is `make ci-local` (6/6 on the exact commit, posted as a PR comment with the SHA) after merging latest `main`, plus the required reviews; nothing skipped or failing. Workflow runs only on ready-for-review PRs and pushes to `main`, with path filters; WIP PRs are drafts. At most 2 agents; full suite + Playwright once per merge; never two full suites at once. Full text: `CLAUDE.md` §19.
 
 **Resume point (2026-11-13 overnight):** see `docs/reports/notes/resume-prompt.md` "Update 2026-11-13". #18 merged; S7 blocked by financial discrepancy D-N1 (owner); S8/S9/S11.1 on branches.
 
@@ -119,3 +121,4 @@ Top items only; full list in the analysis and `SECURITY.md` §12.
 | 2026-11-10 | S1 complete: audit shows actor names; runbook operator scripts + dry run (found and fixed a missing EXECUTE grant, migration `20261110_0900`); session-ended message; axe on S1 pages; completion report |
 | 2026-11-10 | S2 complete: job queue (ADR-005 fallback), worker, files module (SeaweedFS + ClamAV, quarantine → clean), Files/Jobs pages; two independent reviews (8 serious findings fixed); K-4, K-9 closed; K-10..K-12 opened |
 | 2026-11-12 | Owner decisions: S5 signed off; OD-1 approved; OD-2 deferred (recorded fixtures); 3 validator refusals + split-period tiers moved to Release 2; `cannot_be_net_claimed` adjustments stay `proposed` and batches <= 0 are refused unless `allow_negative_claims`; unpaid line without rejection code = `short_paid_unexplained` (BUSINESS_LOGIC §10.3) |
+| 2026-11-13 | Owner rules: `make ci-local` merge gate, draft-PR/path-filtered workflow, 2-agent limit (`CLAUDE.md` §19). Owner decisions D-N1/D-N3/D-N7 (an adjustment belongs to the batch that carries it; frozen claim lines reconcile at their frozen amount; no return_reversal/agreement_change for a return netted into a frozen claim), D-N2 (unpaid deadline = submission date + dispute window), D-N5 (closed cases immutable; separate "recovered after write-off" S10 figure), D-N6 (dashboard definitions; one at-risk definition; month buckets in tenant business time zone; XLSX audit pack for Release 1, PDF Release 1.1), D-N4 deferred (legal review; dry-run only), D-N8 (ESLint security plugin + weekly grouped Dependabot approved; ZAP/pen test wait for staging), D-N9 (no 1M run locally; measure 100k/250k import memory, growth = streaming bug) |

@@ -187,3 +187,12 @@ Prefer the smallest vertical slice that proves the design, test it, then extend.
 3. **Independent reviewer:** run the read-only `reviewer` subagent (`.claude/agents/reviewer.md`) (a) on every kickoff report before presenting it, and (b) on every completion report plus the stage's code diff before presenting it. Fix its findings or explain the disagreement; include its findings and the responses in the report.
 4. **Stage sign-off:** the owner personally approves **S1, S5 and S8**. For every other stage, if all tests and CI are green, the reviewer has no unresolved serious finding, and nothing from item 2 is open, start the next stage automatically and send the owner a short digest (built, tested, issues). Otherwise stop and wait.
 5. **Every report starts with a 5-line summary of what the owner needs to decide** (or "nothing"). Honesty rules (§3) still apply: say what was not tested.
+
+## 19. CI, merging and local load (owner rules, 2026-11-13)
+
+GitHub Actions minutes are not paid for and the repo stays private, so the gate works without them.
+
+1. **`make ci-local`** (`infra/scripts/ci-local.sh`) runs the same steps as the six CI jobs (api-contract, backend incl. isolation suite and RLS-off control, frontend, e2e, images, secrets) against the dev stack, on a clean working tree, stops at the first failure and prints pass/fail per job with the SHA.
+2. **GitHub workflow** runs only on pull requests that are ready for review and on pushes to `main`; per-job path filters (frontend jobs when `frontend/` changes, backend jobs when `backend/` incl. migrations, `infra/`, `testdata/` or `BUSINESS_LOGIC.md` change); concurrency cancels in-progress runs. Open work-in-progress PRs as **drafts**.
+3. **Merge rule:** merge only after (a) the latest `main` is merged into the branch, (b) 6/6 green on that exact commit — GitHub CI if minutes are available, otherwise `make ci-local` with its result posted as a PR comment naming the SHA — and (c) the required reviews passed. A job that was skipped (by a path filter or anything else) or failed is not green. Never merge with anything skipped or failing.
+4. **Local load (weak laptop):** at most 2 agents at once. While building, run only the tests for the changed code; the full suite and Playwright run once per merge (inside `make ci-local`). Never two full suites at the same time (`ci-local` holds a lock).

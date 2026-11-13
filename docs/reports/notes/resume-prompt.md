@@ -1,39 +1,35 @@
-# Resume prompt (2026-11-12 night stop): paste into a new session started in D:\veyra\rebate-recovery-docs\rebate-recovery
+# Resume prompt (2026-11-13 morning): paste into a new session started in D:\veyra\rebate-recovery-docs\rebate-recovery
 
 Resume the Veyra Recover build. The deadline is 2026-11-15.
 
-Read ONLY these: this file, docs/reports/STATUS_2026-11-12.md, docs/PROJECT_STATUS.md §3, and your memory. The per-branch resume notes are `docs/reports/notes/<branch>-resume.md`, each on its own branch. Read one only when you work on that branch.
+Read ONLY these: this file, the MORNING SUMMARY at the top of `docs/reports/notes/overnight-log.md`, `docs/PROJECT_STATUS.md` §3, and your memory. Per-branch notes (`docs/reports/notes/<branch>-resume.md`, `<id>-*.md`) live on their branches; read one only when you work on that branch.
 
-First run `git worktree list`, `git status`, `gh pr list` and `git fetch`. Commit and push any leftovers.
+First run `git worktree list`, `git status`, `gh pr list` and `git fetch`. Commit and push any leftovers. Start the dev stack if it is down: `docker compose --env-file .env -f infra/docker/compose.dev.yml --profile s2 up -d` (from main).
 
-## Update 2026-11-13 (overnight run) — read this first
-- Done: #18 merged; ADR-017/PRODUCTION_PLAN (managed S3). F2 finished s7-adjustments (17a70c9, full 1897 pass, negctl OK).
-- **HARD STOP D-N1** (financial discrepancy, netted-before-claim double correction; overnight-log.md item 3): s7-adjustments is NOT merged into s7-claims, #15 NOT merged, owner decides. S8/S9 can't reach main until then.
-- Running/branches: I1 s8-reconciliation, J1 s9-recovery, K1 s11-audit-seal (S11.1, from main). ui/qa-1 returned (antigravity-prompt-qa-1-fixes.md). ui/s7 waits for #15.
-- Next: S8/S9 reviews on branches (no merge to main while D-N1 open); S11 items independent of S7.
+## State (2026-11-13 morning)
+- **Main:** #18 merged (c7d014b); ADR-017 + `docs/PRODUCTION_PLAN.md` (managed S3 in production, owner decision).
+- **CI is dead:** GitHub Actions refuses every job for billing (D-N0). Check first: `gh pr checks 20`. Nothing merges without 6/6 green.
+- **Ready PRs (reviewed, findings fixed), merge when CI is green:** #20 `s11-docs-drill` (restore drill + guides), #21 `s11-audit-seal` (S11.1; migration 20261115_0900_audit_seals on calc_runs), #22 `s11-security` (S11.3).
+- **Held by financial HARD STOPs (owner decides; do not pick a side):**
+  - D-N1 S7: `s7-adjustments` 17a70c9 → `s7-claims` → PR #15.
+  - D-N3 S8: `s8-reconciliation` edaa230 (contains s7-adjustments + main; remittances re-chained after neg_claims_guard; 1 head).
+  - D-N7 S10: `s10-reporting` c9f971f (stacked on S9 7fe11bb; merge s9-recovery 0d8021b in before PR).
+  - All three are one question: which claimed amount an adjustment belongs to. Details + recommendations: overnight-log D-N1/D-N3/D-N7; reviews `docs/reports/notes/s8-financial-review-1.md`, PR #15 comment 6841512829.
+- **`s9-recovery` 0d8021b:** S9 complete, three review rounds clean, full 2222 pass, negctl OK. Stacked on S8; merge after S8.
+- **Blocked:** `s11-perf` S11.2 (local Docker VM, 7.65 GiB, dies at the 1M import confirm step; D-N9). Only change: perf test pins clock to 2026-07-10 (not executed).
+- **Antigravity:** `ui/qa-1` Playwright 8/18 fail → `antigravity-prompt-qa-1-fixes.md`. `ui/s7` waits for #15. S7–S10 UI briefs not written (write each after its backend merges).
+- **Other owner items:** D-N2 unpaid-case deadline basis, D-N4 retention/deletion design (5 questions in `k1-s11-audit-seal.md`), D-N5 receipts after write-off, D-N6 S10 figure definitions (`m1-s10-reporting.md`), D-N8 ZAP/pen test/ESLint plugin/Dependabot.
 
 ## Next steps, in order
-1. **PR #18 (s11-ops, 9c7ba2c):** it is ready, with three security passes and CI green. Merge it if the owner has allowed `gh pr merge`; otherwise ask the owner to merge it.
-2. **s7-adjustments (worktree .claude/worktrees/agent-adc7160f14611b131):** finish the WIP fixes for the 2nd financial review (B1 double deduction, S1 DB triggers, M1–M4; see the resume note). Run ONE full suite with REBATE_AI_WRITER_PASSWORD set, plus isolation, the RLS-off control (negctl), ruff, mypy and lint-imports. Fix the mypy error in tests/integration/test_end_to_end.py:17. Then run an independent financial pass on the fix diff, merge s7-adjustments into s7-claims, and merge PR #15 when CI is green.
-3. **s8-reconciliation (worktree .claude/worktrees/i1-s8):**
-   - Merge origin/s7-adjustments in.
-   - **Re-chain** the migration: `20261117_0900_remittances.down_revision = 20261117_0900_neg_claims_guard`, then check that `alembic heads` = 1.
-   - Finish S8.4–S8.7 per brief I1 and its resume note.
-   - Reviews: financial, then security + DB.
-   - Open the PR and merge it.
-4. **s9-recovery (worktree .claude/worktrees/j1-s9):**
-   - Merge origin/s8-reconciliation in after its re-chain.
-   - Finish Phase B per brief J1 and its resume note.
-   - Reviews: security + DB, and financial on any recovered or written-off amounts.
-   - Open the PR and merge it after S8.
-5. **Antigravity:**
-   - After ui/s7 is reported, read ui-report-s7.md and the diff. Run lint, typecheck, vitest, and Playwright in batches of at most 4 specs (clear rate_limit_counters between them; stop veyra-recover-frontend-1 while running vite from a worktree and restart it afterwards). Get a reviewer pass, then merge after #15.
-   - Its next task is ready: docs/reports/notes/antigravity-prompt-qa-1.md.
-   - Write UI briefs for the S7 adjustments queue, S8 workbench and S9 queue as each backend merges.
-6. **S10** (summary job, dashboard and drill-down, tier tracker, trace resolver, audit pack), then the rest of **S11** per IMPLEMENTATION_PLAN. Core first, extras second.
+1. If CI runs again: merge #20, #21, #22 one at a time (6/6 green + review recorded on the PR); `git pull` main after each; re-chain migrations if two heads appear.
+2. After the owner decides D-N1/D-N3/D-N7: align BUSINESS_LOGIC + code + tests on the chosen rule (expected values from ground truth / hand derivation), independent financial review on the change, then merge s7-adjustments → s7-claims → PR #15 → S8 PR → S9 PR → S10 PR, one at a time, full suite + negctl per merge. Each later branch merges main in and re-chains its migration first.
+3. After each backend merge: UI brief + Antigravity prompt (S7 adjustments queue, S8 workbench, S9 queue, S10 dashboard) in `docs/reports/notes/`; verify Antigravity branches yourself (lint, typecheck, vitest, Playwright ≤4 specs per batch, clear rate_limit_counters, stop veyra-recover-frontend-1 while vite runs from a worktree).
+4. Remaining S11: S11.2 perf (needs more Docker memory), S11.4 a11y, S11.5 deploy (hosting = owner), S11.8 pilot review. Then `docs/reports/RELEASE_1_REPORT.md`.
+5. Housekeeping: `s11-docs-drill/backups/` holds a gitignored synthetic dump with password hashes; delete only if the owner agrees.
 
-## Owner decisions pending (see STATUS)
-OD-3/OD-4 production object storage; the merge permission. Do not block on them: log them and continue.
+## Test helpers (session scratchpad, recreate if gone)
+- One-off pytest in a worktree: see `docs/reports/notes/briefs/COMMON.md`; pass `-e REBATE_AI_WRITER_PASSWORD` and your own `REBATE_TEST_DB`. Tests reading `infra/` need `-v <worktree>/infra:/infra:ro` with `MSYS_NO_PATHCONV=1` in Git Bash.
+- Negative control: `python -m tests.isolation.negative_control` (one agent at a time).
 
 ## Rules
 - **Building:**
@@ -45,11 +41,11 @@ OD-3/OD-4 production object storage; the merge permission. Do not block on them:
   - An independent financial review on all money logic.
   - One review pass per stage, plus a second pass on the fix diff only.
 - **Merging:**
-  - CI green before any merge.
+  - Merge gate: CLAUDE.md §19 (`make ci-local` 6/6 on the exact SHA, posted on the PR, after merging latest main).
   - The full suite once per merged wave.
   - Commit and push after every merged piece.
 - **Agents:**
-  - At most 3 at once.
+  - At most 2 at once (CLAUDE.md §19).
   - Use the cheaper model (sonnet) for builders and opus for reviewers.
   - Ponytail rules apply: shortest working diff, reuse before writing, no new dependencies or abstractions. They never relax quality.
 - **Decisions:**
