@@ -100,6 +100,8 @@ class Action(StrEnum):
     CLAIM_TEMPLATE_UPDATED = "claim_export_template.updated"
     MISSED_CLAIMS_EXPORT_REQUESTED = "missed_claims.export_requested"
     MISSED_CLAIMS_EXPORTED = "missed_claims.exported"
+    AUDIT_PACK_REQUESTED = "audit_pack.requested"
+    AUDIT_PACK_EXPORTED = "audit_pack.exported"
     VARIANCE_CASE_CREATED = "variance_case.created"
     VARIANCE_CASE_STATUS_CHANGED = "variance_case.status_changed"
     VARIANCE_CASE_ASSIGNED = "variance_case.assigned"

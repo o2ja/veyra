@@ -17,6 +17,7 @@ from rebate.modules.ingestion import models as _ingestion_models  # noqa: F401
 from rebate.modules.masterdata import models as _masterdata_models  # noqa: F401
 from rebate.modules.reconciliation import models as _reconciliation_models  # noqa: F401
 from rebate.modules.recovery import models as _recovery_models  # noqa: F401
+from rebate.modules.reporting import models as _reporting_models  # noqa: F401
 from rebate.modules.tenancy import models as _tenancy_models  # noqa: F401
 
 config = context.config

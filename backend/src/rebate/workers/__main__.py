@@ -22,6 +22,7 @@ from rebate.modules import (  # noqa: F401  (each registers its job handlers)
     ingestion,
     reconciliation,
     recovery,
+    reporting,
     tenancy,
 )
 from rebate.modules.files import storage
