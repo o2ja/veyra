@@ -14,6 +14,7 @@
 - Stack was down; started it (compose --profile s2 up -d, no rebuild).
 - Launched builders F2, I1, J1 (own test DBs; F2 owns negctl).
 - ui/qa-1: merged main in (ec83e66); lint/typecheck/vitest PASS; Playwright 18 specs in batches of 4: 10 pass, 8 fail (Antigravity had not run Playwright). Fix prompt eeea8e1.
+- F2 done (s7-adjustments 17a70c9): B1/S1/M1-M4 + mypy fixed; main merged in; full 1897 passed, isolation 360, negctl OK, ruff/mypy/lint-imports clean. bandit/pip-audit not run. Opus financial 2nd pass on fix diff launched.
 
 ---
 
