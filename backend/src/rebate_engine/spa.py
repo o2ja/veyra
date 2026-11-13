@@ -315,15 +315,19 @@ def _evaluate_original(
     else:
         t.step("price_check", mode=rules.price_check_mode, sell_price=item.sell_price, skipped=True)
 
-    # Returns netting (§7): unclaimed originals are computed net; claimed originals stay on the frozen basis
-    # a claimed original is evaluated on the basis its frozen claim was made with (owner decision 2026-11-13)
+    # Returns netting (§7): unclaimed originals are computed net; a claimed original is evaluated on the basis its
+    # frozen claim was made with (owner decision 2026-11-13). ``netted`` is the one place that basis is decided.
     claimed = line.prior_claim is not None
-    netted = line.prior_claim.netted_returned_quantity if line.prior_claim else line.returned_quantity
+    # owner decision 2026-11-13 (D-N10): a netted return later reduced or voided lowers the basis (min), so the
+    # shortfall surfaces as an agreement_change
+    pc0 = line.prior_claim
+    netted = min(pc0.netted_returned_quantity, line.returned_quantity) if pc0 else line.returned_quantity
     net = line.quantity - netted
     t.step(
         "returns",
         quantity=line.quantity,
-        returned_quantity=netted,
+        returned_quantity=line.returned_quantity,
+        netted_returned_quantity=netted,
         claimed=claimed,
         net=net,
     )
@@ -497,7 +501,7 @@ def calculate_spa(run: SpaRunInput) -> tuple[LineResult, ...]:
                     key = (pc.agreement_id, line.product_id)
                     factor = find_factor(run.conversions, line.product_id, line.uom, pc.claim_uom)
                     returned = (
-                        (line.returned_quantity - pc.netted_returned_quantity) * factor
+                        max(line.returned_quantity - pc.netted_returned_quantity, ZERO) * factor
                         if factor is not None
                         else ZERO
                     )

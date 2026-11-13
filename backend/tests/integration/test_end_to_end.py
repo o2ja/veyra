@@ -104,9 +104,14 @@ def test_every_spa_scenario_matches_ground_truth(env: Env) -> None:
     activate_all(ws, AGREEMENTS)
     import_sales_part(ws, late=False)
     fixture = truth("claim_batches_fixture.json")["lines"]
-    claim_and_submit(
+    batch = claim_and_submit(
         ws, results(ws, run(ws, **WINDOW)["id"]), [f"{x['invoice_no']}/{x['line_no']}" for x in fixture]
     )
+    # pins the order of events: every line frozen at the fixture amount (INV-10021/1 at 250.00, no CN-5002 yet)
+    frozen = ws.api.get(f"/claim-batches/{batch['id']}/lines", params={"limit": 200}).json()["data"]
+    assert {x["document_number"]: Decimal(x["claim_amount"]) for x in frozen} == {
+        x["invoice_no"]: Decimal(x["claim_amount"]) for x in fixture
+    }
     import_sales_part(ws, late=True)
     r = run(ws, **WINDOW)
     assert r["status"] == "completed", r

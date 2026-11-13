@@ -821,3 +821,30 @@ def test_an_adjustment_is_counted_in_the_batch_that_carries_it(env: Env) -> None
     held = ws.api.get(f"/claim-batches/{b1['id']}").json()
     assert Decimal(held["total_amount"]) == Decimal("200.00") == Decimal(b1["total_amount"])
     assert Decimal(claim_lines_of(ws, b1["id"])["INV-10021"]["claim_amount"]) == Decimal("200.00")
+
+
+def test_a_netted_return_later_reduced_proposes_the_shortfall_as_an_agreement_change(env: Env) -> None:
+    """D-N10. INV-10021/1 (20 x 12.50) is claimed at 200.00 = (20 - 4) x 12.50, net of CN-5002's 4 units. CN-5002 is
+    then re-imported with 2 units. Hand: the original is now worth (20 - 2) x 12.50 = 225.00, so exactly
+    225.00 - 200.00 = +25.00 is proposed as an agreement_change on the claim line; the frozen claim stays 200.00 and
+    CN-5002 (2 units, all within the 4 netted) stays netted, no return_reversal."""
+    ws = workspace(env)
+    import_sales_part(ws, late=False)
+    import_sales_part(ws, late=True)
+    batch = claim_and_submit(ws, results(ws, run(ws, **WINDOW)["id"]), ["INV-10021/1"])
+    import_text(
+        ws,
+        SALES_HEADER
+        + "CN-5002,1,2026-07-02,2026-07-02,BLUFF,Bluff City Mechanical (SYNTHETIC),BR01,BRK-3P-60A,"
+        "Breaker 3-pole 60A,2,EA,58.00,64.50,116.00,SPA-VOLT-2026-884,,CN,INV-10021,1\n",
+        "cn5002_reduced.csv",
+    )
+    second = run(ws, **WINDOW)
+    res = results(ws, second["id"])
+    assert Decimal(res["INV-10021/1"]["claim_amount"]) == Decimal("225.00")
+    assert res["CN-5002/1"]["status"] == "netted"
+    (adj,) = propose(ws, second["id"])["proposed"]
+    assert adj["adjustment_type"] == "agreement_change" and Decimal(adj["amount"]) == Decimal("25.00")
+    line = claim_lines_of(ws, batch["id"])["INV-10021"]
+    assert adj["claim_line_id"] == line["id"] and Decimal(line["claim_amount"]) == Decimal("200.00")
+    assert propose(ws, second["id"])["proposed"] == []

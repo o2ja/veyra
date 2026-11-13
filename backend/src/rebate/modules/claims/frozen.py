@@ -70,8 +70,9 @@ _ANCESTRY = (
 # what the frozen claim was netted by: the "returns" step of the calculation result the claim was made from
 # (owner decision 2026-11-13, BUSINESS_LOGIC §7)
 _NETTED = (
-    "(SELECT CAST(s->>'returned_quantity' AS numeric) FROM jsonb_array_elements(r.trace->'steps') s "
-    "WHERE s->>'step' = 'returns' LIMIT 1)"
+    "(SELECT CAST(e.s->>'netted_returned_quantity' AS numeric) "
+    "FROM jsonb_array_elements(r.trace->'steps') WITH ORDINALITY AS e(s, n) "
+    "WHERE e.s->>'step' = 'returns' ORDER BY e.n LIMIT 1)"
 )
 _ACTIVE = "c.released_at IS NULL AND c.frozen_at IS NOT NULL AND c.source_kind = 'sales_line'"
 # the cap counts every live claim line (draft, approved or submitted batch), BUSINESS_LOGIC §4.2

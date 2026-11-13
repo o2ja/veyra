@@ -438,7 +438,7 @@ def _carry(
             continue
         factor = find_factor(conversions, ln.product_id, ln.uom, pc.claim_uom)
         returned = (
-            (ln.returned_quantity - pc.netted_returned_quantity) * factor
+            max(ln.returned_quantity - pc.netted_returned_quantity, Decimal(0)) * factor
             if factor is not None
             else Decimal(0)
         )
