@@ -2240,6 +2240,52 @@
         "title": "CustomerScope",
         "type": "object"
       },
+      "DashboardOut": {
+        "properties": {
+          "as_of": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "As Of"
+          },
+          "as_of_date": {
+            "anyOf": [
+              {
+                "format": "date",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "As Of Date"
+          },
+          "figures": {
+            "$ref": "#/components/schemas/Figures"
+          },
+          "months": {
+            "items": {
+              "$ref": "#/components/schemas/MonthFigures"
+            },
+            "title": "Months",
+            "type": "array"
+          }
+        },
+        "required": [
+          "as_of",
+          "as_of_date",
+          "figures",
+          "months"
+        ],
+        "title": "DashboardOut",
+        "type": "object"
+      },
       "DiffOut": {
         "properties": {
           "changes": {
@@ -3069,6 +3115,142 @@
           "payload"
         ],
         "title": "DraftUpdate",
+        "type": "object"
+      },
+      "DrillRow": {
+        "properties": {
+          "amount": {
+            "title": "Amount",
+            "type": "string"
+          },
+          "branch_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Branch Id"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "label": {
+            "title": "Label",
+            "type": "string"
+          },
+          "manufacturer_id": {
+            "format": "uuid",
+            "title": "Manufacturer Id",
+            "type": "string"
+          },
+          "month": {
+            "format": "date",
+            "title": "Month",
+            "type": "string"
+          },
+          "trace_id": {
+            "format": "uuid",
+            "title": "Trace Id",
+            "type": "string"
+          },
+          "trace_kind": {
+            "anyOf": [
+              {
+                "enum": [
+                  "claim_line",
+                  "remittance_line",
+                  "variance_case",
+                  "calculation_result"
+                ],
+                "type": "string"
+              },
+              {
+                "const": "remittance_line",
+                "type": "string"
+              }
+            ],
+            "title": "Trace Kind"
+          }
+        },
+        "required": [
+          "id",
+          "trace_kind",
+          "trace_id",
+          "manufacturer_id",
+          "branch_id",
+          "month",
+          "amount",
+          "label"
+        ],
+        "title": "DrillRow",
+        "type": "object"
+      },
+      "DrilldownOut": {
+        "properties": {
+          "as_of": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "As Of"
+          },
+          "consistent": {
+            "title": "Consistent",
+            "type": "boolean"
+          },
+          "data": {
+            "items": {
+              "$ref": "#/components/schemas/DrillRow"
+            },
+            "title": "Data",
+            "type": "array"
+          },
+          "figure": {
+            "title": "Figure",
+            "type": "string"
+          },
+          "metric": {
+            "enum": [
+              "claimed",
+              "collected",
+              "short_paid",
+              "recovered",
+              "written_off",
+              "at_risk",
+              "expiring"
+            ],
+            "title": "Metric",
+            "type": "string"
+          },
+          "page": {
+            "$ref": "#/components/schemas/Page"
+          },
+          "total": {
+            "title": "Total",
+            "type": "string"
+          }
+        },
+        "required": [
+          "metric",
+          "as_of",
+          "figure",
+          "total",
+          "consistent",
+          "data",
+          "page"
+        ],
+        "title": "DrilldownOut",
         "type": "object"
       },
       "EmailChangeIn": {
@@ -4119,6 +4301,49 @@
           "required"
         ],
         "title": "FieldOut",
+        "type": "object"
+      },
+      "Figures": {
+        "properties": {
+          "at_risk": {
+            "title": "At Risk",
+            "type": "string"
+          },
+          "claimed": {
+            "title": "Claimed",
+            "type": "string"
+          },
+          "collected": {
+            "title": "Collected",
+            "type": "string"
+          },
+          "expiring": {
+            "title": "Expiring",
+            "type": "string"
+          },
+          "recovered": {
+            "title": "Recovered",
+            "type": "string"
+          },
+          "short_paid": {
+            "title": "Short Paid",
+            "type": "string"
+          },
+          "written_off": {
+            "title": "Written Off",
+            "type": "string"
+          }
+        },
+        "required": [
+          "claimed",
+          "collected",
+          "short_paid",
+          "recovered",
+          "written_off",
+          "at_risk",
+          "expiring"
+        ],
+        "title": "Figures",
         "type": "object"
       },
       "FileList": {
@@ -7024,6 +7249,24 @@
         "title": "MissedSummary",
         "type": "object"
       },
+      "MonthFigures": {
+        "properties": {
+          "figures": {
+            "$ref": "#/components/schemas/Figures"
+          },
+          "month": {
+            "format": "date",
+            "title": "Month",
+            "type": "string"
+          }
+        },
+        "required": [
+          "month",
+          "figures"
+        ],
+        "title": "MonthFigures",
+        "type": "object"
+      },
       "NoteIn": {
         "additionalProperties": false,
         "properties": {
@@ -8437,6 +8680,27 @@
           "unresolved_skus"
         ],
         "title": "References",
+        "type": "object"
+      },
+      "RefreshAccepted": {
+        "properties": {
+          "job_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Job Id"
+          }
+        },
+        "required": [
+          "job_id"
+        ],
+        "title": "RefreshAccepted",
         "type": "object"
       },
       "RegisterIn": {
@@ -11365,6 +11629,85 @@
           "token"
         ],
         "title": "TokenIn",
+        "type": "object"
+      },
+      "TraceNode": {
+        "properties": {
+          "fields": {
+            "additionalProperties": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "title": "Fields",
+            "type": "object"
+          },
+          "id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Id"
+          },
+          "kind": {
+            "title": "Kind",
+            "type": "string"
+          },
+          "label": {
+            "title": "Label",
+            "type": "string"
+          }
+        },
+        "required": [
+          "kind",
+          "id",
+          "label",
+          "fields"
+        ],
+        "title": "TraceNode",
+        "type": "object"
+      },
+      "TraceOut": {
+        "properties": {
+          "chain": {
+            "items": {
+              "$ref": "#/components/schemas/TraceNode"
+            },
+            "title": "Chain",
+            "type": "array"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "kind": {
+            "enum": [
+              "claim_line",
+              "remittance_line",
+              "variance_case",
+              "calculation_result"
+            ],
+            "title": "Kind",
+            "type": "string"
+          }
+        },
+        "required": [
+          "kind",
+          "id",
+          "chain"
+        ],
+        "title": "TraceOut",
         "type": "object"
       },
       "TrackerOut": {
@@ -16942,6 +17285,241 @@
         ]
       }
     },
+    "/api/v1/dashboard": {
+      "get": {
+        "operationId": "dashboard_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "manufacturer_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "format": "uuid",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Manufacturer Id"
+            }
+          },
+          {
+            "in": "query",
+            "name": "branch_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "format": "uuid",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Branch Id"
+            }
+          },
+          {
+            "in": "query",
+            "name": "month",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "format": "date",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Month"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DashboardOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Dashboard",
+        "tags": [
+          "reporting"
+        ]
+      }
+    },
+    "/api/v1/dashboard/drilldown": {
+      "get": {
+        "operationId": "dashboard_drilldown",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "metric",
+            "required": true,
+            "schema": {
+              "enum": [
+                "claimed",
+                "collected",
+                "short_paid",
+                "recovered",
+                "written_off",
+                "at_risk",
+                "expiring"
+              ],
+              "title": "Metric",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "manufacturer_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "format": "uuid",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Manufacturer Id"
+            }
+          },
+          {
+            "in": "query",
+            "name": "branch_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "format": "uuid",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Branch Id"
+            }
+          },
+          {
+            "in": "query",
+            "name": "month",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "format": "date",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Month"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 50,
+              "maximum": 200,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "cursor",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Cursor"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DrilldownOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Drilldown",
+        "tags": [
+          "reporting"
+        ]
+      }
+    },
+    "/api/v1/dashboard/refresh": {
+      "post": {
+        "operationId": "dashboard_refresh",
+        "responses": {
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RefreshAccepted"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Refresh Dashboard",
+        "tags": [
+          "reporting"
+        ]
+      }
+    },
     "/api/v1/document-extractions": {
       "get": {
         "operationId": "extraction_list",
@@ -20739,6 +21317,61 @@
         ]
       }
     },
+    "/api/v1/reports/claim-batches/{batch_id}/audit-pack": {
+      "get": {
+        "operationId": "claim_batch_audit_pack",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "batch_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Batch Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "format",
+            "required": false,
+            "schema": {
+              "default": "csv",
+              "enum": [
+                "csv",
+                "xlsx"
+              ],
+              "title": "Format",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Audit Pack",
+        "tags": [
+          "reporting"
+        ]
+      }
+    },
     "/api/v1/sales-lines": {
       "get": {
         "operationId": "sales_line_list",
@@ -21077,6 +21710,178 @@
         "summary": "Patch Settings",
         "tags": [
           "workspace"
+        ]
+      }
+    },
+    "/api/v1/trace/calculation_result/{result_id}": {
+      "get": {
+        "operationId": "trace_calculation_result",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "result_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Result Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TraceOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Trace Calculation Result",
+        "tags": [
+          "reporting"
+        ]
+      }
+    },
+    "/api/v1/trace/claim_line/{claim_line_id}": {
+      "get": {
+        "operationId": "trace_claim_line",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "claim_line_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Claim Line Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TraceOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Trace Claim Line",
+        "tags": [
+          "reporting"
+        ]
+      }
+    },
+    "/api/v1/trace/remittance_line/{remittance_line_id}": {
+      "get": {
+        "operationId": "trace_remittance_line",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "remittance_line_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Remittance Line Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TraceOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Trace Remittance Line",
+        "tags": [
+          "reporting"
+        ]
+      }
+    },
+    "/api/v1/trace/variance_case/{case_id}": {
+      "get": {
+        "operationId": "trace_variance_case",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "case_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Case Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TraceOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Trace Variance Case",
+        "tags": [
+          "reporting"
         ]
       }
     },
