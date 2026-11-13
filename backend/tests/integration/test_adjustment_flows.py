@@ -478,34 +478,25 @@ def test_rebate_accrual_claims_and_the_r2_clawback(env: Env, admin_engine: Engin
     assert two.status_code == 201, two.text
     assert (two.json()["line_count"], Decimal(two.json()["total_amount"])) == (1, Decimal("0.00"))
     # M1: the current setting also decides at approve and at submit (0.00 <= 0 again)
-    for step, call in (
-        ("approve", lambda: ws.api.post(f"/claim-batches/{two.json()['id']}/approve")),
-        (
-            "submit",
-            lambda: ws.api.post(
-                f"/claim-batches/{two.json()['id']}/submit",
-                json={"submitted_at": "2026-07-09", "external_reference": "REB-1"},
-                headers=key(),
-            ),
-        ),
-    ):
+    bid = two.json()["id"]
+
+    def attempt(step: str) -> Any:
+        if step == "approve":
+            return ws.api.post(f"/claim-batches/{bid}/approve")
+        body = {"submitted_at": "2026-07-09", "external_reference": "REB-1"}
+        return ws.api.post(f"/claim-batches/{bid}/submit", json=body, headers=key())
+
+    for step in ("approve", "submit"):
         settings(ws, "VOLT", allow_negative_claims=False)
-        refused = call()
+        refused = attempt(step)
         assert refused.status_code == 422, (step, refused.text)
         assert refused.json()["error"]["code"] == "batch_total_not_positive", (step, refused.text)
         settings(ws, "VOLT")
         if step == "approve":
-            assert call().status_code == 200
+            assert attempt(step).status_code == 200
     rows = csv_rows(env, admin_engine, ws.api, two.json()["id"])
     assert sorted(Decimal(r["Claim amount"]) for r in rows) == [Decimal("-10400.00"), Decimal("10400.00")]
-    assert (
-        ws.api.post(
-            f"/claim-batches/{two.json()['id']}/submit",
-            json={"submitted_at": "2026-07-09", "external_reference": "REB-1"},
-            headers=key(),
-        ).status_code
-        == 200
-    )
+    assert attempt("submit").status_code == 200
 
 
 # ---- source_changed (S3 hook) ------------------------------------------------------------------------------
