@@ -133,3 +133,60 @@ def test_unauthenticated_gets_401_everywhere(migrated_db: DbUrls, route: APIRout
         for method in route.methods or ():
             r = _call(anon, method, _url(route))
             assert r.status_code == 401, f"{method} {route.path} -> {r.status_code}"
+
+
+# ---- independent expectations -------------------------------------------------------------------------
+# Transcribed by hand from SECURITY.md §3 (permission -> roles) and the role columns of API_SPECIFICATION.md
+# (route -> roles), NOT derived from the registry. Shorthand: A admin, P approver, N analyst, V viewer.
+DOC_PERMISSIONS: dict[str, str] = {
+    "user.manage": "A",
+    "invitation.manage": "A",
+    "settings.write": "A",
+    "jobs.manage": "A",
+    "settings.read": "APNV",
+    "data.read": "APNV",
+    "report.read": "APNV",
+    "audit.read": "APV",
+    "file.upload": "APN",
+    "import.run": "APN",
+    "masterdata.write": "APN",
+    "mapping.write": "APN",
+    "agreement.draft": "APN",
+    "agreement.approve": "AP",
+    "calculation.run": "APN",
+    "claim_batch.create": "APN",
+    "claim_batch.export": "APN",
+    "claim_batch.approve": "AP",
+    "claim_batch.submit": "AP",
+    "claim_batch.void": "AP",
+    "adjustment.approve": "AP",
+    "remittance.reconcile": "APN",
+    "case.work": "APN",
+    "case.write_off": "AP",
+    "ai.use": "APN",
+    "manufacturer_settings.write": "AP",  # API_SPECIFICATION.md: PUT /manufacturers/{id}/settings write A P
+}
+DOC_ROUTES: dict[tuple[str, str], str] = {  # API_SPECIFICATION.md role column
+    ("POST", "/manufacturers"): "APN",
+    ("PUT", "/manufacturers/{manufacturer_id}/settings"): "AP",
+    ("POST", "/calculation-runs"): "APN",
+    ("GET", "/audit-log"): "APV",
+}
+_ROLE_LETTER = {"admin": "A", "approver": "P", "analyst": "N", "viewer": "V"}
+
+
+def test_permission_registry_equals_the_documented_matrix() -> None:
+    actual = {p: "".join(_ROLE_LETTER[r] for r in ROLES if r in roles) for p, roles in PERMISSIONS.items()}
+    assert actual == DOC_PERMISSIONS
+
+
+def test_documented_routes_declare_the_documented_roles() -> None:
+    seen: dict[tuple[str, str], str] = {}
+    for route, (kind, permission) in ROUTES:
+        if kind != "permission":
+            continue
+        for method in route.methods or ():
+            key = (method, route.path.removeprefix(API_PREFIX))
+            if key in DOC_ROUTES:
+                seen[key] = "".join(_ROLE_LETTER[r] for r in ROLES if r in PERMISSIONS[permission])
+    assert seen == DOC_ROUTES
