@@ -41,7 +41,7 @@ First run `git worktree list`, `git status`, `gh pr list` and `git fetch`. Commi
   - An independent financial review on all money logic.
   - One review pass per stage, plus a second pass on the fix diff only.
 - **Merging:**
-  - CI green before any merge.
+  - Merge gate: CLAUDE.md §19 (`make ci-local` 6/6 on the exact SHA, posted on the PR, after merging latest main).
   - The full suite once per merged wave.
   - Commit and push after every merged piece.
 - **Agents:**
