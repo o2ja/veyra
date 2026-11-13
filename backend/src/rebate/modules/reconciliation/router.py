@@ -147,21 +147,21 @@ def list_lines(
     principal: Annotated[Principal, Depends(require(READ))],
     limit: Limit = 50,
     cursor: str | None = None,
-) -> s.LineList:
+) -> s.RemittanceLineList:
     rows = ingest.list_lines(ctx(request).db, tenant_of(principal), remittance_id, limit=limit, cursor=cursor)
     data, p = page(rows, limit)
-    return s.LineList(data=[s.LineOut.model_validate(r) for r in data], page=p)
+    return s.RemittanceLineList(data=[s.RemittanceLineOut.model_validate(r) for r in data], page=p)
 
 
 @router.get("/remittances/{remittance_id}/extraction", operation_id="remittance_extraction_get")
 def get_extraction(
     request: Request, remittance_id: UUID, principal: Annotated[Principal, Depends(require(WRITE))]
-) -> s.ExtractionOut:
+) -> s.RemittanceExtractionOut:
     v = ingest.extraction_view(ctx(request).db, tenant_of(principal), remittance_id)
-    return s.ExtractionOut(
+    return s.RemittanceExtractionOut(
         remittance=s.RemittanceOut.model_validate(v["remittance"]),
         lines=[s.StagedLineOut.model_validate(r) for r in v["lines"]],
-        problems=[s.Issue(**i) for i in v["problems"]],
+        problems=[s.RemittanceIssue(**i) for i in v["problems"]],
     )
 
 
@@ -170,9 +170,11 @@ def accept_remittance(
     request: Request,
     remittance_id: UUID,
     principal: Annotated[Principal, Depends(require(WRITE))],
-    body: s.AcceptIn | None = None,
+    body: s.RemittanceAcceptIn | None = None,
 ) -> s.RemittanceOut:
-    doc = ingest.accept(ctx(request).db, _who(request, principal), remittance_id, body or s.AcceptIn())
+    doc = ingest.accept(
+        ctx(request).db, _who(request, principal), remittance_id, body or s.RemittanceAcceptIn()
+    )
     return s.RemittanceOut.model_validate(doc)
 
 
@@ -227,7 +229,11 @@ def get_reconciliation(
         state = (
             "matched" if any(m.status == "confirmed" for m in live) else "suggested" if live else "unmatched"
         )
-        out.append(s.ReconciliationLineOut(line=s.LineOut.model_validate(line), state=state, matches=matches))
+        out.append(
+            s.ReconciliationLineOut(
+                line=s.RemittanceLineOut.model_validate(line), state=state, matches=matches
+            )
+        )
     return s.ReconciliationOut(remittance=s.RemittanceOut.model_validate(doc), data=out, page=p)
 
 

@@ -199,14 +199,17 @@ Legend: **R** = roles allowed (A admin, P approver, N analyst, V viewer). Writes
 
 | Method & path | Purpose | R |
 |---|---|---|
-| `POST /remittances` | `{file_id, manufacturer_id, doc_type, channel, mapping_template_id?}` → 202 | A P N |
-| `GET /remittances`, `GET /remittances/{id}`, `GET /remittances/{id}/lines` | | all |
-| `GET /remittances/{id}/extraction`, `POST /remittances/{id}/accept` | PDF path: review/correct lines then accept | A P N |
-| `POST /remittances/{id}/reconcile` | Run matching → 202 | A P N |
-| `GET /remittances/{id}/reconciliation` | Side-by-side view with match status | all |
-| `POST /matches/{id}/confirm`, `POST /matches/{id}/reject` | | A P N |
+| `POST /remittances` | `{file_id, manufacturer_id, doc_type, channel, mapping_template_id?, document_number?, document_date?, payment_date?, total_amount?, currency_code?}` → 202 `{remittance, job}` (the `remittance_ingest` job reads the file). `Idempotency-Key` required. A PDF needs `ai_processing_enabled` (else 409 `ai_not_enabled`; CSV/XLSX never use AI). Same manufacturer + `document_number` as a non-void remittance → 409 `duplicate_remittance`; a file already used by a remittance → 409 `conflict`. CSV/XLSX that pass every check are `accepted` by the requesting user; a PDF always lands in `pending_review` | A P N |
+| `GET /remittances` (filters `status`, `manufacturer_id`), `GET /remittances/{id}`, `GET /remittances/{id}/lines` | Cursor pagination. Lines exist only after acceptance (`remittance_lines`); before that read the staging rows via `/extraction` | all |
+| `GET /remittances/{id}/extraction` | Staged lines, per-line `issues` and document-level `problems` (`total_mismatch`, `not_in_document`, `negative_amount`, ...) | all |
+| `POST /remittances/{id}/accept` | `{document_number?, document_date?, payment_date?, total_amount?, corrections?: [{line_number, ...}]}`: corrections are kept as evidence; refused with 409 `cannot_accept` (details = the remaining problems) unless every line has an amount, none is negative and the lines add up to the document total (+-0.01). Lines become matchable only on acceptance | A P N |
+| `POST /remittances/{id}/void` | Only while `uploaded` or `pending_review` (else 409 `invalid_state`); `void` is final | A P N |
+| `POST /remittances/{id}/reconcile` | Run matching → 202 `{job}`; 409 `invalid_state` unless `accepted`. A re-run keeps confirmed matches and recomputes the rest | A P N |
+| `GET /remittances/{id}/reconciliation` | Side-by-side view: per line `state` (`matched`, `suggested`, `unmatched`) and its matches with allocations | all |
+| `GET /matches` (filters `remittance_id`, `status`), `GET /matches/{id}` | Match with allocations and evidence; `ETag` = revision | all |
+| `POST /matches/{id}/confirm`, `POST /matches/{id}/reject` | `If-Match` revision required (428 without, 412 on mismatch); only `suggested` matches | A P N |
 | `POST /matches` | Manual match `{remittance_line_id, claim_line_id, allocated_amount}` | A P N |
-| `POST /remittances/{id}/finalize` | Classify variances → cases | A P N |
+| `POST /remittances/{id}/finalize` | `Idempotency-Key` required. Refused unless `accepted` with no `suggested` match left. Classifies variances (`findings`: `case_type`, `reason_code`, `amount`, ...) in one transaction, sets the document `reconciled` (immutable) and calls the registered S9 hooks, which create the cases | A P N |
 
 ### 2.8 Recovery
 

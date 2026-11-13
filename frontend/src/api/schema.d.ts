@@ -1458,6 +1458,75 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/matches": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List Matches */
+        get: operations["match_list"];
+        put?: never;
+        /** Create Match */
+        post: operations["match_create"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/matches/{match_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Match */
+        get: operations["match_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/matches/{match_id}/confirm": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Confirm Match */
+        post: operations["match_confirm"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/matches/{match_id}/reject": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Reject Match */
+        post: operations["match_reject"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/missed-claims": {
         parameters: {
             query?: never;
@@ -1590,6 +1659,160 @@ export interface paths {
         get: operations["rebate_tracker_get"];
         put?: never;
         post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/remittances": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List Remittances */
+        get: operations["remittance_list"];
+        put?: never;
+        /** Create Remittance */
+        post: operations["remittance_create"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/remittances/{remittance_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Remittance */
+        get: operations["remittance_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/remittances/{remittance_id}/accept": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Accept Remittance */
+        post: operations["remittance_accept"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/remittances/{remittance_id}/extraction": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Extraction */
+        get: operations["remittance_extraction_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/remittances/{remittance_id}/finalize": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Finalize Remittance */
+        post: operations["remittance_finalize"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/remittances/{remittance_id}/lines": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List Lines */
+        get: operations["remittance_line_list"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/remittances/{remittance_id}/reconcile": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Reconcile Remittance */
+        post: operations["remittance_reconcile"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/remittances/{remittance_id}/reconciliation": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Reconciliation */
+        get: operations["remittance_reconciliation_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/remittances/{remittance_id}/void": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Void Remittance */
+        post: operations["remittance_void"];
         delete?: never;
         options?: never;
         head?: never;
@@ -1949,6 +2172,17 @@ export interface components {
             manufacturer_id: string;
             /** Name */
             name: string;
+        };
+        /** AllocationOut */
+        AllocationOut: {
+            /** Allocated Amount */
+            allocated_amount: string;
+            /** Claim Adjustment Id */
+            claim_adjustment_id: string | null;
+            /** Claim Line Id */
+            claim_line_id: string | null;
+            /** Claim Reference */
+            claim_reference: string | null;
         };
         /** AuditEntry */
         AuditEntry: {
@@ -3001,6 +3235,34 @@ export interface components {
              */
             uploaded_by: string;
         };
+        /** FinaliseOut */
+        FinaliseOut: {
+            /** Findings */
+            findings: components["schemas"]["FindingOut"][];
+            remittance: components["schemas"]["RemittanceOut"];
+        };
+        /** FindingOut */
+        FindingOut: {
+            /** Amount */
+            amount: string;
+            /**
+             * Case Type
+             * @enum {string}
+             */
+            case_type: "rejected" | "short_paid" | "overpaid" | "unmatched_payment" | "unpaid";
+            /** Claim Line Id */
+            claim_line_id: string | null;
+            /** Claimed */
+            claimed: string | null;
+            /** External Reason Code */
+            external_reason_code: string | null;
+            /** Paid */
+            paid: string;
+            /** Reason Code */
+            reason_code: string;
+            /** Remittance Line Id */
+            remittance_line_id: string | null;
+        };
         /** ForgotIn */
         ForgotIn: {
             /** Email */
@@ -3396,6 +3658,34 @@ export interface components {
             /** Status */
             status: string;
         };
+        /**
+         * LineCorrection
+         * @description Only the fields sent are changed; ``null`` clears one.
+         */
+        LineCorrection: {
+            /** Amount Claimed Stated */
+            amount_claimed_stated?: number | string | null;
+            /** Amount Paid */
+            amount_paid?: number | string | null;
+            /** Claim Reference */
+            claim_reference?: string | null;
+            /** Customer Ref */
+            customer_ref?: string | null;
+            /** External Reason Code */
+            external_reason_code?: string | null;
+            /** External Reason Text */
+            external_reason_text?: string | null;
+            /** Invoice Line Number */
+            invoice_line_number?: number | null;
+            /** Invoice Number */
+            invoice_number?: string | null;
+            /** Line Number */
+            line_number: number;
+            /** Quantity */
+            quantity?: number | string | null;
+            /** Sku */
+            sku?: string | null;
+        };
         /** LineList */
         LineList: {
             /** Data */
@@ -3498,6 +3788,21 @@ export interface components {
             amount: string;
             /** Lines */
             lines: number;
+        };
+        /** ManualMatchIn */
+        ManualMatchIn: {
+            /** Allocated Amount */
+            allocated_amount: number | string;
+            /**
+             * Claim Line Id
+             * Format: uuid
+             */
+            claim_line_id: string;
+            /**
+             * Remittance Line Id
+             * Format: uuid
+             */
+            remittance_line_id: string;
         };
         /** ManufacturerIn */
         ManufacturerIn: {
@@ -3671,6 +3976,58 @@ export interface components {
             prompt_version: string;
             /** Source */
             source: string;
+        };
+        /** MatchList */
+        MatchList: {
+            /** Data */
+            data: components["schemas"]["MatchOut"][];
+            page: components["schemas"]["Page"];
+        };
+        /** MatchOut */
+        MatchOut: {
+            /** Allocations */
+            allocations: components["schemas"]["AllocationOut"][];
+            /** Confirmed At */
+            confirmed_at: string | null;
+            /** Confirmed By */
+            confirmed_by: string | null;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /** Evidence */
+            evidence: {
+                [key: string]: unknown;
+            };
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /**
+             * Method
+             * @enum {string}
+             */
+            method: "exact_reference" | "invoice_line" | "composite" | "fuzzy" | "subset_sum" | "manual";
+            /** Rejected At */
+            rejected_at: string | null;
+            /** Rejected By */
+            rejected_by: string | null;
+            /**
+             * Remittance Line Id
+             * Format: uuid
+             */
+            remittance_line_id: string;
+            /** Revision */
+            revision: number;
+            /** Score */
+            score: string | null;
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "suggested" | "confirmed" | "rejected";
         };
         /** MeOut */
         MeOut: {
@@ -4227,6 +4584,24 @@ export interface components {
              */
             volume_basis: "purchases" | "sales";
         };
+        /** ReconciliationLineOut */
+        ReconciliationLineOut: {
+            line: components["schemas"]["RemittanceLineOut"];
+            /** Matches */
+            matches: components["schemas"]["MatchOut"][];
+            /**
+             * State
+             * @enum {string}
+             */
+            state: "matched" | "suggested" | "unmatched";
+        };
+        /** ReconciliationOut */
+        ReconciliationOut: {
+            /** Data */
+            data: components["schemas"]["ReconciliationLineOut"][];
+            page: components["schemas"]["Page"];
+            remittance: components["schemas"]["RemittanceOut"];
+        };
         /** RecoveryCodesOut */
         RecoveryCodesOut: {
             /** Recovery Codes */
@@ -4254,6 +4629,185 @@ export interface components {
         RejectIn: {
             /** Reason */
             reason: string;
+        };
+        /** RemittanceAcceptIn */
+        RemittanceAcceptIn: {
+            /**
+             * Corrections
+             * @default []
+             */
+            corrections: components["schemas"]["LineCorrection"][];
+            /** Document Date */
+            document_date?: string | null;
+            /** Document Number */
+            document_number?: string | null;
+            /** Payment Date */
+            payment_date?: string | null;
+            /** Total Amount */
+            total_amount?: number | string | null;
+        };
+        /** RemittanceAccepted */
+        RemittanceAccepted: {
+            job: components["schemas"]["RunJobRef"];
+            remittance: components["schemas"]["RemittanceOut"];
+        };
+        /** RemittanceExtractionOut */
+        RemittanceExtractionOut: {
+            /** Lines */
+            lines: components["schemas"]["StagedLineOut"][];
+            /** Problems */
+            problems: components["schemas"]["RemittanceIssue"][];
+            remittance: components["schemas"]["RemittanceOut"];
+        };
+        /** RemittanceIn */
+        RemittanceIn: {
+            /**
+             * Channel
+             * @enum {string}
+             */
+            channel: "credit_memo" | "check" | "ach" | "deduction";
+            /** Currency Code */
+            currency_code?: string | null;
+            /**
+             * Doc Type
+             * @enum {string}
+             */
+            doc_type: "credit_memo" | "remittance_advice" | "deduction_notice";
+            /** Document Date */
+            document_date?: string | null;
+            /** Document Number */
+            document_number?: string | null;
+            /**
+             * File Id
+             * Format: uuid
+             */
+            file_id: string;
+            /**
+             * Manufacturer Id
+             * Format: uuid
+             */
+            manufacturer_id: string;
+            /** Mapping Template Id */
+            mapping_template_id?: string | null;
+            /** Payment Date */
+            payment_date?: string | null;
+            /** Total Amount */
+            total_amount?: number | string | null;
+        };
+        /** RemittanceIssue */
+        RemittanceIssue: {
+            /** Code */
+            code: string;
+            /** Field */
+            field: string;
+            /** Message */
+            message: string;
+        };
+        /** RemittanceLineList */
+        RemittanceLineList: {
+            /** Data */
+            data: components["schemas"]["RemittanceLineOut"][];
+            page: components["schemas"]["Page"];
+        };
+        /** RemittanceLineOut */
+        RemittanceLineOut: {
+            /** Amount Claimed Stated */
+            amount_claimed_stated: string | null;
+            /** Amount Paid */
+            amount_paid: string;
+            /** Claim Reference */
+            claim_reference: string | null;
+            /** Customer Ref */
+            customer_ref: string | null;
+            /** External Reason Code */
+            external_reason_code: string | null;
+            /** External Reason Text */
+            external_reason_text: string | null;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Invoice Line Number */
+            invoice_line_number: number | null;
+            /** Invoice Number */
+            invoice_number: string | null;
+            /** Line Number */
+            line_number: number;
+            /** Quantity */
+            quantity: string | null;
+            /** Reason Code */
+            reason_code: string | null;
+            /** Sku Raw */
+            sku_raw: string | null;
+            /** Source Row Number */
+            source_row_number: number | null;
+        };
+        /** RemittanceList */
+        RemittanceList: {
+            /** Data */
+            data: components["schemas"]["RemittanceOut"][];
+            page: components["schemas"]["Page"];
+        };
+        /** RemittanceOut */
+        RemittanceOut: {
+            /** Accepted At */
+            accepted_at: string | null;
+            /** Accepted By */
+            accepted_by: string | null;
+            /**
+             * Channel
+             * @enum {string}
+             */
+            channel: "credit_memo" | "check" | "ach" | "deduction";
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /** Currency Code */
+            currency_code: string | null;
+            /**
+             * Doc Type
+             * @enum {string}
+             */
+            doc_type: "credit_memo" | "remittance_advice" | "deduction_notice";
+            /** Document Date */
+            document_date: string | null;
+            /** Document Number */
+            document_number: string | null;
+            /** Extraction Id */
+            extraction_id: string | null;
+            /**
+             * File Id
+             * Format: uuid
+             */
+            file_id: string;
+            /** Finalised At */
+            finalised_at: string | null;
+            /** Finalised By */
+            finalised_by: string | null;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /**
+             * Manufacturer Id
+             * Format: uuid
+             */
+            manufacturer_id: string;
+            /** Mapping Template Id */
+            mapping_template_id: string | null;
+            /** Payment Date */
+            payment_date: string | null;
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "uploaded" | "pending_review" | "accepted" | "reconciled" | "void";
+            /** Total Amount */
+            total_amount: string;
         };
         /** ResetIn */
         ResetIn: {
@@ -4755,6 +5309,37 @@ export interface components {
              * @enum {string}
              */
             type: "spa";
+        };
+        /** StagedLineOut */
+        StagedLineOut: {
+            /** Amount Claimed Stated */
+            amount_claimed_stated: string | null;
+            /** Amount Paid */
+            amount_paid: string | null;
+            /** Claim Reference */
+            claim_reference: string | null;
+            /** Corrected */
+            corrected: boolean;
+            /** Customer Ref */
+            customer_ref: string | null;
+            /** External Reason Code */
+            external_reason_code: string | null;
+            /** External Reason Text */
+            external_reason_text: string | null;
+            /** Invoice Line Number */
+            invoice_line_number: number | null;
+            /** Invoice Number */
+            invoice_number: string | null;
+            /** Issues */
+            issues: components["schemas"]["RemittanceIssue"][];
+            /** Line Number */
+            line_number: number;
+            /** Quantity */
+            quantity: string | null;
+            /** Sku Raw */
+            sku_raw: string | null;
+            /** Source Row Number */
+            source_row_number: number | null;
         };
         /** SubmitIn */
         SubmitIn: {
@@ -8767,6 +9352,170 @@ export interface operations {
             };
         };
     };
+    match_list: {
+        parameters: {
+            query?: {
+                remittance_id?: string | null;
+                status?: ("suggested" | "confirmed" | "rejected") | null;
+                limit?: number;
+                cursor?: string | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MatchList"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    match_create: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ManualMatchIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MatchOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    match_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                match_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MatchOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    match_confirm: {
+        parameters: {
+            query?: never;
+            header?: {
+                "if-match"?: string | null;
+            };
+            path: {
+                match_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MatchOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    match_reject: {
+        parameters: {
+            query?: never;
+            header?: {
+                "if-match"?: string | null;
+            };
+            path: {
+                match_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MatchOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     missed_claim_list: {
         parameters: {
             query?: {
@@ -9106,6 +9855,335 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["TrackerOut"];
+                };
+            };
+        };
+    };
+    remittance_list: {
+        parameters: {
+            query?: {
+                status?: ("uploaded" | "pending_review" | "accepted" | "reconciled" | "void") | null;
+                manufacturer_id?: string | null;
+                limit?: number;
+                cursor?: string | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RemittanceList"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    remittance_create: {
+        parameters: {
+            query?: never;
+            header?: {
+                "idempotency-key"?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RemittanceIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RemittanceAccepted"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    remittance_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                remittance_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RemittanceOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    remittance_accept: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                remittance_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["RemittanceAcceptIn"] | null;
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RemittanceOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    remittance_extraction_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                remittance_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RemittanceExtractionOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    remittance_finalize: {
+        parameters: {
+            query?: never;
+            header?: {
+                "idempotency-key"?: string | null;
+            };
+            path: {
+                remittance_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FinaliseOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    remittance_line_list: {
+        parameters: {
+            query?: {
+                limit?: number;
+                cursor?: string | null;
+            };
+            header?: never;
+            path: {
+                remittance_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RemittanceLineList"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    remittance_reconcile: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                remittance_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    remittance_reconciliation_get: {
+        parameters: {
+            query?: {
+                limit?: number;
+                cursor?: string | null;
+            };
+            header?: never;
+            path: {
+                remittance_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ReconciliationOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    remittance_void: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                remittance_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RemittanceOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
                 };
             };
         };

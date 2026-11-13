@@ -85,7 +85,7 @@ class RemittanceAccepted(BaseModel):
     job: RunJobRef
 
 
-class LineOut(BaseModel):
+class RemittanceLineOut(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
     id: UUID
@@ -104,12 +104,12 @@ class LineOut(BaseModel):
     reason_code: str | None
 
 
-class LineList(BaseModel):
-    data: list[LineOut]
+class RemittanceLineList(BaseModel):
+    data: list[RemittanceLineOut]
     page: Page
 
 
-class Issue(BaseModel):
+class RemittanceIssue(BaseModel):
     field: str
     code: str
     message: str
@@ -130,14 +130,14 @@ class StagedLineOut(BaseModel):
     amount_claimed_stated: Money | None
     external_reason_code: str | None
     external_reason_text: str | None
-    issues: list[Issue]
+    issues: list[RemittanceIssue]
     corrected: bool
 
 
-class ExtractionOut(BaseModel):
+class RemittanceExtractionOut(BaseModel):
     remittance: RemittanceOut
     lines: list[StagedLineOut]
-    problems: list[Issue]  # what blocks acceptance now (row issues and the arithmetic check)
+    problems: list[RemittanceIssue]  # what blocks acceptance now (row issues and the arithmetic check)
 
 
 class LineCorrection(BaseModel):
@@ -158,7 +158,7 @@ class LineCorrection(BaseModel):
     external_reason_text: LongText | None = None
 
 
-class AcceptIn(BaseModel):
+class RemittanceAcceptIn(BaseModel):
     model_config = STRICT
 
     document_number: Text | None = None
@@ -212,7 +212,7 @@ class ManualMatchIn(BaseModel):
 
 
 class ReconciliationLineOut(BaseModel):
-    line: LineOut
+    line: RemittanceLineOut
     state: Literal["matched", "suggested", "unmatched"]
     matches: list[MatchOut]
 
