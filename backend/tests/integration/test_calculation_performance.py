@@ -9,6 +9,7 @@ import os
 import resource
 import time
 from contextlib import ExitStack
+from datetime import UTC, datetime
 from pathlib import Path
 
 import pytest
@@ -40,6 +41,8 @@ def test_one_million_lines_calculation(app: FastAPI, clk: FakeClock, admin_engin
         done = confirm(ws, batch)
         print(f"\nPERF import rows={expected} {time.perf_counter() - ti:.1f}s peak_rss={_rss_mb():.0f}MB")
         assert done["status"] == "completed" and done["counts"]["inserted"] == expected, done
+        # pin the run date inside the SPA claim window (generator ground truth: run_date 2026-07-10), so lines can be eligible
+        clk.t = datetime(2026, 7, 10, 12, tzinfo=UTC)
         rss0, t0 = _rss_mb(), time.perf_counter()
         r = run(ws, date_from="2000-01-01", date_to="2100-12-31")
         t1 = time.perf_counter()
