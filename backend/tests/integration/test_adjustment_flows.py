@@ -14,12 +14,15 @@ from dataclasses import dataclass
 from datetime import UTC, datetime
 from decimal import Decimal
 from typing import Any
+from uuid import UUID
 
 import pytest
 from fastapi import FastAPI
 from sqlalchemy import Engine, text
 from sqlalchemy.exc import DBAPIError
+from sqlalchemy.orm import Session
 
+from rebate.modules.claims import frozen
 from rebate.modules.files import storage
 from tests.conftest import DbUrls
 from tests.integration.agreements_support import approve as approve_draft
@@ -29,6 +32,7 @@ from tests.integration.calc_support import (
     all_settings,
     claim_and_submit,
     import_sales_part,
+    line_ids,
     open_workspace,
     results,
     run,
@@ -848,3 +852,114 @@ def test_a_netted_return_later_reduced_proposes_the_shortfall_as_an_agreement_ch
     line = claim_lines_of(ws, batch["id"])["INV-10021"]
     assert adj["claim_line_id"] == line["id"] and Decimal(line["claim_amount"]) == Decimal("200.00")
     assert propose(ws, second["id"])["proposed"] == []
+
+
+# ---- a reversal is undone when its return is no longer open (second-pass review) -----------------------------
+
+CN_5002_UNLINKED = (
+    "CN-5002,1,2026-07-02,2026-07-02,BLUFF,Bluff City Mechanical (SYNTHETIC),BR01,BRK-3P-60A,"
+    "Breaker 3-pole 60A,4,EA,58.00,64.50,232.00,SPA-VOLT-2026-884,,CN,,\n"
+)
+
+
+def _total(ws: Workspace) -> Decimal:
+    return sum((Decimal(a["amount"]) for a in listing(ws.api, "/claim-adjustments")), Decimal(0))
+
+
+def test_a_reversal_is_undone_when_a_netted_return_is_reduced(env: Env) -> None:
+    """Claim 200.00 = (20 - 4) x 12.50 net of CN-5002 (N = 4). CN-5003 (3 units) after the claim: -(3 x 12.50) =
+    -37.50. CN-5002 is then reduced to 1 unit: returns R = 1 + 3 = 4 = N, so the original stays (20 - 4) x 12.50 =
+    200.00 and CN-5003 is open for max(1 + 3 - 4, 0) = 0 units: reversal due 0, so +37.50 undoes it (total 0)."""
+    ws = workspace(env)
+    import_sales_part(ws, late=False)
+    import_sales_part(ws, late=True)
+    claim_and_submit(ws, results(ws, run(ws, **WINDOW)["id"]), ["INV-10021/1"])
+    import_text(ws, SALES_HEADER + CN_5003, "cn5003.csv")
+    (first,) = propose(ws, run(ws, **WINDOW)["id"])["proposed"]
+    assert Decimal(first["amount"]) == Decimal("-37.50")
+    import_text(
+        ws,
+        SALES_HEADER
+        + "CN-5002,1,2026-07-02,2026-07-02,BLUFF,Bluff City Mechanical (SYNTHETIC),BR01,BRK-3P-60A,"
+        "Breaker 3-pole 60A,1,EA,58.00,64.50,58.00,SPA-VOLT-2026-884,,CN,INV-10021,1\n",
+        "cn5002_one.csv",
+    )
+    second = run(ws, **WINDOW)
+    assert Decimal(results(ws, second["id"])["INV-10021/1"]["claim_amount"]) == Decimal("200.00")
+    (undo,) = propose(ws, second["id"])["proposed"]
+    assert undo["adjustment_type"] == "return_reversal" and Decimal(undo["amount"]) == Decimal("37.50")
+    assert _total(ws) == 0
+    assert propose(ws, second["id"])["proposed"] == []
+    assert propose(ws, run(ws, **WINDOW)["id"])["proposed"] == []
+
+
+def test_a_voided_netted_return_shifts_the_basis_and_undoes_the_later_reversal(env: Env) -> None:
+    """Same claim (200.00, N = 4) and CN-5003 reversal -37.50. CN-5002 is then unlinked (voided): R = 3, so the
+    original is (20 - min(4, 3)) x 12.50 = 17 x 12.50 = 212.50 (+12.50 agreement_change) and CN-5003 is open for
+    max(0 + 3 - 4, 0) = 0 units: +37.50 undoes the reversal. Cumulative: -37.50 + 37.50 + 12.50 = +12.50, i.e. the
+    claim 200.00 + 12.50 = 212.50 = 17 x 12.50."""
+    ws = workspace(env)
+    import_sales_part(ws, late=False)
+    import_sales_part(ws, late=True)
+    claim_and_submit(ws, results(ws, run(ws, **WINDOW)["id"]), ["INV-10021/1"])
+    import_text(ws, SALES_HEADER + CN_5003, "cn5003.csv")
+    propose(ws, run(ws, **WINDOW)["id"])
+    import_text(ws, SALES_HEADER + CN_5002_UNLINKED, "cn5002_void.csv")
+    second = run(ws, **WINDOW)
+    assert Decimal(results(ws, second["id"])["INV-10021/1"]["claim_amount"]) == Decimal("212.50")
+    made = propose(ws, second["id"])["proposed"]
+    by_type = {a["adjustment_type"]: Decimal(a["amount"]) for a in made}
+    assert by_type == {"agreement_change": Decimal("12.50"), "return_reversal": Decimal("37.50")}
+    assert _total(ws) == Decimal("12.50")
+    assert propose(ws, second["id"])["proposed"] == []
+
+
+def test_a_reversal_is_undone_when_its_return_is_voided(env: Env) -> None:
+    """SC-09r: claimed 250.00 before CN-5002 exists, reversal -4 x 12.50 = -50.00. CN-5002 is then unlinked (voided):
+    the original stays 250.00 (no agreement_change) and the reversal is undone by +50.00 (total 0)."""
+    ws = workspace(env)
+    import_sales_part(ws, late=False)
+    claim_and_submit(ws, results(ws, run(ws, **WINDOW)["id"]), ["INV-10021/1"])
+    import_sales_part(ws, late=True)
+    (first,) = propose(ws, run(ws, **WINDOW)["id"])["proposed"]
+    assert Decimal(first["amount"]) == Decimal("-50.00")
+    import_text(ws, SALES_HEADER + CN_5002_UNLINKED, "cn5002_void.csv")
+    second = run(ws, **WINDOW)
+    (undo,) = propose(ws, second["id"])["proposed"]
+    assert undo["adjustment_type"] == "return_reversal" and Decimal(undo["amount"]) == Decimal("50.00")
+    assert undo["claim_line_id"] == first["claim_line_id"] and _total(ws) == 0
+    assert propose(ws, second["id"])["proposed"] == []
+
+
+def test_a_claim_frozen_from_an_engine_1_0_0_result_still_reads_its_netting_basis(
+    env: Env, admin_engine: Engine
+) -> None:
+    """A claim made from an engine 1.0.0 trace (no ``netted_returned_quantity`` key; ``returned_quantity`` was the
+    basis then): INV-10021/1 claimed at 200.00 = (20 - 4) x 12.50 with CN-5002 netted, so N = 4. The result table is
+    append-only, so the old trace form is written inside a transaction that is always rolled back (triggers off via
+    session_replication_role). 1.0.0 -> N = 4 from ``returned_quantity``; the same trace under 1.1.0 fails loudly."""
+    ws = workspace(env)
+    import_sales_part(ws, late=False)
+    import_sales_part(ws, late=True)
+    first = results(ws, run(ws, **WINDOW)["id"])["INV-10021/1"]
+    claim_and_submit(ws, {"INV-10021/1": first}, ["INV-10021/1"])
+    old = (
+        "UPDATE calculation_results SET trace = jsonb_set(jsonb_set(trace, '{engine_version}', CAST(:v AS jsonb)), "
+        "'{steps}', (SELECT jsonb_agg(CASE WHEN e.s->>'step' = 'returns' THEN e.s - 'netted_returned_quantity' "
+        "ELSE e.s END ORDER BY e.n) FROM jsonb_array_elements(trace->'steps') WITH ORDINALITY AS e(s, n))) "
+        "WHERE id = :r"
+    )
+    line = line_ids(admin_engine, ws.tenant_id)["INV-10021/1"]
+    with admin_engine.connect() as conn:
+        tx = conn.begin()
+        try:
+            conn.execute(text("SET LOCAL session_replication_role = replica"))
+            conn.execute(text(old), {"v": '"1.0.0"', "r": first["id"]})
+            db = Session(bind=conn)
+            (pc,) = frozen.source.prior_claims(db, UUID(ws.tenant_id), [line]).values()
+            assert pc.netted_returned_quantity == Decimal("4") and pc.quantity == Decimal("16")
+            conn.execute(text(old), {"v": '"1.1.0"', "r": first["id"]})
+            with pytest.raises(ValueError, match="returns"):
+                frozen.source.prior_claims(db, UUID(ws.tenant_id), [line])
+        finally:
+            tx.rollback()
