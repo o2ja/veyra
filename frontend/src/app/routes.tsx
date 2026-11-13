@@ -46,6 +46,10 @@ import { ClaimBatchDetailPage } from "../features/claims/claim-batch-detail-page
 import { ClaimBatchesPage } from "../features/claims/claim-batches-page";
 import { ClaimExportTemplatesPage } from "../features/claims/claim-export-templates-page";
 import { MissedClaimsPage } from "../features/claims/missed-claims-page";
+import { NewRemittancePage } from "../features/reconciliation/new-remittance-page";
+import { ReasonCodesPage } from "../features/reconciliation/reason-codes-page";
+import { RemittanceDetailPage } from "../features/reconciliation/remittance-detail-page";
+import { RemittancesPage } from "../features/reconciliation/remittances-page";
 import { AppLayout } from "./app-layout";
 import { RequirePermission, RequireSession } from "./guards";
 import { RouteError } from "./route-error";
@@ -208,6 +212,11 @@ export const routes: RouteObject[] = [
       guarded("claims/batches", "data.read", <ClaimBatchesPage />),
       guarded("claims/batches/:batchId", "data.read", <ClaimBatchDetailPage />),
       guarded("claims/templates", "claim_batch.create", <ClaimExportTemplatesPage />),
+      // S8: reconciliation
+      guarded("reconciliation", "data.read", <RemittancesPage />),
+      guarded("reconciliation/new", "remittance.reconcile", <NewRemittancePage />),
+      guarded("reconciliation/reason-codes", "data.read", <ReasonCodesPage />),
+      guarded("reconciliation/:remittanceId", "data.read", <RemittanceDetailPage />),
     ],
   },
 ];
