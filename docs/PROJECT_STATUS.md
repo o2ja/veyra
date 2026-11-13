@@ -25,6 +25,8 @@
 
 S1 signed off by the owner 2026-11-10. Evidence and open points: `docs/reports/S1_COMPLETION_REPORT.md`. CI green on `main` (jobs: backend incl. isolation negative control, frontend, e2e (Playwright W1–W2 + axe), api-contract, secrets, images).
 
+**Resume point (2026-11-13 overnight):** see `docs/reports/notes/resume-prompt.md` "Update 2026-11-13". #18 merged; S7 blocked by financial discrepancy D-N1 (owner); S8/S9/S11.1 on branches.
+
 ### S3–S6 batch (in progress, started 2026-11-10; S2 approved)
 
 Multi-agent waves (worktree branches, orchestrator merges). Resume point:

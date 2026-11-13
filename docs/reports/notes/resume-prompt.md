@@ -6,6 +6,12 @@ Read ONLY these: this file, docs/reports/STATUS_2026-11-12.md, docs/PROJECT_STAT
 
 First run `git worktree list`, `git status`, `gh pr list` and `git fetch`. Commit and push any leftovers.
 
+## Update 2026-11-13 (overnight run) — read this first
+- Done: #18 merged; ADR-017/PRODUCTION_PLAN (managed S3). F2 finished s7-adjustments (17a70c9, full 1897 pass, negctl OK).
+- **HARD STOP D-N1** (financial discrepancy, netted-before-claim double correction; overnight-log.md item 3): s7-adjustments is NOT merged into s7-claims, #15 NOT merged, owner decides. S8/S9 can't reach main until then.
+- Running/branches: I1 s8-reconciliation, J1 s9-recovery, K1 s11-audit-seal (S11.1, from main). ui/qa-1 returned (antigravity-prompt-qa-1-fixes.md). ui/s7 waits for #15.
+- Next: S8/S9 reviews on branches (no merge to main while D-N1 open); S11 items independent of S7.
+
 ## Next steps, in order
 1. **PR #18 (s11-ops, 9c7ba2c):** it is ready, with three security passes and CI green. Merge it if the owner has allowed `gh pr merge`; otherwise ask the owner to merge it.
 2. **s7-adjustments (worktree .claude/worktrees/agent-adc7160f14611b131):** finish the WIP fixes for the 2nd financial review (B1 double deduction, S1 DB triggers, M1–M4; see the resume note). Run ONE full suite with REBATE_AI_WRITER_PASSWORD set, plus isolation, the RLS-off control (negctl), ruff, mypy and lint-imports. Fix the mypy error in tests/integration/test_end_to_end.py:17. Then run an independent financial pass on the fix diff, merge s7-adjustments into s7-claims, and merge PR #15 when CI is green.
