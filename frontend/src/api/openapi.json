@@ -3164,6 +3164,7 @@
               {
                 "enum": [
                   "claim_line",
+                  "claim_adjustment",
                   "remittance_line",
                   "variance_case",
                   "calculation_result"
@@ -3227,6 +3228,7 @@
               "short_paid",
               "recovered",
               "written_off",
+              "recovered_after_write_off",
               "at_risk",
               "expiring"
             ],
@@ -4325,6 +4327,10 @@
             "title": "Recovered",
             "type": "string"
           },
+          "recovered_after_write_off": {
+            "title": "Recovered After Write Off",
+            "type": "string"
+          },
           "short_paid": {
             "title": "Short Paid",
             "type": "string"
@@ -4340,6 +4346,7 @@
           "short_paid",
           "recovered",
           "written_off",
+          "recovered_after_write_off",
           "at_risk",
           "expiring"
         ],
@@ -11694,6 +11701,7 @@
           "kind": {
             "enum": [
               "claim_line",
+              "claim_adjustment",
               "remittance_line",
               "variance_case",
               "calculation_result"
@@ -17384,6 +17392,7 @@
                 "short_paid",
                 "recovered",
                 "written_off",
+                "recovered_after_write_off",
                 "at_risk",
                 "expiring"
               ],
@@ -21751,6 +21760,49 @@
           }
         },
         "summary": "Trace Calculation Result",
+        "tags": [
+          "reporting"
+        ]
+      }
+    },
+    "/api/v1/trace/claim_adjustment/{adjustment_id}": {
+      "get": {
+        "operationId": "trace_claim_adjustment",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "adjustment_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Adjustment Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TraceOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Trace Claim Adjustment",
         "tags": [
           "reporting"
         ]

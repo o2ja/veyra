@@ -2148,6 +2148,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/trace/claim_adjustment/{adjustment_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Trace Claim Adjustment */
+        get: operations["trace_claim_adjustment"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/trace/claim_line/{claim_line_id}": {
         parameters: {
             query?: never;
@@ -3361,7 +3378,7 @@ export interface components {
              */
             trace_id: string;
             /** Trace Kind */
-            trace_kind: ("claim_line" | "remittance_line" | "variance_case" | "calculation_result") | "remittance_line";
+            trace_kind: ("claim_line" | "claim_adjustment" | "remittance_line" | "variance_case" | "calculation_result") | "remittance_line";
         };
         /** DrilldownOut */
         DrilldownOut: {
@@ -3377,7 +3394,7 @@ export interface components {
              * Metric
              * @enum {string}
              */
-            metric: "claimed" | "collected" | "short_paid" | "recovered" | "written_off" | "at_risk" | "expiring";
+            metric: "claimed" | "collected" | "short_paid" | "recovered" | "written_off" | "recovered_after_write_off" | "at_risk" | "expiring";
             page: components["schemas"]["Page"];
             /** Total */
             total: string;
@@ -3756,6 +3773,8 @@ export interface components {
             expiring: string;
             /** Recovered */
             recovered: string;
+            /** Recovered After Write Off */
+            recovered_after_write_off: string;
             /** Short Paid */
             short_paid: string;
             /** Written Off */
@@ -6203,7 +6222,7 @@ export interface components {
              * Kind
              * @enum {string}
              */
-            kind: "claim_line" | "remittance_line" | "variance_case" | "calculation_result";
+            kind: "claim_line" | "claim_adjustment" | "remittance_line" | "variance_case" | "calculation_result";
         };
         /** TrackerOut */
         TrackerOut: {
@@ -9193,7 +9212,7 @@ export interface operations {
     dashboard_drilldown: {
         parameters: {
             query: {
-                metric: "claimed" | "collected" | "short_paid" | "recovered" | "written_off" | "at_risk" | "expiring";
+                metric: "claimed" | "collected" | "short_paid" | "recovered" | "written_off" | "recovered_after_write_off" | "at_risk" | "expiring";
                 manufacturer_id?: string | null;
                 branch_id?: string | null;
                 month?: string | null;
@@ -11571,6 +11590,37 @@ export interface operations {
             header?: never;
             path: {
                 result_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TraceOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    trace_claim_adjustment: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                adjustment_id: string;
             };
             cookie?: never;
         };

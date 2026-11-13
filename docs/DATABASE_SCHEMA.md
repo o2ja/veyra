@@ -209,7 +209,7 @@ Partial unique `(tenant_id, claim_line_id, case_type) WHERE status NOT IN ('reco
 
 ### 3.11 Reporting
 
-**summary_claims_monthly** (refreshed by job): `manufacturer_id`, `branch_id` (nullable), `month date`, `claimed`, `collected`, `short_paid`, `recovered`, `written_off`, `at_risk`, `refreshed_at`. PK `(tenant_id, manufacturer_id, coalesce(branch_id,…), month)`. Never the source of truth; every figure is reproducible by query (tested). *Implementation (S10):* extra columns `id` (tenant-table convention), `expiring` and `as_of_date` (the business date `at_risk`/`expiring` were computed for); the natural key is the unique index `(tenant_id, manufacturer_id, coalesce(branch_id, zero uuid), month)`. Rebuilt per tenant in one transaction by the `refresh_summaries` job. Figure definitions: `docs/reports/notes/m1-s10-reporting.md`.
+**summary_claims_monthly** (refreshed by job): `manufacturer_id`, `branch_id` (nullable), `month date`, `claimed`, `collected`, `short_paid`, `recovered`, `written_off`, `at_risk`, `refreshed_at`. PK `(tenant_id, manufacturer_id, coalesce(branch_id,…), month)`. Never the source of truth; every figure is reproducible by query (tested). *Implementation (S10):* extra columns `id` (tenant-table convention), `recovered_after_write_off` (D-N5), `expiring` and `as_of_date` (the business date `at_risk`/`expiring` were computed for); the natural key is the unique index `(tenant_id, manufacturer_id, coalesce(branch_id, zero uuid), month)`. Rebuilt per tenant in one transaction by the `refresh_summaries` job. Figure definitions: BUSINESS_LOGIC §12.2.
 
 ## 4. ER diagram
 

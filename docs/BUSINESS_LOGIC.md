@@ -436,6 +436,18 @@ stateDiagram-v2
 
 Every transition writes a `variance_case_events` row and an audit entry. `recovered_amount` is recorded as payments are matched to the resulting adjustment; partial recovery leaves the case `submitted` until fully recovered or closed.
 
+### 12.2 Dashboard figure definitions (owner decision 2026-11-13, D-N6; D-N5)
+
+All figures are per manufacturer, branch (the invoice branch of the claim line; none if there is none) and month. Months are business months: a business date (`submitted_at`, `payment_date`, `document_date`) is truncated as it is, a timestamp is first converted to the tenant's business time zone. One definition each, shared by the dashboard, the drill-down and (for at-risk) `GET /cases/summary`.
+
+- **claimed**: claim lines of submitted batches (not released) plus adjustments included in a submitted batch (`recovery_reclaim` too), at their amounts; an adjustment belongs to the batch that carries it. Month = that batch's submission date.
+- **collected**: cash on matched lines = confirmed allocations of accepted/reconciled remittances to claim lines and to adjustments; an unallocated remainder is not collected. Month = payment date (else document date).
+- **short_paid**: variance of cases of type `short_paid`, `rejected`, `unpaid` (money claimed and not paid); overpaid, unmatched payments and source changes are not owed to us. Month = case creation.
+- **recovered**, **written_off**: the cases' `recovered_amount` / `written_off_amount`. Month = case creation.
+- **recovered_after_write_off** (D-N5): confirmed allocations to the `recovery_reclaim` adjustment of a case that is `written_off`, from a remittance that recorded no recovery for it. Closed cases stay immutable, so this money is reported here and never changes the case. Month = payment date.
+- **at_risk**: variance minus recovered of live cases (`open`, `to_reclaim`, `submitted`) of the reclaimable types above whose deadline is unknown or at most 14 days after the as-of date (overdue included).
+- **expiring**: the part of at-risk with a known deadline from the as-of date to 14 days after it.
+
 ## 13. Trace format
 
 ```json
