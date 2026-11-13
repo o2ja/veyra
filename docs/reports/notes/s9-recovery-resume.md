@@ -6,3 +6,8 @@ Left: verify S9.4 jobs (deadline_sweep, notification dedupe, digest via existing
 ## Update 2026-11-13 (overnight run)
 Done: jobs verified + tests (test_recovery_jobs.py, 6), four-eyes/state machine/idempotent write-off tests, isolation for tables and routes, OpenAPI/spec/client regenerated, audit key bug fixed, notes in j1-s9-recovery.md.
 Left: re-merge origin/s8-reconciliation (regenerate client, check alembic head, importlinter `reconciliation` contract and calc_support `FixtureClaims` are S8-side breakages), negctl, one more full run after the merge, then security + DB review, PR after S8 merges.
+
+## Update after review 1 (commit 7fe11bb, merged origin/s8-reconciliation)
+Fixed: S1 hook via reconciliation.on_finalise (+ CM-7781 finalise -> GET /cases test; repeated unpaid is skipped by ON CONFLICT DO NOTHING, tested on open_cases directly, not via two real finalisations), S2 write-off retires the reclaim / 409 reclaim_included, S3 audit allow-list reason + write_off_reason, S4 active members only, M1 DB CHECK, M2 proposal voided on recovery/status change, M3 real days in title, M4 on_dead schedules next sweep (tested by direct call), M5 ETag on replay / written_off_amount / Money, M6 tests. DATABASE_SCHEMA 3.10 and API spec 2.8 updated.
+Runs: full suite no ignore 2217 passed, 0 failed (rebate_test_j1, includes isolation); ruff check/format, mypy (300 files), lint-imports (16 kept) clean; one alembic head 20261118_0900_recovery_cases.
+Not done: negctl (orchestrator), npm test, SMTP-failure retry test, M7 (owner: unpaid case with remittance_date basis has no deadline).
