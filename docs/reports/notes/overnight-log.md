@@ -1,12 +1,13 @@
 # Day log (2026-11-13, owner present)
 
-## SUMMARY (current, 2026-11-14 early)
-- Backend chain done: S8 final (40dc42f) → S9 (1983f5a, reviewed, minors fixed) → S10 (7054beb, needs test re-run + full review). S7 final (e43aefd).
-- All UI branches built (ui/s7-adjustments fixed after review 1; ui/s8, ui/s9 (OpenCode), ui/s10 committed). None Playwright-verified yet.
-- #21 needs a fresh gate (main moved; the re-run was interrupted). Owner merges (classifier blocks gh pr merge).
-- Machine: C: nearly full, RAM tight (Docker crashed once). Plan: docs/reports/notes/FINISH_PLAN.md.
+## SUMMARY (current, 2026-11-14)
+- Backend S7–S10 all reviewed; last fixes in (S10 79614c0). Waiting: #21 gate (main merge first) → owner merges; then the merge chain.
+- UI: ui/s7-adjustments fixed; ui/s8 review running/redo; ui/s9, ui/s10 to review. None Playwright-verified.
+- Owner: D-N11 decides a real double count (INV-10020 vs CL-4, 50.00) once B2 is paid; D-N4, D-N8, D-N9.
+- Preview app for the owner runs from ui/s10 on DB rebate_preview (http://localhost:5173).
 
 ## Log
+- 2026-11-14: C: freed by owner. S10 verified after the S9 merge (single head, 17 pass). Full S10 review MERGEABLE WITH MINORS (no discrepancy; claimed 10,672.50, collected 7,470.00, short-paid 2,940.00) → fixed 79614c0 (audit pack POST). #21 gate 5/6: e2e flake root cause = enrolMfa returned before the post-MFA navigate("/") → wait added; full gate started then stopped for the docs push. ui/s8: final S8 merged in (e2761ac), opus review launched. ui/s8 + ui/s10 work committed for the external agents. Preview app started from ui/s10 on rebate_preview.
 - 2026-11-13 late: owner hired OpenCode (prompt 3, ui/s9); Antigravity did prompts 1, 2 and 4 (ui/s7-adjustments, ui/s8, ui/s10) — committed by me (their sandbox cannot run hooks). Plan with 2 Claude agents (sonnet builder + opus reviewer) → FINISH_PLAN.md.
 - ui/s7-adjustments review 1: NOT MERGEABLE (stub e2e spec, unreachable tabs + 13 more) → Claude UI fixer, dccc040.
 - Builder B1: S9 ← final S8 (8d8de1e, single head; fifth case CL-4 short_paid 50.00 by D-N3/D-N11 interim), S10 ← S9 (2 expectations corrected per D-N3: 6 collected rows, CL-4 paid 200.00; total 7,470.00 unchanged). S9 review MERGEABLE WITH MINORS → fixed 1983f5a; S10 merged it (7054beb), tests not re-run (C: full).
