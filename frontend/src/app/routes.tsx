@@ -42,6 +42,7 @@ import { RunsPage } from "../features/calculations/runs-page";
 import { AiUsagePage } from "../features/extractions/ai-usage-page";
 import { ExtractionDetailPage } from "../features/extractions/extraction-detail-page";
 import { ExtractionsPage } from "../features/extractions/extractions-page";
+import { ClaimAdjustmentsPage } from "../features/claims/claim-adjustments-page";
 import { ClaimBatchDetailPage } from "../features/claims/claim-batch-detail-page";
 import { ClaimBatchesPage } from "../features/claims/claim-batches-page";
 import { ClaimExportTemplatesPage } from "../features/claims/claim-export-templates-page";
@@ -207,6 +208,7 @@ export const routes: RouteObject[] = [
       guarded("claims/missed", "data.read", <MissedClaimsPage />),
       guarded("claims/batches", "data.read", <ClaimBatchesPage />),
       guarded("claims/batches/:batchId", "data.read", <ClaimBatchDetailPage />),
+      guarded("claims/adjustments", "data.read", <ClaimAdjustmentsPage />),
       guarded("claims/templates", "claim_batch.create", <ClaimExportTemplatesPage />),
     ],
   },

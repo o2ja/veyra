@@ -15,9 +15,11 @@ import {
   useManufacturerMap,
 } from "./common";
 import {
+  ADJUSTMENT_TYPE_LABELS,
   BATCH_STATUS_LABELS,
   canApproveBatch,
   formatDecimal,
+  type AdjustmentOut,
   type ExportAccepted,
   type ExportTemplateOut,
   type LineOut,
@@ -60,6 +62,21 @@ export function ClaimBatchDetailPage() {
           params: {
             path: { batch_id: batchId },
             query: { limit: 50, cursor: pager.cursor },
+          },
+        }),
+      ),
+  });
+
+  const adjustments = useQuery({
+    queryKey: ["claim-adjustments", "batch", batchId],
+    queryFn: () =>
+      unwrap(
+        api.GET("/api/v1/claim-adjustments", {
+          params: {
+            query: {
+              included_in_batch_id: batchId,
+              limit: 100,
+            },
           },
         }),
       ),
@@ -130,6 +147,8 @@ export function ClaimBatchDetailPage() {
       setVoidReason("");
       void client.invalidateQueries({ queryKey: ["claim-batches", batchId] });
       void client.invalidateQueries({ queryKey: ["claim-batches"] });
+      void client.invalidateQueries({ queryKey: ["claim-adjustments"] });
+      void client.invalidateQueries({ queryKey: ["claim-adjustments", "batch", batchId] });
     },
   });
 
@@ -174,6 +193,7 @@ export function ClaimBatchDetailPage() {
 
   const batchErr = batch.error as ApiError | null;
   const linesErr = lines.error as ApiError | null;
+  const adjustmentsErr = adjustments.error as ApiError | null;
   const approveErr = approve.error as ApiError | null;
   const voidErr = voidBatch.error as ApiError | null;
   const submitErr = submitBatch.error as ApiError | null;
@@ -278,7 +298,7 @@ export function ClaimBatchDetailPage() {
                   <dd className="font-medium">{m ? `${m.name} (${m.code})` : b.manufacturer_id}</dd>
                 </div>
                 <div>
-                  <dt className="text-muted">Total amount</dt>
+                  <dt className="text-muted">Batch total (lines + carried adjustments, from server)</dt>
                   <dd className="font-mono text-lg font-semibold text-ok">{formatDecimal(b.total_amount)}</dd>
                 </div>
                 <div>
@@ -395,7 +415,11 @@ export function ClaimBatchDetailPage() {
               },
               {
                 header: "Source",
-                cell: (l) =>
+                cell: (l: LineOut) => (l.source_kind === "rebate_accrual" ? "Rebate accrual" : "Sales line"),
+              },
+              {
+                header: "Lineage",
+                cell: (l: LineOut) =>
                   l.calculation_result_id ? (
                     <Link
                       to={`/calculations/results/${l.calculation_result_id}`}
@@ -417,6 +441,38 @@ export function ClaimBatchDetailPage() {
             ]}
           />
           <PagerControls pager={pager} page={lines.data?.page} />
+        </Card>
+
+        <Card title={`Carried adjustments (${adjustments.data?.data?.length ?? 0})`}>
+          <DataTable
+            caption="Carried adjustments"
+            loading={adjustments.isPending}
+            error={adjustmentsErr}
+            rows={adjustments.data?.data}
+            empty="No adjustments carried in this batch."
+            columns={[
+              {
+                header: "Type",
+                cell: (a: AdjustmentOut) => ADJUSTMENT_TYPE_LABELS[a.adjustment_type] ?? a.adjustment_type,
+              },
+              {
+                header: "Reference",
+                cell: (a: AdjustmentOut) => (
+                  <span className="font-mono text-xs font-medium">{a.claim_reference ?? "—"}</span>
+                ),
+              },
+              {
+                header: "Signed amount",
+                cell: (a: AdjustmentOut) => (
+                  <span className="block text-right font-mono font-medium">{formatDecimal(a.amount)}</span>
+                ),
+              },
+              {
+                header: "Reason",
+                cell: (a: AdjustmentOut) => a.reason,
+              },
+            ]}
+          />
         </Card>
 
         <div>

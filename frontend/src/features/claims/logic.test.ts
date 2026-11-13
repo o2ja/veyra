@@ -1,6 +1,10 @@
 import { expect, test } from "vitest";
 
 import {
+  ADJUSTMENT_STATUS_LABELS,
+  ADJUSTMENT_STATUSES,
+  ADJUSTMENT_TYPE_LABELS,
+  ADJUSTMENT_TYPES,
   canApproveBatch,
   formatDecimal,
   getFormatOptionsForSource,
@@ -21,6 +25,7 @@ test("formatDecimal groups thousands without rounding", () => {
 
 test("TEMPLATE_SOURCES and SOURCE_KIND_MAP map field kinds accurately", () => {
   expect(TEMPLATE_SOURCES.length).toBeGreaterThan(15);
+  expect(SOURCE_KIND_MAP["line_type"]).toBe("text");
   expect(SOURCE_KIND_MAP["claim_reference"]).toBe("text");
   expect(SOURCE_KIND_MAP["line_number"]).toBe("int");
   expect(SOURCE_KIND_MAP["invoice_date"]).toBe("date");
@@ -74,4 +79,27 @@ test("canApproveBatch enforces four-eyes and permissions", () => {
   const approvedBatch: BatchOut = { ...batch, status: "approved" };
   const notDraftCheck = canApproveBatch(approvedBatch, "user-approver", true);
   expect(notDraftCheck.allowed).toBe(false);
+});
+
+test("ADJUSTMENT_TYPES and ADJUSTMENT_TYPE_LABELS provide plain english names", () => {
+  expect(ADJUSTMENT_TYPES).toEqual([
+    "return_reversal",
+    "agreement_change",
+    "manual_correction",
+    "rebate_clawback",
+    "recovery_reclaim",
+  ]);
+  expect(ADJUSTMENT_TYPE_LABELS["return_reversal"]).toBe("Return reversal");
+  expect(ADJUSTMENT_TYPE_LABELS["agreement_change"]).toBe("Agreement change");
+  expect(ADJUSTMENT_TYPE_LABELS["manual_correction"]).toBe("Manual correction");
+  expect(ADJUSTMENT_TYPE_LABELS["rebate_clawback"]).toBe("Rebate clawback");
+  expect(ADJUSTMENT_TYPE_LABELS["recovery_reclaim"]).toBe("Recovery reclaim");
+});
+
+test("ADJUSTMENT_STATUSES and ADJUSTMENT_STATUS_LABELS cover all queue statuses", () => {
+  expect(ADJUSTMENT_STATUSES).toEqual(["proposed", "approved", "included", "rejected"]);
+  expect(ADJUSTMENT_STATUS_LABELS["proposed"]).toBe("Proposed");
+  expect(ADJUSTMENT_STATUS_LABELS["approved"]).toBe("Approved");
+  expect(ADJUSTMENT_STATUS_LABELS["included"]).toBe("Included");
+  expect(ADJUSTMENT_STATUS_LABELS["rejected"]).toBe("Rejected");
 });

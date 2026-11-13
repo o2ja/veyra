@@ -1,5 +1,9 @@
 import type { components } from "../../api/schema";
 
+export type AccrualList = components["schemas"]["AccrualList"];
+export type AccrualOut = components["schemas"]["AccrualOut"];
+export type AdjustmentList = components["schemas"]["AdjustmentList"];
+export type AdjustmentOut = components["schemas"]["AdjustmentOut"];
 export type BatchExportIn = components["schemas"]["BatchExportIn"];
 export type BatchFilter = components["schemas"]["BatchFilter"];
 export type BatchIn = components["schemas"]["BatchIn"];
@@ -30,6 +34,35 @@ export const BATCH_STATUS_LABELS: Record<string, string> = {
   void: "Void",
 };
 
+export const ADJUSTMENT_TYPES = [
+  "return_reversal",
+  "agreement_change",
+  "manual_correction",
+  "rebate_clawback",
+  "recovery_reclaim",
+] as const;
+
+export type AdjustmentType = (typeof ADJUSTMENT_TYPES)[number];
+
+export const ADJUSTMENT_TYPE_LABELS: Record<string, string> = {
+  return_reversal: "Return reversal",
+  agreement_change: "Agreement change",
+  manual_correction: "Manual correction",
+  rebate_clawback: "Rebate clawback",
+  recovery_reclaim: "Recovery reclaim",
+};
+
+export const ADJUSTMENT_STATUSES = ["proposed", "approved", "included", "rejected"] as const;
+
+export type AdjustmentStatus = (typeof ADJUSTMENT_STATUSES)[number];
+
+export const ADJUSTMENT_STATUS_LABELS: Record<string, string> = {
+  proposed: "Proposed",
+  approved: "Approved",
+  included: "Included",
+  rejected: "Rejected",
+};
+
 /**
  * Format a server decimal string with thousands grouping only.
  * Preserves exact fractional digits; never parses to float or rounds.
@@ -48,6 +81,7 @@ export type SourceKind = "text" | "int" | "date" | "decimal";
 
 export const TEMPLATE_SOURCES: { name: string; kind: SourceKind; label: string }[] = [
   // text
+  { name: "line_type", kind: "text", label: "Line type" },
   { name: "claim_reference", kind: "text", label: "Claim reference" },
   { name: "batch_number", kind: "text", label: "Batch number" },
   { name: "manufacturer_code", kind: "text", label: "Manufacturer code" },
