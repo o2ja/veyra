@@ -326,7 +326,7 @@ def propose(
             "SELECT count(*) FROM calculation_results r "
             "JOIN sales_document_lines s ON s.tenant_id = r.tenant_id AND s.id = r.sales_document_line_id "
             "WHERE r.tenant_id = :t AND r.run_id = :r "
-            "AND r.status IN ('eligible', 'exception', 'not_applicable', 'adjustment') "
+            "AND r.status IN ('eligible', 'exception', 'not_applicable', 'adjustment', 'netted') "
             "AND (NOT s.is_current OR EXISTS (SELECT 1 FROM calculation_results r2 "
             "JOIN calculation_runs cr2 ON cr2.tenant_id = r2.tenant_id AND cr2.id = r2.run_id "
             "AND cr2.status = 'completed' WHERE r2.tenant_id = r.tenant_id "
@@ -456,7 +456,12 @@ def propose(
     # a reversal whose return line is no longer a return of that claim (re-imported unlinked or as something else)
     # is undone: due 0, proposed = minus what is already proposed (judged only when the run covers that line)
     covered = {r.sales_document_line_id for r in rows} | {r.sales_document_line_id for r in netted_returns}
-    current = {r.sales_document_line_id for r in returns}
+    # (return line, claim line) pairs that are still open returns of a frozen claim
+    current = {
+        (r.sales_document_line_id, originals[r.original_line_id].claim_line_id)
+        for r in returns
+        if r.original_line_id in originals
+    }
     claim_ids = sorted(
         {c.claim_line_id for c in claims.values()} | {o.claim_line_id for o in originals.values()}
     )
@@ -482,7 +487,7 @@ def propose(
         ),
         {"t": t, "cls": claim_ids},
     ).all():
-        if o.head not in covered or o.head in current or o.done == 0:
+        if o.head not in covered or (o.head, o.claim_line_id) in current or o.done == 0:
             continue
         a = _insert(
             db,
