@@ -773,7 +773,7 @@ export function RecoveryCasePage() {
             }
             confirmLabel={writeOffLabel}
             confirmVariant="danger"
-            confirmDisabled={proposalMine}
+            confirmDisabled={proposalMine || writeOffReason.trim() === ""}
             busy={writeOff.isPending}
             onConfirm={() => writeOff.mutate()}
           >
