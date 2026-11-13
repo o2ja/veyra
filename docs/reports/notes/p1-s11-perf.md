@@ -19,3 +19,12 @@
 Start Docker Desktop, then run the command in `docs/reports/PERFORMANCE_BASELINES.md` (Method) with `REBATE_TEST_DB=rebate_test_p1`
 and `PERF_SALES_CSV` pointing at a freshly generated 1M file; then EXPLAIN the hot queries on that DB and drop it.
 Choice recorded: 5M not attempted (import alone would be roughly 2 h and ~10 GB of Postgres data on a 7.6 GiB VM that just crashed).
+
+docker info MemTotal before retry: 8213245952 bytes (7.65 GiB)
+
+## Retry (the one allowed), 2026-11-13 ~10:55
+Fresh stack (orchestrator restarted Docker), `rebate_test_p1` dropped first. Same harness and file. The run reached the mapping step
+again (log ends with `PUT /imports/{id}/mapping 202`, about 5-7 min in), then Docker Desktop died again ("Docker Desktop is unable to start").
+Last Postgres container memory samples: 843-916 MiB of 7.65 GiB, i.e. Postgres was not under memory pressure at the last sample (60 s interval),
+so the cause is not shown to be Postgres shm; the host/VM died at the start of the import confirm phase (file parse + stage of 1M rows).
+Per instruction: stopped, no further retry. `rebate_test_p1` may remain as a partial DB; drop it when Docker is back.
