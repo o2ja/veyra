@@ -77,8 +77,9 @@ def validate_matches(
     matches: Sequence[Match], remits: Mapping[str, RemittanceLine], claims: Mapping[str, ClaimLine]
 ) -> None:
     """§10.2 invariants: same manufacturer; per remittance line, Σ allocations <= amount_paid, where an allocation to an
-    adjustment item carried by ANOTHER batch (one the claim line does not carry in ``adjustments``) is not counted: it is
-    not cash on a claim line and must not free room for claim lines (owner decision 2026-11-13; interim, D-N11)."""
+    adjustment item carried by ANOTHER batch (one the claim line does not carry in ``adjustments``) counts as
+    max(amount, 0): a negative one never frees room for claim lines, a positive one consumes room (owner decision
+    2026-11-13; interim, D-N11)."""
     totals: dict[str, Decimal] = defaultdict(Decimal)
     for m in matches:
         rem = remits[m.remittance_line_id]
@@ -91,6 +92,8 @@ def validate_matches(
             claim = claims[a.claim_line_id]
             if a.adjustment_ref is None or any(adj.ref == a.adjustment_ref for adj in claim.adjustments):
                 totals[rem.id] += a.amount
+            else:
+                totals[rem.id] += max(a.amount, Decimal(0))
     for rid, total in totals.items():
         if total > remits[rid].amount_paid:
             raise InvariantViolation(

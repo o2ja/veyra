@@ -546,6 +546,19 @@ def manual(
                 "invalid",
                 "The amount must have the adjustment's sign and not exceed its amount.",
             )
+        already = db.scalar(
+            select(func.coalesce(func.sum(ReconciliationMatch.allocated_amount), ZERO)).where(
+                ReconciliationMatch.tenant_id == t,
+                ReconciliationMatch.claim_adjustment_id == claim_adjustment_id,
+                ReconciliationMatch.status == "confirmed",
+            )
+        )
+        if abs((already or ZERO) + amount) > abs(adjustment.amount):
+            raise _invalid(
+                "allocated_amount",
+                "invalid",
+                "The adjustment is already allocated; the total cannot exceed its amount.",
+            )
     claim = st.claims.get(adjustment.claim_line_id if adjustment else str(claim_line_id))
     if claim is None:
         raise _invalid("claim_line_id", "not_found", "Not a submitted claim line of this manufacturer.")

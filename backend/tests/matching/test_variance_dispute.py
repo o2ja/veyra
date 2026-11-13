@@ -6,7 +6,14 @@ from decimal import Decimal
 import pytest
 
 from rebate_matching.dispute import DisputeFacts, assess_dispute
-from rebate_matching.engine import confirm_suggestion, manual_adjustment_match, manual_match, reconcile
+from rebate_matching.engine import (
+    InvariantViolation,
+    confirm_suggestion,
+    manual_adjustment_match,
+    manual_match,
+    reconcile,
+    validate_matches,
+)
 from rebate_matching.models import Adjustment, ClaimLine, Method, RemittanceLine, Status
 from rebate_matching.variance import (
     classify_claim_line,
@@ -313,3 +320,21 @@ def test_the_remainder_counts_claim_parts_only_and_stays_within_the_payment() ->
     split = ClaimLine("s", "M", "CL-s", "I", 2, D("250.00"), adjustments=(Adjustment("a1", D("-50.00")),))
     (m,) = reconcile([RemittanceLine("z", "M", D("200.00"), invoice_no="I", invoice_line=2)], [split]).matches
     assert classify_unmatched_payment(RemittanceLine("z", "M", D("200.00")), [m]) is None
+
+
+def test_a_positive_cross_batch_adjustment_allocation_consumes_the_payment() -> None:
+    """Line pays 225.00, CL-4 frozen 200.00, cross-batch ADJ +25.00. (a) 200.00 -> CL-4 and 25.00 -> ADJ: 200 + 25 = 225
+    <= 225 accepted, unmatched remainder 225 - (200 + 25) = 0.00 (no finding, not 25.00). (b) 225.00 -> CL-4 and
+    25.00 -> ADJ: 250 > 225, refused."""
+    cl4 = ClaimLine("c4", "M", "CL-4", "INV-10021", 1, D("200.00"))
+    r = RemittanceLine("r", "M", D("225.00"))
+    remits, claims = {"r": r}, {"c4": cl4}
+    ok = [manual_match(r, [(cl4, D("200.00"))]), manual_adjustment_match(r, cl4, "adj", D("25.00"))]
+    validate_matches(ok, remits, claims)
+    assert classify_unmatched_payment(r, ok) is None
+    with pytest.raises(InvariantViolation):
+        validate_matches(
+            [manual_match(r, [(cl4, D("225.00"))]), manual_adjustment_match(r, cl4, "adj", D("25.00"))],
+            remits,
+            claims,
+        )

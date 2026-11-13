@@ -107,10 +107,15 @@ def classify_unmatched_payment(
     """
     confirmed = [m for m in matches if m.status is Status.CONFIRMED and m.remittance_line_id == line.id]
     if confirmed:
-        # only the claim-line parts are cash applied to claims; an allocation to an adjustment item is signed and is not
-        # cash on a claim line (D-N11 interim). Never below 0 (a same-batch split can exceed the payment) nor above it.
+        # claim-line parts are cash applied to claims; a positive adjustment allocation consumes cash too, a negative one
+        # never frees any (D-N11 interim). Never below 0 (a same-batch split can exceed the payment) nor above it.
         claim_parts = sum(
-            (a.amount for m in confirmed for a in m.allocations if a.adjustment_ref is None), Decimal(0)
+            (
+                a.amount if a.adjustment_ref is None else max(a.amount, Decimal(0))
+                for m in confirmed
+                for a in m.allocations
+            ),
+            Decimal(0),
         )
         amount = min(line.amount_paid, line.amount_paid - claim_parts)
     elif categorised:
