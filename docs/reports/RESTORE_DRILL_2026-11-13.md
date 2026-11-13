@@ -26,7 +26,7 @@ The scripts default to the production compose file; pointing `COMPOSE` and `ENV_
 | Object load into the new bucket | 16 s (cumulative) |
 | **`restore.sh` total** | **16 s** |
 
-Dataset is tiny (about 5 MB dump scale, 100 objects). These numbers say nothing about production volume or the 4 h RTO.
+Dataset is tiny (0.9 MB dump, 100 objects of 88 KB). These numbers say nothing about production volume or the 4 h RTO.
 
 ## Verification
 
