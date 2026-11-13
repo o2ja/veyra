@@ -19,7 +19,8 @@ everything: the builder, OpenCode, Antigravity). Orchestrator runs every gate an
 ## Reviewer queue (in order)
 1. ui/s7-adjustments — done: NOT MERGEABLE → 15 findings fixed (dccc040); Playwright pending
 2. S9 on final S8 + D-N2 — done: MERGEABLE WITH MINORS → fixed (1983f5a)
-3. S10 (7054beb; re-run test_reporting*.py + heads first) — financial + security + DB (first full S10 review on the owner money rule)
+3. S10 full review — done: MERGEABLE WITH MINORS → fixed (79614c0)
+4. ui/s8 (running at 82% usage; redo if no note), then ui/s9, ui/s10 — financial + security + DB (first full S10 review on the owner money rule)
 4. ui/s8 when Antigravity reports; ui/s9 when OpenCode reports; ui/s10 when built; ui/s7 + ui/qa-1 leftovers
 
 ## Merge order (one at a time; each: merge latest main → ci-local 6/6 posted on the PR → owner merges)
