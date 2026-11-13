@@ -161,7 +161,9 @@ def test_every_figure_drills_to_rows_that_sum_to_it(env: Env, story: Story) -> N
     figures = api.get("/dashboard").json()["figures"]
     counts = {
         "claimed": 9,  # 7 + INV-10020/1 + the adjustment
-        "collected": 7,
+        # D-N3 + D-N11 interim: ADJ-2026-0001 rides in B2 and nothing auto-allocates to it, so line 4 pays 200.00 all to CL-4.
+        # Rows: 2050 + 3120 + 0 + 200 + 1000 + 1100 = 7,470.00 = 6 allocations (the figure is unchanged).
+        "collected": 6,
         "short_paid": 4,
         "recovered": 0,
         "written_off": 0,
@@ -347,7 +349,8 @@ def test_the_audit_pack_ties_to_the_batch_and_shows_payments(env: Env, story: St
         sum(D(x["Claim amount"]) for x in rows) == CB_VOLT
     )  # Σ of the fixture lines; the adjustment is in B2
     by_invoice = {x["Invoice"]: x for x in rows}
-    paid = {"INV-10001": "2050.00", "INV-10010": "3120.00", "INV-10011": "0.00", "INV-10021": "250.00",
+    # D-N3 + D-N11 interim: line 4 pays 200.00, all to CL-4 (claimed 250.00 -> short 50.00); the -50.00 ADJ rides in B2.
+    paid = {"INV-10001": "2050.00", "INV-10010": "3120.00", "INV-10011": "0.00", "INV-10021": "200.00",
             "INV-10050": "1000.00", "INV-10051": "1100.00"}  # fmt: skip
     for invoice, amount in paid.items():  # ground truth lines 1-5
         assert D(by_invoice[invoice]["Paid (confirmed)"]) == D(amount), invoice
