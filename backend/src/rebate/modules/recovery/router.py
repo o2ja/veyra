@@ -6,11 +6,13 @@ from typing import Annotated
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, Header, Query, Request, Response
+from fastapi.responses import JSONResponse
 
 from rebate.core.access import require, tenant_of
 from rebate.core.errors import PreconditionFailed
 from rebate.core.query import only_query_params
 from rebate.core.request import Principal, ctx
+from rebate.modules import ingestion
 from rebate.modules.masterdata import Page, Who, page
 from rebate.modules.recovery import schemas as s
 from rebate.modules.recovery import service
@@ -168,7 +170,7 @@ def add_attachment(
     return s.AttachmentOut.model_validate(a)
 
 
-@router.post("/cases/{case_id}/write-off", operation_id="case_write_off")
+@router.post("/cases/{case_id}/write-off", operation_id="case_write_off", response_model=s.CaseOut)
 def write_off(
     request: Request,
     response: Response,
@@ -176,11 +178,21 @@ def write_off(
     body: s.WriteOffIn,
     principal: Annotated[Principal, Depends(require(WRITE_OFF))],
     if_match: IfMatch = None,
-) -> s.CaseOut:
-    c = service.write_off(
-        ctx(request).db, _who(request, principal), case_id, body.reason, _revision(if_match)
+    idempotency_key: Annotated[str | None, Header()] = None,
+) -> object:
+    """``Idempotency-Key`` is required (API_SPECIFICATION.md §1): a repeat with the same body replays the answer."""
+    c, who = ctx(request), _who(request, principal)
+    key, endpoint, payload = (
+        ingestion.parse_key(idempotency_key),
+        f"POST /cases/{case_id}/write-off",
+        body.model_dump(),
     )
-    return _out(response, c)
+    replayed = ingestion.replay(c.db, who.tenant_id, key, endpoint, payload)
+    if replayed is not None:
+        return JSONResponse(replayed[1], replayed[0])
+    out = _out(response, service.write_off(c.db, who, case_id, body.reason, _revision(if_match)))
+    ingestion.store(c.db, who.tenant_id, key, endpoint, payload, 200, out.model_dump(mode="json"))
+    return out
 
 
 @router.post("/cases/{case_id}/reclaim", operation_id="case_reclaim")

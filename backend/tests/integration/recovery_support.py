@@ -173,5 +173,8 @@ def act(
     api: Api, method: str, path: str, case_id: UUID | str, body: Any = None, etag: str | None = None
 ) -> Any:
     """POST/PATCH on a case with the current ETag (or ``etag``)."""
-    h = {"If-Match": etag or case_by(api, case_id)["etag"]}
+    h = {
+        "If-Match": etag or case_by(api, case_id)["etag"],
+        "Idempotency-Key": str(uuid.uuid4()),
+    }  # write-off needs it
     return getattr(api, method)(path, json=body, headers=h)

@@ -214,14 +214,22 @@ Legend: **R** = roles allowed (A admin, P approver, N analyst, V viewer). Writes
 |---|---|---|
 | `GET /cases` | Queue; filters `status`, `manufacturer_id`, `owner_user_id`, `deadline_before`, `reason_code`; sort by deadline | all |
 | `GET /cases/summary` | Totals by status/reason, at-risk | all |
-| `GET /cases/{id}`, `GET /cases/{id}/events` | Detail with trace refs and dispute assessment | all |
-| `PATCH /cases/{id}` | Assign owner, update fields | A P N |
+| `GET /cases/{id}`, `GET /cases/{id}/events`, `GET /cases/{id}/attachments` | Detail with trace refs and dispute assessment; timeline; attachments | all |
+| `PATCH /cases/{id}` | `{owner_user_id}` (assign or clear; the owner must be a member) | A P N |
 | `POST /cases/{id}/transition` | `{to_status, note}` (state machine validated) | A P N (except write-off) |
 | `POST /cases/{id}/notes` | | A P N |
 | `POST /cases/{id}/attachments` | `{file_id}` | A P N |
 | `POST /cases/{id}/write-off` | `{reason}`; four-eyes | A P |
 | `POST /cases/{id}/reclaim` | Creates a `recovery_reclaim` adjustment proposal | A P N |
-| `GET /notifications`, `POST /notifications/{id}/read` | In-app | all |
+| `GET /notifications`, `POST /notifications/{id}/read` | In-app; the caller's own only (`unread=true`, keyset paging); another user's id is 404 | all |
+
+Cases (S9): the queue lists `deadline_unknown` cases first, then by `deadline_date`, then id (`sort` accepts only that order).
+`deadline_unknown` is `deadline_date = null`, not a case type. Every change to a case (`PATCH`, `transition`, `write-off`,
+`reclaim`) needs `If-Match: "<revision>"` (412 `precondition_failed` otherwise) and returns the new `ETag`; `write-off`
+also needs `Idempotency-Key`. With workspace four-eyes on, the first approver's `write-off` records a proposal (case stays
+as is, event `write_off_proposed`) and a different approver completes it; the same person gets 403 `four_eyes_violation`.
+`reclaim` returns `{case, adjustment_id}`. Reminders (14/7/3 days before the deadline) are created by the daily sweep and
+mailed once as a digest; there is no endpoint to create them.
 
 ### 2.9 Reporting, trace, audit
 
