@@ -30,6 +30,8 @@
 - K1 done (s11-audit-seal 86508de): audit_seals migration + RLS + append-only, seal job (hourly, chunked), verify CLI (exit 1 on break), retention dry-run, runbook. 12 new tests; full 1733 pass / 1 fail (ORM drift, fixed, db+isolation 356 re-run pass); negctl OK. Security+DB review running.
 - S8 branch after re-chain (edaa230, includes s7-adjustments + main): full suite 2023 passed, 0 failed (12.5 min); ruff, format, mypy clean (my lint-imports call missed its config; I1's run: 14 kept, 0 broken). negctl not re-run on this merge.
 - PR #20 (S11.6 drill + S11.7 guides; review MERGEABLE WITH MINORS, minors fixed): CI jobs not started — GitHub billing (D-N0). Not merged.
+- S11.1 review: NOT MERGEABLE (blocker: migration enqueues 0 seal jobs because tenants is FORCE RLS; serious: settle rule relies on a nonexistent timeout, head-hash anchor not checkable, tamper limitation understated). Sent back to K1.
+- M1 launched: S10 core backend (summary job, dashboard + drill-down, tier tracker, trace resolver, audit pack) on s10-reporting, stacked on s9-recovery 7fe11bb.
 
 ---
 
