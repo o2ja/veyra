@@ -1,6 +1,15 @@
 import { expect } from "@playwright/test";
 
-import { PASSWORD, enrolMfa, noViolations, signIn, test, tokenFromMail, uniqueEmail } from "./support";
+import {
+  PASSWORD,
+  clientIpHeader,
+  enrolMfa,
+  noViolations,
+  signIn,
+  test,
+  tokenFromMail,
+  uniqueEmail,
+} from "./support";
 
 test.describe("QA Agreements: agreements list, drafts, editor, validation, approval, 403, axe", () => {
   test("covers agreements happy path, draft workflow, empty/error states, four-eyes, and axe", async ({
@@ -27,7 +36,26 @@ test.describe("QA Agreements: agreements list, drafts, editor, validation, appro
     await signIn(page, adminEmail);
     await enrolMfa(page);
 
-    // 2. Agreements Page: empty state
+    // 2. Master data: manufacturer MFR1 and product SKU-TEST-01 required for agreement references
+    await page.getByRole("link", { name: "Master data" }).click();
+    await page.getByLabel("Name", { exact: true }).fill("Manufacturer One");
+    await page.getByLabel("Code", { exact: true }).fill("MFR1");
+    await page.getByRole("button", { name: "Add manufacturer" }).click();
+    await expect(page.getByText("Manufacturer added.")).toBeVisible();
+
+    await page
+      .getByRole("navigation", { name: "Master data" })
+      .getByRole("link", { name: "Products" })
+      .click();
+    await expect(page.getByRole("heading", { name: "Add a product" })).toBeVisible();
+    await page.getByLabel("SKU", { exact: true }).fill("SKU-TEST-01");
+    await page.getByLabel("Description", { exact: true }).fill("Test SKU 01");
+    await page.getByLabel("Manufacturer", { exact: true }).selectOption({ label: "Manufacturer One (MFR1)" });
+    await page.getByLabel("Base unit of measure").fill("EA");
+    await page.getByRole("button", { name: "Add product" }).click();
+    await expect(page.getByText("Product added.")).toBeVisible();
+
+    // 3. Agreements Page: empty state
     await page.goto("/agreements");
     await expect(page.getByRole("heading", { name: "Agreements" })).toBeVisible();
     await expect(page.getByText("No agreements yet.")).toBeVisible();
@@ -78,8 +106,9 @@ test.describe("QA Agreements: agreements list, drafts, editor, validation, appro
     await page.getByLabel("Email").fill(approverEmail);
     await page.getByLabel("Role").selectOption("approver");
     await page.getByRole("button", { name: "Invite" }).click();
+    await expect(page.getByRole("status")).toContainText(`Invitation created for ${approverEmail}`);
 
-    const approverCtx = await browser.newContext();
+    const approverCtx = await browser.newContext({ extraHTTPHeaders: clientIpHeader() });
     const approverPage = await approverCtx.newPage();
     const approverToken = await tokenFromMail(approverEmail);
 

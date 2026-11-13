@@ -34,7 +34,7 @@ test.describe("QA Calculations: runs, run details, rebate tracker, accruals, err
     // 3. Rebates page: empty state & tracker
     await page.goto("/calculations/rebates");
     await expect(page.getByRole("heading", { name: "Rebate tracker" })).toBeVisible();
-    await expect(page.getByRole("heading", { name: "Rebate accruals" })).toBeVisible();
+    await expect(page.getByRole("heading", { name: "Accrual ledger" })).toBeVisible();
     await noViolations(page, "/calculations/rebates");
 
     // 4. Error state: Not found run ID

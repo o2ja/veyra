@@ -42,7 +42,8 @@ test.describe("QA Admin: users, invitations, settings, audit log, jobs, 403 chec
     await page.getByLabel("Email").fill(viewerEmail);
     await page.getByLabel("Role").selectOption("viewer");
     await page.getByRole("button", { name: "Invite" }).click();
-    await expect(page.getByText(`Invitation created for ${viewerEmail}`)).toBeVisible();
+    await expect(page.getByRole("status")).toContainText(`Invitation created for ${viewerEmail}`);
+    await expect(page.getByRole("table").getByRole("cell", { name: viewerEmail })).toBeVisible();
 
     // 4. Settings page: view and update
     await page.goto("/admin/settings");

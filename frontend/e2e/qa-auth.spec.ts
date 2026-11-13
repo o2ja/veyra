@@ -68,10 +68,10 @@ test.describe("QA Auth: registration, verification, login, MFA, password reset, 
     await expect(page).toHaveURL("/");
 
     // 6. Security page
-    await page.goto("/security");
+    await page.goto("/account/security");
     await expect(page.getByRole("heading", { name: "Password" })).toBeVisible();
     await expect(page.getByRole("heading", { name: "Recovery codes" })).toBeVisible();
     await expect(page.getByRole("heading", { name: "Sign-in email" })).toBeVisible();
-    await noViolations(page, "/security");
+    await noViolations(page, "/account/security");
   });
 });

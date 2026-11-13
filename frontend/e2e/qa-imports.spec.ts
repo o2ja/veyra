@@ -40,13 +40,13 @@ test.describe("QA Imports: import history, new import wizard, sales & purchase l
 
     // 4. Source lines: Sales lines empty state
     await page.goto("/lines/sales");
-    await expect(page.getByRole("heading", { name: "Source lines" })).toBeVisible();
+    await expect(page.getByRole("heading", { name: "Sales lines" })).toBeVisible();
     await expect(page.getByText("No lines match.")).toBeVisible();
     await noViolations(page, "/lines/sales (empty)");
 
     // 5. Source lines: Purchase lines empty state
     await page.goto("/lines/purchases");
-    await expect(page.getByRole("heading", { name: "Source lines" })).toBeVisible();
+    await expect(page.getByRole("heading", { name: "Purchase lines" })).toBeVisible();
     await expect(page.getByText("No lines match.")).toBeVisible();
     await noViolations(page, "/lines/purchases (empty)");
 
@@ -60,7 +60,7 @@ test.describe("QA Imports: import history, new import wizard, sales & purchase l
     await page.getByLabel("Email").fill(viewerEmail);
     await page.getByLabel("Role").selectOption("viewer");
     await page.getByRole("button", { name: "Invite" }).click();
-    await expect(page.getByText(`Invitation created for ${viewerEmail}`)).toBeVisible();
+    await expect(page.getByRole("status")).toContainText(`Invitation created for ${viewerEmail}`);
 
     const viewerCtx = await browser.newContext();
     const viewerPage = await viewerCtx.newPage();
