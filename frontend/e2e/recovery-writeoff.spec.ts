@@ -10,8 +10,9 @@ test("S9 write-off: propose, same user disabled, second approver completes, anal
   const fixture = await bootstrapRecovery(page, browser, { twoApprovers: true });
   const approverB = fixture.approverB;
   if (!approverB) throw new Error("second approver missing from the fixture");
-  const target = fixture.cases.find((item) => item.status !== "written_off") ?? fixture.cases[0];
-  const caseId = target?.id ?? "";
+  const target = fixture.cases.find((item) => item.case_type === "short_paid");
+  if (!target) throw new Error("short-paid recovery case missing from the fixture");
+  const caseId = target.id;
 
   const analyst = await inviteMember(
     page,

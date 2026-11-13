@@ -8,7 +8,9 @@ test("S9 recovery case: assign, note, attachment, transition, reclaim, stale 412
 }) => {
   test.setTimeout(420_000);
   const fixture = await bootstrapRecovery(page, browser);
-  const target = fixture.cases[0];
+  // The 150.00 short-paid case is reclaimable; the unmatched payment has no claim line and is not.
+  const target = fixture.cases.find((item) => item.case_type === "short_paid");
+  if (!target) throw new Error("short-paid recovery case missing from the fixture");
 
   try {
     await page.goto(`/recovery/${target?.id ?? ""}`);
@@ -48,20 +50,13 @@ test("S9 recovery case: assign, note, attachment, transition, reclaim, stale 412
       timeout: 60_000,
     });
 
-    // Move to to_reclaim, then reclaim through the S7 queue.
-    await page.getByRole("button", { name: "Change status" }).click();
-    const statusDialog = page.getByRole("dialog");
-    await expect(statusDialog).toBeVisible();
-    await statusDialog.getByLabel("New status").selectOption("to_reclaim");
-    await statusDialog.getByLabel("Note (optional)").fill("Reclaiming the short payment");
-    await statusDialog.getByRole("button", { name: "Change status" }).click();
-    await expect(page.getByLabel("Case status")).toHaveText("To reclaim");
-
+    // Reclaiming moves the case to to_reclaim itself; moving it there first would be refused.
     await page.getByRole("button", { name: "Reclaim" }).click();
     const reclaimDialog = page.getByRole("dialog");
     await expect(reclaimDialog).toBeVisible();
     await reclaimDialog.getByRole("button", { name: "Reclaim" }).click();
     await expect(page.getByText("Reclaim adjustment created.")).toBeVisible();
+    await expect(page.getByLabel("Case status")).toHaveText("To reclaim");
     const adjustmentLink = page.getByRole("link", { name: "View adjustment" });
     await expect(adjustmentLink).toBeVisible();
     await expect(adjustmentLink).toHaveAttribute("href", "/claims/adjustments?status=proposed");

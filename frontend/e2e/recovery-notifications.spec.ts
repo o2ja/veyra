@@ -30,12 +30,15 @@ test("S9 notifications: unread/all list, mark read, axe on queue, case and notif
     const items = card.getByRole("listitem");
     const unreadCount = await items.count();
     if (unreadCount > 0) {
-      const firstTitle = await items.first().getByRole("heading", { level: 2 }).innerText();
+      const heading = items.first().getByRole("heading", { level: 2 });
+      const firstTitle = await heading.innerText();
+      const sameTitle = card.getByRole("heading", { name: firstTitle, exact: true });
+      const before = await sameTitle.count();
       await items
         .first()
         .getByRole("button", { name: /Mark read/ })
         .click();
-      await expect(card.getByRole("heading", { name: firstTitle, exact: true })).toHaveCount(0);
+      await expect(sameTitle).toHaveCount(before - 1);
     } else {
       // Reminders only exist after the server's daily sweep; no reminder means the empty state.
       await expect(card.getByText("No unread notifications.")).toBeVisible();

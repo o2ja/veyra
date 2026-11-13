@@ -155,7 +155,7 @@ async function csrfToken(page: Page): Promise<string> {
 /** A real API call from the signed-in browser context (CSRF header included). */
 export async function apiJson<T>(
   page: Page,
-  method: "GET" | "POST" | "PATCH",
+  method: "GET" | "POST" | "PUT" | "PATCH",
   path: string,
   body?: unknown,
   extraHeaders: Record<string, string> = {},
@@ -238,6 +238,80 @@ interface RecoveryFixture {
   contexts: BrowserContext[];
 }
 
+interface GroundManufacturer {
+  name: string;
+  code: string;
+  claim_window_days: number;
+  claim_window_basis: string;
+  dispute_window_days: number;
+  allow_negative_claims: boolean;
+  conflict_policy: string;
+  variance_tolerance: string;
+}
+
+interface CalculationResult {
+  id: string;
+  document_number: string;
+  line_number: number;
+  manufacturer_id: string | null;
+  status: string;
+}
+
+interface Paged<T> {
+  data: T[];
+  page: { has_more: boolean; next_cursor: string | null };
+}
+
+interface MatchRow {
+  id: string;
+  status: string;
+  revision: number;
+}
+
+/** The S9 ground truth: the seven lines claimed before CM-7781 is reconciled. */
+const CLAIM_FIXTURE = JSON.parse(
+  readFileSync(generated("ground_truth/claim_batches_fixture.json"), "utf8"),
+) as {
+  batch_number: string;
+  submitted_at: string;
+  lines: { invoice_no: string; line_no: number }[];
+};
+
+/** The result ids of the seven ground-truth lines in a completed run (page through the result list). */
+async function claimableResultIds(page: Page, runId: string, manufacturerId: string): Promise<string[]> {
+  const wanted = new Map(
+    CLAIM_FIXTURE.lines.map((line) => [`${line.invoice_no}/${line.line_no}`, line.invoice_no]),
+  );
+  const found = new Map<string, string>();
+  let cursor: string | null = null;
+  for (;;) {
+    const query = new URLSearchParams({ limit: "200" });
+    if (cursor) query.set("cursor", cursor);
+    const body = await apiJson<Paged<CalculationResult>>(
+      page,
+      "GET",
+      `/api/v1/calculation-runs/${runId}/results?${query.toString()}`,
+    );
+    for (const result of body.data) {
+      const key = `${result.document_number}/${result.line_number}`;
+      if (wanted.has(key) && result.manufacturer_id === manufacturerId && result.status === "eligible") {
+        found.set(key, result.id);
+      }
+    }
+    if (!body.page.has_more) break;
+    cursor = body.page.next_cursor;
+  }
+  const missing = [...wanted.keys()].filter((key) => !found.has(key));
+  if (missing.length > 0) {
+    throw new Error(`eligible results missing for ${missing.join(", ")}`);
+  }
+  return CLAIM_FIXTURE.lines.map((line) => {
+    const id = found.get(`${line.invoice_no}/${line.line_no}`);
+    if (!id) throw new Error(`result missing for ${line.invoice_no}/${line.line_no}`);
+    return id;
+  });
+}
+
 async function importFile(page: Page, type: string, relPath: string): Promise<void> {
   await page.goto("/imports/new");
   await page.getByLabel("File to upload").setInputFiles(generated(relPath));
@@ -276,7 +350,7 @@ export async function bootstrapRecovery(
   await page.getByRole("link", { name: "Master data" }).click();
   const manufacturers = JSON.parse(
     readFileSync(generated("ground_truth/master_manufacturers.json"), "utf8"),
-  ) as { name: string; code: string }[];
+  ) as GroundManufacturer[];
   for (const manufacturer of manufacturers) {
     await page.getByLabel("Name", { exact: true }).fill(manufacturer.name);
     await page.getByLabel("Code", { exact: true }).fill(manufacturer.code);
@@ -300,6 +374,42 @@ export async function bootstrapRecovery(
   ] as const) {
     await importFile(page, type, file);
   }
+
+  const manufacturerList = await apiJson<{ data: { id: string; code: string }[] }>(
+    page,
+    "GET",
+    "/api/v1/manufacturers?limit=200",
+  );
+  const voltara = manufacturerList.data.find((manufacturer) => manufacturer.code === "VOLT");
+  if (!voltara) throw new Error("VOLT manufacturer missing after master-data setup");
+
+  // The run happens on the real clock (well after the ground-truth invoices), so widen the claim window
+  // to keep the seven June lines eligible. Submission-date dispute deadlines make the unmatched payment
+  // the one unknown deadline (it has no claim line to count from).
+  const groundVolt = manufacturers.find((manufacturer) => manufacturer.code === "VOLT");
+  if (!groundVolt) throw new Error("VOLT ground-truth settings missing");
+  const currentSettings = await apiJson<{ revision: number }>(
+    page,
+    "GET",
+    `/api/v1/manufacturers/${voltara.id}/settings`,
+  );
+  await apiJson(
+    page,
+    "PUT",
+    `/api/v1/manufacturers/${voltara.id}/settings`,
+    {
+      claim_window_days: 250,
+      claim_window_basis: groundVolt.claim_window_basis,
+      dispute_window_days: groundVolt.dispute_window_days,
+      dispute_window_basis: "submission_date",
+      allow_negative_claims: groundVolt.allow_negative_claims,
+      conflict_policy: groundVolt.conflict_policy,
+      variance_tolerance: groundVolt.variance_tolerance,
+      payment_lag_days_expected: 30,
+      notes: null,
+    },
+    { "If-Match": `"${currentSettings.revision}"` },
+  );
 
   const approverA = await inviteMember(page, browser, approverAEmail, "approver", "Recovery Approver A");
   contexts.push(approverA.context);
@@ -359,13 +469,35 @@ export async function bootstrapRecovery(
   await expect(firstRunRow).toBeVisible({ timeout: 30_000 });
   await expect(firstRunRow.locator("td").nth(1)).toHaveText("Completed", { timeout: 180_000 });
 
-  const manufacturerList = await apiJson<{ data: { id: string; code: string }[] }>(
+  const runs = await apiJson<{ data: { id: string; status: string }[] }>(
     page,
     "GET",
-    "/api/v1/manufacturers?limit=200",
+    "/api/v1/calculation-runs?limit=10",
   );
-  const voltara = manufacturerList.data.find((manufacturer) => manufacturer.code === "VOLT");
-  if (!voltara) throw new Error("VOLT manufacturer missing after master-data setup");
+  const run = runs.data.find((item) => item.status === "completed");
+  if (!run) throw new Error("completed calculation run missing");
+
+  // Claim exactly the seven ground-truth lines, then approve and submit as the second person (four-eyes
+  // is on by default; the admin created the batch).
+  const resultIds = await claimableResultIds(page, run.id, voltara.id);
+  const batch = await apiJson<{ id: string }>(
+    page,
+    "POST",
+    "/api/v1/claim-batches",
+    { manufacturer_id: voltara.id, result_ids: resultIds },
+    { "Idempotency-Key": crypto.randomUUID() },
+  );
+  await apiJson(approverA.page, "POST", `/api/v1/claim-batches/${batch.id}/approve`);
+  await apiJson(
+    approverA.page,
+    "POST",
+    `/api/v1/claim-batches/${batch.id}/submit`,
+    {
+      submitted_at: CLAIM_FIXTURE.submitted_at,
+      external_reference: CLAIM_FIXTURE.batch_number,
+    },
+    { "Idempotency-Key": crypto.randomUUID() },
+  );
 
   // Upload CM-7781 through the real files screen.
   const remittanceName = "credit_memo_VOLT_CM-7781.csv";
@@ -399,15 +531,15 @@ export async function bootstrapRecovery(
       channel: "credit_memo",
       doc_type: "credit_memo",
       document_number: "CM-7781",
-      document_date: "2026-02-15",
-      payment_date: "2026-02-15",
+      document_date: "2026-07-31",
+      payment_date: "2026-07-31",
     },
     { "Idempotency-Key": crypto.randomUUID() },
   );
 
   await poll(
     () => apiJson<{ status: string }>(page, "GET", `/api/v1/jobs/${created.job.id}`),
-    (job) => job.status === "completed" || job.status === "finished",
+    (job) => job.status === "succeeded",
     "CM-7781 extraction job",
   );
   await poll(
@@ -420,15 +552,35 @@ export async function bootstrapRecovery(
   await apiJson(page, "POST", `/api/v1/remittances/${created.remittance.id}/accept`, {
     corrections: [],
     document_number: "CM-7781",
-    document_date: "2026-02-15",
-    payment_date: "2026-02-15",
+    document_date: "2026-07-31",
+    payment_date: "2026-07-31",
   });
-  await apiJson(page, "POST", `/api/v1/remittances/${created.remittance.id}/reconcile`);
-  await poll(
-    () => apiJson<{ status: string }>(page, "GET", `/api/v1/remittances/${created.remittance.id}`),
-    (remittance) => remittance.status === "reconciled",
-    "CM-7781 reconciliation",
+  const reconciled = await apiJson<{ job: { id: string } }>(
+    page,
+    "POST",
+    `/api/v1/remittances/${created.remittance.id}/reconcile`,
   );
+  await poll(
+    () => apiJson<{ status: string }>(page, "GET", `/api/v1/jobs/${reconciled.job.id}`),
+    (job) => job.status === "succeeded",
+    "CM-7781 reconciliation job",
+  );
+
+  // The unique subset match is a suggestion: a person must confirm it before finalising.
+  const lines = await apiJson<{ data: { matches: MatchRow[] }[] }>(
+    page,
+    "GET",
+    `/api/v1/remittances/${created.remittance.id}/reconciliation?limit=200`,
+  );
+  for (const line of lines.data) {
+    for (const match of line.matches) {
+      if (match.status !== "suggested") continue;
+      await apiJson(page, "POST", `/api/v1/matches/${match.id}/confirm`, undefined, {
+        "If-Match": `"${match.revision}"`,
+      });
+    }
+  }
+
   await apiJson(page, "POST", `/api/v1/remittances/${created.remittance.id}/finalize`, undefined, {
     "Idempotency-Key": crypto.randomUUID(),
   });
