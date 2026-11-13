@@ -24,6 +24,7 @@
 - I1 done (S8 66bca00): PDF path, RA-5521/DN-310, isolation, perf 5,000 lines ingest 2.5 s / reconcile 1.0 s (8-line claim pool), OpenAPI additive, import-linter contract. Full 2004 pass (end_to_end ignored). I merged origin/s7-adjustments in + re-chained remittances after neg_claims_guard (edaa230, alembic heads = 1). S8 full suite re-running; opus financial review of S8 running.
 - S9 review 1: NOT MERGEABLE, 4 serious (cases never opened: on_finalise not wired; write-off leaves reclaim live; audit reason dropped; reminders to deactivated owners), 7 minor, no financial discrepancy. Sent to J1 with S8 re-merge.
 - S8 financial review 1: **FAIL / HARD STOP D-N3**. CM-7781, RA-5521 (120.00 unmatched_payment confirmed), DN-310 re-derived OK. S8 stopped. J1 told: S9 finalise hook must upsert/skip.
+- L1 done (s11-docs-drill 4342bb1): restore drill local — backup 8 s, restore 16 s into rebate_drill, 47 tables row counts equal, alembic head equal, 100/100 object sha256 OK; PITR not drilled. Guides: operator, user, onboarding, customer security overview. Review running.
 
 ---
 
