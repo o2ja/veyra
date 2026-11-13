@@ -41,11 +41,11 @@ First run `git worktree list`, `git status`, `gh pr list` and `git fetch`. Commi
   - An independent financial review on all money logic.
   - One review pass per stage, plus a second pass on the fix diff only.
 - **Merging:**
-  - CI green before any merge.
+  - Merge gate: CLAUDE.md §19 (`make ci-local` 6/6 on the exact SHA, posted on the PR, after merging latest main).
   - The full suite once per merged wave.
   - Commit and push after every merged piece.
 - **Agents:**
-  - At most 3 at once.
+  - At most 2 at once (CLAUDE.md §19).
   - Use the cheaper model (sonnet) for builders and opus for reviewers.
   - Ponytail rules apply: shortest working diff, reuse before writing, no new dependencies or abstractions. They never relax quality.
 - **Decisions:**
