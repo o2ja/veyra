@@ -410,7 +410,9 @@ def propose(
     returns = [r for r in rows if r.status == "adjustment" and r.original_line_id is not None] + list(
         netted_returns
     )
-    originals = source.frozen_claims(db, t, sorted({r.original_line_id for r in returns}))
+    # every linked return row of the run, whatever its status (an exception row proposes nothing but is not "gone")
+    linked = [r for r in (*rows, *netted_returns) if r.original_line_id is not None]
+    originals = source.frozen_claims(db, t, sorted({r.original_line_id for r in linked}))
     compared += len(returns)
     for row in returns:
         orig = originals.get(row.original_line_id)
@@ -459,7 +461,7 @@ def propose(
     # (return line, claim line) pairs that are still open returns of a frozen claim
     current = {
         (r.sales_document_line_id, originals[r.original_line_id].claim_line_id)
-        for r in returns
+        for r in linked
         if r.original_line_id in originals
     }
     claim_ids = sorted(

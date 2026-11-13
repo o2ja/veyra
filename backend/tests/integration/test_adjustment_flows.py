@@ -1000,3 +1000,34 @@ def test_an_older_run_cannot_unwind_a_later_reversal(env: Env) -> None:
     stale = ws.api.post(f"/calculation-runs/{older['id']}/propose-adjustments")
     assert stale.status_code == 409 and stale.json()["error"]["code"] == "invalid_state", stale.text
     assert _total(ws) == Decimal("-37.50")
+
+
+def test_a_reversed_return_that_becomes_an_exception_keeps_its_reversal(env: Env) -> None:
+    """SC-09r: claimed 250.00 (N = 0), CN-5002 (4 units) reversed -50.00 and approved. A 17-unit return CN-5009 of the
+    same original arrives: R = 4 + 17 = 21 > 20 units, so both returns are return_exceeds_original exceptions. A
+    return that is an exception is not gone: nothing is unwound (no +50.00) and nothing new is reversed. Removing the
+    17-unit return (unlinking it) makes CN-5002 open again for 4 units: due -50.00 = done, nothing new; total -50.00."""
+    ws = workspace(env)
+    approver = member(env.stack, env.app, ws.api, "approver")
+    import_sales_part(ws, late=False)
+    claim_and_submit(ws, results(ws, run(ws, **WINDOW)["id"]), ["INV-10021/1"])
+    import_sales_part(ws, late=True)
+    (first,) = propose(ws, run(ws, **WINDOW)["id"])["proposed"]
+    assert Decimal(first["amount"]) == Decimal("-50.00")
+    assert approver.post(f"/claim-adjustments/{first['id']}/approve").status_code == 200
+    cn = (
+        "CN-5009,1,2026-07-04,2026-07-04,BLUFF,Bluff City Mechanical (SYNTHETIC),BR01,BRK-3P-60A,"
+        "Breaker 3-pole 60A,17,EA,58.00,64.50,986.00,SPA-VOLT-2026-884,,CN,{orig}\n"
+    )
+    import_text(ws, SALES_HEADER + cn.format(orig="INV-10021,1"), "cn5009.csv")
+    over = run(ws, **WINDOW)
+    res = results(ws, over["id"])
+    assert (
+        res["CN-5002/1"]["exception_code"] == res["CN-5009/1"]["exception_code"] == "return_exceeds_original"
+    )
+    assert propose(ws, over["id"])["proposed"] == []
+    import_text(ws, SALES_HEADER + cn.format(orig=","), "cn5009_unlinked.csv")
+    fixed = run(ws, **WINDOW)
+    assert results(ws, fixed["id"])["CN-5002/1"]["status"] == "adjustment"
+    assert propose(ws, fixed["id"])["proposed"] == []
+    assert _total(ws) == Decimal("-50.00")
