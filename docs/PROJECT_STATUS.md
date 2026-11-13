@@ -27,7 +27,7 @@ S1 signed off by the owner 2026-11-10. Evidence and open points: `docs/reports/S
 
 **CI and merging (owner, 2026-11-13):** GitHub Actions is unpaid; the merge gate is `make ci-local` (6/6 on the exact commit, posted as a PR comment with the SHA) after merging latest `main`, plus the required reviews; nothing skipped or failing. Workflow runs only on ready-for-review PRs and pushes to `main`, with path filters; WIP PRs are drafts. At most 2 agents; full suite + Playwright once per merge; never two full suites at once. Full text: `CLAUDE.md` §19.
 
-**Resume point (2026-11-13 evening):** see `docs/reports/notes/resume-prompt.md`. #20 merged; #21 gate 6/6, waits for the owner's merge; S7 and S8 reviews final; then #15 → S8 → S9 → S10, one gate each.
+**Resume point (2026-11-14 early):** `docs/reports/notes/resume-prompt.md` + `docs/reports/notes/FINISH_PLAN.md`. Backend S7–S10 built and reviewed (S10 full review pending); all S7–S10 UI branches built, not yet Playwright-verified; #21 needs a fresh gate; merges by the owner.
 
 ### S3–S6 batch (in progress, started 2026-11-10; S2 approved)
 
