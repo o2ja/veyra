@@ -8,7 +8,7 @@
    - `s9-recovery` 0d8021b: S9 complete; reviews: round 1 NOT MERGEABLE → fixed; 2nd pass N1 → fixed; check of that diff MERGEABLE WITH MINORS → minors fixed. Full suite 2222 pass at bef6ba3, negctl OK (211 RLS-dependent). Stacked on S8, so held by D-N3. No PR yet (it would carry S7+S8).
    - `s10-reporting`: S10 core backend in progress (M1), stacked on S9.
    - PR #20 `s11-docs-drill` (restore drill + guides): reviewed, ready; waits for CI.
-   - PR #21 `s11-audit-seal` (S11.1): reviewed twice, MERGEABLE WITH MINORS; waits for CI.
+   - PR #21 `s11-audit-seal` (S11.1) 24eacc3: reviewed twice, all minors fixed; waits for CI.
    - `ui/qa-1`: Playwright 8/18 fail → back to Antigravity. `ui/s7`: waits for #15.
 3. **Needs your decision:**
    - **D-N0 GitHub Actions billing (blocks ALL merges):** since ~02:19Z every CI job is refused: "The job was not started because recent account payments have failed or your spending limit needs to be increased" (Billing & plans). Spending = yours. Until it runs, no PR can show 6/6 green, so I merged nothing after #18. Main's own CI runs on my doc commits also show failure for this reason only (no job started).
