@@ -477,7 +477,25 @@ def test_rebate_accrual_claims_and_the_r2_clawback(env: Env, admin_engine: Engin
     )
     assert two.status_code == 201, two.text
     assert (two.json()["line_count"], Decimal(two.json()["total_amount"])) == (1, Decimal("0.00"))
-    assert ws.api.post(f"/claim-batches/{two.json()['id']}/approve").status_code == 200
+    # M1: the current setting also decides at approve and at submit (0.00 <= 0 again)
+    for step, call in (
+        ("approve", lambda: ws.api.post(f"/claim-batches/{two.json()['id']}/approve")),
+        (
+            "submit",
+            lambda: ws.api.post(
+                f"/claim-batches/{two.json()['id']}/submit",
+                json={"submitted_at": "2026-07-09", "external_reference": "REB-1"},
+                headers=key(),
+            ),
+        ),
+    ):
+        settings(ws, "VOLT", allow_negative_claims=False)
+        refused = call()
+        assert refused.status_code == 422, (step, refused.text)
+        assert refused.json()["error"]["code"] == "batch_total_not_positive", (step, refused.text)
+        settings(ws, "VOLT")
+        if step == "approve":
+            assert call().status_code == 200
     rows = csv_rows(env, admin_engine, ws.api, two.json()["id"])
     assert sorted(Decimal(r["Claim amount"]) for r in rows) == [Decimal("-10400.00"), Decimal("10400.00")]
     assert (
@@ -719,3 +737,30 @@ def test_the_database_enforces_negative_claims(env: Env, admin_engine: Engine) -
     settings(ws, "VOLT", allow_negative_claims=True)
     assert "allows negative claims" not in outcome(admin_engine, batch, n="CB-ZERO-2", **args)
     assert outcome(admin_engine, approve_sql, **args) == "ok"
+
+
+def test_the_database_refuses_including_an_adjustment_of_an_unfrozen_line(
+    env: Env, admin_engine: Engine
+) -> None:
+    """INV-10021/1 sits in a DRAFT batch, so its claim line is not frozen. An approved adjustment of that line cannot be
+    included in a second draft batch (even for the owner): the corrected line must be frozen and not released."""
+    ws = workspace(env)
+    import_sales_part(ws, late=False)
+    res = results(ws, run(ws, **WINDOW)["id"])
+    first = res["INV-10021/1"]
+    mfr = first["manufacturer_id"]
+    draft = new_batch(ws.api, mfr, result_ids=[first["id"]])
+    assert draft.status_code == 201, draft.text
+    other = new_batch(ws.api, mfr, result_ids=[res["INV-10020/1"]["id"]])
+    assert other.status_code == 201, other.text
+    adj, user = str(uuid.uuid4()), draft.json()["created_by"]
+    args = {"t": ws.tenant_id, "a": adj, "m": mfr, "u": user, "b": other.json()["id"]}
+    args["l"] = next(iter(claim_lines_of(ws, draft.json()["id"]).values()))["id"]
+    steps = (
+        "INSERT INTO claim_adjustments (tenant_id, id, manufacturer_id, adjustment_type, claim_line_id, amount, reason, "
+        "status) VALUES (:t, :a, :m, 'agreement_change', :l, -1, 'x', 'proposed')",
+        "UPDATE claim_adjustments SET status = 'approved', approved_by = :u, approved_at = now() WHERE id = :a",
+    )
+    assert [outcome(admin_engine, sql, **args) for sql in steps] == ["ok", "ok"]
+    include_sql = "UPDATE claim_adjustments SET status = 'included', included_in_batch_id = :b WHERE id = :a"
+    assert "frozen and not released" in outcome(admin_engine, include_sql, **args)
