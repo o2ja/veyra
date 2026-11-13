@@ -58,6 +58,7 @@
 - S11.3 ASVS L2 review of main (`docs/reports/S11_3_ASVS_L2_REVIEW.md` on s11-security): 3 serious (DB params in error logs; no parse memory/CPU limits; headers untested), 7 minor, 2 nit; 697 security/api/route tests pass. Builder N1 fixing on s11-security.
 - N1 S11.3 fixes done (s11-security 8e74238): hide_parameters + type-only 500 logs, worker mem/cpu/pids limits in compose.prod, XLSX uncompressed cap 300→100 MB, header + Caddyfile tests, doc-transcribed permission matrix (matches; SECURITY.md §3 lacks manufacturer_settings.write), XML DTD + PDF/ZIP polyglot refusal, per-IP login limit 20/min. Full 1731 pass / 1 fail (encrypted-PDF, reverted by design; affected tests re-run pass); negctl OK. Review running.
 - S11.3 review of fixes: MERGEABLE WITH MINORS → fixed (a7f7f6a). Full suite 1732 pass. PR #22 opened; waits for CI (D-N0).
+- S11.2 (P1, s11-perf): Docker Desktop died ~3 min into the 1M import (host failure, WSL distro stopped). I restarted Docker Desktop (`docker desktop restart`) and the stack; dev DB intact. One retry allowed; no 5M run. Perf test now pins the clock to 2026-07-10 so eligible lines are counted (930,149 expected per ground truth).
 
 ---
 
