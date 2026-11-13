@@ -494,3 +494,97 @@ def test_an_adjustment_item_is_matched_only_by_a_person_and_yields_no_finding(st
     assert final.status_code == 200, final.text
     got = [(f["case_type"], Decimal(f["amount"])) for f in final.json()["findings"]]
     assert got == [("unmatched_payment", Decimal("100.00"))]
+
+
+def _raw_confirmed(conn: Any, ws: Any, line_id: str, claim_line_id: str, amount: str) -> None:
+    """Insert a confirmed allocation straight into the table (the database invariants, without the service)."""
+    tenant = conn.execute(
+        text("SELECT tenant_id FROM remittance_lines WHERE id = :l"), {"l": line_id}
+    ).scalar_one()
+    mid = uuid.uuid4()
+    conn.execute(
+        text(
+            "INSERT INTO reconciliation_matches (tenant_id, id, match_id, remittance_line_id, claim_line_id, "
+            "allocated_amount, method, evidence, status, confirmed_by, confirmed_at) VALUES "
+            "(:t, :m, :m, :l, :c, :a, 'manual', '{}', 'confirmed', :u, now())"
+        ),
+        {"t": tenant, "m": mid, "l": line_id, "c": claim_line_id, "a": amount, "u": ws.user_id},
+    )
+
+
+def test_cross_batch_adjustment_allocation_never_frees_room_for_claim_lines_and_categorised_lines_stay_closed(
+    story: Story, admin_engine: Engine
+) -> None:
+    """Line 1 pays 200.00. A person gives 200.00 to INV-10010 and confirms the cross-batch ADJ -50.00 on it. A further
+    50.00 to INV-10011 would make claim parts 200.00 + 50.00 = 250.00 > 200.00: refused (409 match_invariant), although
+    the signed sum 200.00 - 50.00 + 50.00 = 200.00 would fit. The database trigger refuses the same insert.
+    Line 3 (300.00, within 5% of the 312.50 carrier claim by invoice + SKU + quantity) is only suggested (T3); once a
+    person categorises it, confirming the suggestion is refused (409 line_categorised), in the service and in the
+    database, and rejecting still works."""
+    ws, volt = story.ws, story.mfr["VOLT"]
+    carrier = story.lines["INV-10020"]
+    body = HEADER + (
+        "1,,,,,,200.00,,pays two claims\n2,,,,,,5.00,,x\n"
+        f"3,INV-10020,,BRK-3P-60A,{carrier['quantity']},,300.00,,near\n"
+    )
+    doc = ingest(
+        ws,
+        upload(ws, "guard.csv", body.encode(), CSV),
+        volt,
+        document_number="GUARD-1",
+        total_amount="505.00",
+    )
+    assert doc["status"] == "accepted"
+    reconcile(ws, doc["id"])
+    rows = view(ws, doc["id"])
+    assert rows[1]["state"] == "unmatched" and rows[3]["state"] == "suggested"
+    line1, line2, line3 = (rows[n]["line"]["id"] for n in (1, 2, 3))
+    a, b = story.lines["INV-10010"]["id"], story.lines["INV-10011"]["id"]
+
+    def post(**kw: str) -> Any:
+        return ws.api.post("/matches", json={"remittance_line_id": line1, **kw})
+
+    assert post(claim_line_id=a, allocated_amount="200.00").status_code == 201
+    assert post(claim_adjustment_id=story.adjustment["id"], allocated_amount="-50.00").status_code == 201
+    refused = post(claim_line_id=b, allocated_amount="50.00")
+    assert refused.status_code == 409 and refused.json()["error"]["code"] == "match_invariant"
+    with admin_engine.begin() as conn:
+        _raw_confirmed(conn, ws, line1, a, "0.00")  # no effect on the sum
+        sp = conn.begin_nested()
+        _raw_confirmed(conn, ws, line1, b, "50.00")
+        with pytest.raises(Exception, match="exceed the amount paid"):
+            conn.execute(text("SET CONSTRAINTS ALL IMMEDIATE"))
+        sp.rollback()
+    # categorisation is final: the suggestion on line 3 cannot be confirmed any more
+    (m,) = rows[3]["matches"]
+    assert m["status"] == "suggested"
+    assert (
+        ws.api.post(
+            f"/remittance-lines/{line3}/categorise", json={"category": "unmatched_payment"}
+        ).status_code
+        == 200
+    )
+    assert (
+        ws.api.post(
+            f"/remittance-lines/{line2}/categorise", json={"category": "unmatched_payment"}
+        ).status_code
+        == 200
+    )
+    held = ws.api.post(f"/matches/{m['id']}/confirm", headers={"If-Match": f'"{m["revision"]}"'})
+    assert held.status_code == 409 and held.json()["error"]["code"] == "line_categorised"
+    assert ws.api.get(f"/matches/{m['id']}").json()["status"] == "suggested"
+    with admin_engine.begin() as conn:
+        for sql in (
+            "UPDATE reconciliation_matches SET status = 'confirmed', revision = revision + 1, confirmed_by = :u, "
+            "confirmed_at = now() WHERE match_id = :m",
+            None,
+        ):
+            sp = conn.begin_nested()
+            with pytest.raises(Exception, match="categorised line"):
+                if sql:
+                    conn.execute(text(sql), {"u": ws.user_id, "m": m["id"]})
+                else:
+                    _raw_confirmed(conn, ws, line2, a, "1.00")
+            sp.rollback()
+    rejected = ws.api.post(f"/matches/{m['id']}/reject", headers={"If-Match": f'"{m["revision"]}"'})
+    assert rejected.status_code == 200 and rejected.json()["status"] == "rejected"

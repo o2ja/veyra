@@ -367,7 +367,7 @@ After a remittance document is finalised (no `suggested` matches left unresolved
 | `0 < paid < claimed − tol` | `short_paid` |
 | `paid = 0` and no rejection code on the remittance line (owner decision 2026-11-12) | `short_paid` (full `diff`, reason `short_paid_unexplained`) |
 | `paid > claimed + tol` | `overpaid` |
-| Remittance line with no accepted match, and a person categorised it; or the part of a line's `amount_paid` that its confirmed claim-line allocations do not cover (V2-style remainder; an allocation to an adjustment item is not cash on a claim line, so it never reduces the remainder; never above `amount_paid`) | `unmatched_payment` (never 0.00) |
+| Remittance line with no accepted match, and a person categorised it; or the part of a line's `amount_paid` that its confirmed claim-line allocations do not cover (V2-style remainder; an allocation to an adjustment item is not cash on a claim line, so it never reduces the remainder; never above `amount_paid`). Per remittance line, claim-line allocations plus same-batch adjustment allocations never exceed `amount_paid`; a cross-batch adjustment-item allocation is not counted, so it can never free room for claim lines (service and database trigger) | `unmatched_payment` (never 0.00) |
 | Submitted claim line, no remittance after `submitted_at + payment_lag_days_expected` (if configured) | `unpaid` |
 | Source row changed after claim | `source_changed` |
 
