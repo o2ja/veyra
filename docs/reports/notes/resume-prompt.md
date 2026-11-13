@@ -7,10 +7,11 @@ Read ONLY these: this file, docs/reports/STATUS_2026-11-12.md, docs/PROJECT_STAT
 First run `git worktree list`, `git status`, `gh pr list` and `git fetch`. Commit and push any leftovers.
 
 ## Update 2026-11-13 (overnight run) — read this first
-- Done: #18 merged; ADR-017/PRODUCTION_PLAN (managed S3). F2 finished s7-adjustments (17a70c9, full 1897 pass, negctl OK).
-- **HARD STOP D-N1** (financial discrepancy, netted-before-claim double correction; overnight-log.md item 3): s7-adjustments is NOT merged into s7-claims, #15 NOT merged, owner decides. S8/S9 can't reach main until then.
-- Running/branches: I1 s8-reconciliation, J1 s9-recovery, K1 s11-audit-seal (S11.1, from main). ui/qa-1 returned (antigravity-prompt-qa-1-fixes.md). ui/s7 waits for #15.
-- Next: S8/S9 reviews on branches (no merge to main while D-N1 open); S11 items independent of S7.
+State and decisions: `docs/reports/notes/overnight-log.md` MORNING SUMMARY (D-N0 CI billing, D-N1/D-N3 financial hard stops, D-N2, D-N4).
+- Merged: #18. Ready, waiting for CI: PR #20 (s11-docs-drill), PR #21 (s11-audit-seal). Merge each only with 6/6 green.
+- Held by D-N1/D-N3: s7-adjustments 17a70c9 → s7-claims/#15; s8-reconciliation edaa230 (re-chained, 1 head).
+- s9-recovery (stacked on S8): 2nd-pass serious N1 + negctl fixes by J1; then a 2nd-pass check of that diff. s10-reporting (stacked on S9): S10 core backend by M1.
+- Agents die with the session: relaunch from the branch resume notes (`<branch>-resume.md`, `docs/reports/notes/<id>-*.md`).
 
 ## Next steps, in order
 1. **PR #18 (s11-ops, 9c7ba2c):** it is ready, with three security passes and CI green. Merge it if the owner has allowed `gh pr merge`; otherwise ask the owner to merge it.
