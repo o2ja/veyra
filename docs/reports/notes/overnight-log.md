@@ -2,15 +2,18 @@
 
 ## MORNING SUMMARY
 1. **Merged:** #18 S11 ops (c7d014b). ADR-017 + new `docs/PRODUCTION_PLAN.md`: managed S3-compatible storage in production (e5f0918).
-2. **In progress:** s7-adjustments (fix verification).
+2. **In progress:** builders F2 `s7-adjustments`, I1 `s8-reconciliation`, J1 `s9-recovery` (sonnet). `ui/qa-1` returned to Antigravity (Playwright 8/18 fail).
 3. **Needs your decision:** none yet.
-4. **Failures / findings / discrepancies:** none yet.
-5. **Antigravity prompts ready:** `antigravity-prompt-qa-1.md` (from 2026-11-12).
+4. **Failures / findings / discrepancies:** ui/qa-1 Playwright: qa-admin, qa-agreements, qa-auth, qa-calculations, qa-files (axe `dl`), qa-imports, a11y fail; lint/typecheck/vitest pass. Not merged.
+5. **Antigravity prompts ready:** `antigravity-prompt-qa-1-fixes.md` (ui/qa-1 round 2).
 6. **Resume:** `docs/reports/notes/resume-prompt.md`, step 2 (s7-adjustments).
 
 ## Log
 - Merged PR #18 (6/6 checks green, third security pass MERGEABLE).
 - Owner storage decision recorded (ADR-017, PRODUCTION_PLAN.md, OD-3/OD-4 rows). PRODUCTION_PLAN.md did not exist; created it short.
+- Stack was down; started it (compose --profile s2 up -d, no rebuild).
+- Launched builders F2, I1, J1 (own test DBs; F2 owns negctl).
+- ui/qa-1: merged main in (ec83e66); lint/typecheck/vitest PASS; Playwright 18 specs in batches of 4: 10 pass, 8 fail (Antigravity had not run Playwright). Fix prompt eeea8e1.
 
 ---
 
