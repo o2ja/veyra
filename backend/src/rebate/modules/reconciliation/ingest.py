@@ -245,17 +245,18 @@ def create(db: Session, who: Who, body: Any) -> tuple[RemittanceDocument, UUID]:
                 "AI processing is not enabled for this workspace; upload the remittance as CSV or XLSX."
             )
         extraction_id = new_id()
-        db.add(
-            DocumentExtraction(
+        # column list = the INSERT grant of rebate_app: it can queue a request, never write a result
+        db.execute(
+            insert(DocumentExtraction).values(
                 tenant_id=t,
                 id=extraction_id,
                 file_id=file.id,
                 kind="remittance",
                 status="queued",
                 created_by=who.user_id,
+                created_at=clock.now(),
             )
         )
-        db.flush()
     doc = RemittanceDocument(
         tenant_id=t,
         id=new_id(),

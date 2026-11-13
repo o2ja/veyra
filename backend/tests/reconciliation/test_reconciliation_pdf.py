@@ -76,7 +76,7 @@ def step(payload: dict[str, Any]) -> Any:
 
 def test_a_pdf_remittance_needs_ai_processing_to_be_enabled(story: Story) -> None:
     ws, volt = story.ws, story.mfr["VOLT"]
-    r = create(ws, upload(ws, "cm-7781.pdf", PDF_BYTES, PDF), volt)
+    r = create(ws, upload(ws, "cm-7781-off.pdf", PDF_BYTES + b"\n%0", PDF), volt)
     assert r.status_code == 409 and r.json()["error"]["code"] == "ai_not_enabled"
     set_ai(ws, True)
 
