@@ -7,7 +7,7 @@ Sources: `docs/PRODUCT_REQUIREMENTS.md` section 1.4, `backend/src/rebate/modules
 ## Steps
 
 1. **Agree scope.** Which manufacturers, which agreement types (SPA or rebate), which period. Confirm there is no card or bank account data in the files; do not send any.
-2. **Create the workspace and users.** The first person registers (becomes admin), sets business time zone, MFA, four-eyes and retention in Settings, then invites the others with the right roles (`USER_GUIDE.md`).
+2. **Create the workspace and users.** The first person registers (becomes admin), sets business time zone, MFA, four-eyes and retention in Settings (retention is stored; automatic deletion is not in Release 1 yet), then invites the others with the right roles (`USER_GUIDE.md`).
 3. **Master data.** Import customers, products, unit conversions; create manufacturers and set each one's claim window (days and basis) and tolerance. Resolve the Unmapped queue.
 4. **History.** Import sales lines (invoices and credit notes) and purchase lines for the rebate period. Start with a one-month sample, fix mapping issues, then load the rest.
 5. **Agreements.** Enter each agreement as a draft (manual, SPA items spreadsheet, or AI extraction only if enabled), validate, have an approver approve it.
@@ -26,7 +26,7 @@ General, for every file: CSV (UTF-8, UTF-8 BOM, Windows-1252 or UTF-16 with BOM)
 | **Unit conversions** | from unit, to unit, factor | SKU (blank = applies to all products) |
 | **Sales lines** | document number, line number, invoice date, customer code, SKU, quantity, unit of measure, unit price, extended amount | document type (invoice or credit note), ship date, customer name, branch code, description, unit cost, replacement cost, SPA reference, project reference, currency, original document and line number (credit notes) |
 | **Purchase lines** | document number, line number, document date, manufacturer code, SKU, quantity, unit of measure, unit cost, extended amount | document type (receipt or vendor credit), PO number, currency |
-| **SPA items** (spreadsheet template) | SKU, customer scope, deviated cost, reference cost, sell price, quantity cap as applicable per agreement | see `docs/TEST_DATA_SPEC.md` for the sample layout |
+| **SPA items** (spreadsheet template) | SKU (required); optional as the agreement type needs: deviated cost, reference cost, sell price, rate, flat amount, max quantity, claim unit. Customer scope is set on the draft, not in the file | see `docs/TEST_DATA_SPEC.md` for the sample layout |
 | **Agreement documents** | the signed agreement or amendment as PDF or spreadsheet, all pages | the manufacturer's terms letter, tier tables |
 
 Points to confirm with the customer before the first import:

@@ -28,7 +28,7 @@ All settings are environment variables read by `backend/src/rebate/core/config.p
 - `ENCRYPTION_KEYS` encrypts MFA secrets. Keep an offline copy: losing it locks every MFA user out. The first key is active; the rest only decrypt.
 - AI is **off** unless `LLM_PROVIDER`, `LLM_API_KEY` and model names are set **and** a workspace admin turns on "Allow AI document reading" in Settings. Provider terms (OD-2) are not approved yet.
 - Staging and production refuse to start without S3 credentials or with a non-https public S3 endpoint.
-- Workspace settings (admin, in the app under Settings): business time zone, MFA required, four-eyes required, AI processing, retention years.
+- Workspace settings (admin, in the app under Settings): business time zone, MFA required, four-eyes required, AI processing, retention years (stored; automatic deletion is not in Release 1 yet).
 - Secret rotation: `infra/runbooks/secret-rotation.md`.
 
 ## 4. Jobs and dead letters

@@ -21,12 +21,12 @@ The menu only shows what your role may open, and the server checks again on ever
 - Passwords need at least 12 characters and are checked against a list of common passwords.
 - **MFA** (authenticator app) is required by default. At first sign-in you set it up and get 10 one-time recovery codes: store them safely. Admins cannot reset MFA in the app; ask your operator (`infra/runbooks/locked-out-admin.md`).
 - Sessions end after 30 idle minutes or 12 hours.
-- Forgot password: use the link on the login page. After 5 failed sign-ins the account locks for 15 minutes.
+- Forgot password: use the link on the login page. After 5 failed attempts (password or MFA) the account locks for 15 minutes, longer on repeated lockouts.
 - Invitations: an admin invites by email (Invitations page); you accept through the link. Password, email change and recovery codes are under Account security.
 
 ## 3. Files
 
-Files page: upload `.csv`, `.xlsx` or `.pdf` (spreadsheets up to 50 MB, PDF up to 25 MB). Every file is virus-scanned first and is usable only when its status is clean. Other file types are refused.
+Files page: upload imports as `.csv` or `.xlsx`, agreements as `.pdf` or `.xlsx` (spreadsheets up to 50 MB, PDF up to 25 MB). Every file is virus-scanned first and is usable only when its status is clean. Other file types are refused.
 
 ## 4. Master data
 

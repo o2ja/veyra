@@ -4,12 +4,12 @@ Veyra Recover is a multi-tenant web service for rebate and claim recovery. This 
 
 ## Built and covered by automated tests
 
-**Your data is separated from other customers.** Every customer table carries the workspace id and is protected by PostgreSQL row level security, which is enabled and forced. The application database role cannot bypass it, and the service refuses to start if it could. Background jobs set the workspace context before touching data. A test suite tries every route, job and file link across the workspace boundary on every build (`backend/tests/isolation/`). Another workspace's records return "not found".
+**Your data is separated from other customers.** Every customer table carries the workspace id and is protected by PostgreSQL row level security, which is enabled and forced. The application database role cannot bypass it, and the service refuses to start if it could. Background jobs set the workspace context before touching data. A test suite tries every route that takes a record id, plus list endpoints, jobs and file links, across the workspace boundary on every build. Another workspace's records return "not found".
 
 **Sign-in.**
 - Passwords of at least 12 characters, hashed with Argon2id, checked against a bundled list of common passwords.
 - Two-factor sign-in (authenticator app) on by default, with one-time recovery codes. MFA secrets are encrypted in the database.
-- Accounts lock for 15 minutes after 5 failed attempts. Login, reset and invitation responses do not reveal whether an account exists.
+- After 5 failed attempts (password or MFA) the account locks for 15 minutes, longer on repeated lockouts. Login, reset and invitation responses do not reveal whether an account exists.
 - Sessions use a random token in a secure, HttpOnly cookie; only a hash is stored. They expire after 30 idle minutes or 12 hours, and are revoked on logout, password reset and email change. CSRF tokens protect every change request.
 - Changing an email address needs your password and a current MFA code.
 
@@ -19,13 +19,13 @@ Veyra Recover is a multi-tenant web service for rebate and claim recovery. This 
 
 **Audit log.** Sign-ins, user and role changes, settings changes, file uploads and downloads, imports, agreement approvals, calculation runs and AI use are recorded with who, what and when, in the same database transaction as the change. Admins, approvers and viewers can read it.
 
-**Web protections.** HTTPS with HSTS, a strict content security policy and frame blocking are set by the reverse proxy configuration (`infra/caddy/Caddyfile`). Input is validated on the server. Logs avoid request bodies, passwords, tokens and file contents.
+**Web protections.** HTTPS with HSTS, a strict content security policy and frame blocking are set by the reverse proxy. Input is validated on the server. Logs avoid request bodies, passwords, tokens and file contents.
 
 **AI.** AI only reads agreement documents and proposes a draft; it never decides eligibility or amounts, and a person approves every agreement. It is **off by default**: it needs your admin's opt-in and the operator's provider configuration. Document text is treated as untrusted (prompt-injection attempts are tested against a synthetic document). AI calls run through a restricted database role.
 
 ## Backups
 
-Nightly logical backup and restore scripts exist and were run and timed on the development stack (2026-11-13, `docs/reports/RESTORE_DRILL_2026-11-13.md`). Not yet in place: scheduled production backups, encrypted off-site copies, point-in-time recovery (written as configuration only, never run), and a restore drill on production-sized data. Targets under discussion: recovery point 15 minutes, recovery time 4 hours. These are targets, not commitments.
+Logical backup and restore scripts exist (not yet scheduled) and were run and timed on the development stack (2026-11-13). Not yet in place: scheduled production backups, encrypted off-site copies, point-in-time recovery (written as configuration only, never run), and a restore drill on production-sized data. Targets under discussion: recovery point 15 minutes, recovery time 4 hours. These are targets, not commitments.
 
 ## Not in Release 1 yet, or not yet done
 
