@@ -16,14 +16,16 @@ import pytest
 from fastapi import FastAPI
 from sqlalchemy import Engine, text
 
+from rebate.core.db import transaction
+from rebate.core.figures import Filter
 from rebate.modules.files import storage
+from rebate.modules.reporting import service
 from tests.conftest import DbUrls
 from tests.integration.agreements_support import member
 from tests.integration.calc_support import LATE_RETURN, SCENARIOS
 from tests.reconciliation.support import (
     CSV,
     EXPECTED,
-    FIXTURE,
     Story,
     build_story,
     ingest,
@@ -44,9 +46,9 @@ SHARED: dict[str, Any] = {}
 CLAIMED = D("10410.00") + D(
     "312.50"
 )  # the seven fixture lines (sum of claim_batches_fixture.json) + INV-10020/1
-COLLECTED = (
-    D("2050.00") + D("3120.00") + D("0.00") + D("250.00")
-)  # confirmed lines 1-4 on claim lines; line 5 is only suggested
+# confirmed allocations to claim lines: lines 1-3 as paid, line 4's 250.00 (its -50.00 goes to the adjustment), and
+# line 5's subset 1000.00 + 1100.00 once the person confirmed it (7,545.00 - 75.00 unmatched + 50.00 netted)
+COLLECTED = D("2050.00") + D("3120.00") + D("0.00") + D("250.00") + D("1000.00") + D("1100.00")
 SHORT_PAID = (
     D("150.00") + D("2080.00") + D("660.00")
 )  # short_paid + rejected + unpaid; the 75.00 unmatched payment is not owed to us
@@ -58,16 +60,18 @@ EXPIRING_LATER = D("150.00") + D("2080.00")  # known deadline 2026-09-29 within 
 
 
 class Env:
-    def __init__(self, app: FastAPI, stack: ExitStack, clock: FakeClock, engine: Engine) -> None:
-        self.app, self.stack, self.clock, self.engine = app, stack, clock, engine
+    def __init__(
+        self, app: FastAPI, stack: ExitStack, clock: FakeClock, engine: Engine, admin: Engine
+    ) -> None:
+        self.app, self.stack, self.clock, self.engine, self.admin = app, stack, clock, engine, admin
 
 
 @pytest.fixture(scope="module")
-def env(migrated_db: DbUrls, app_engine: Engine) -> Iterator[Env]:
+def env(migrated_db: DbUrls, app_engine: Engine, admin_engine: Engine) -> Iterator[Env]:
     app = make_app(migrated_db.app)
     with fake_clock() as fc, ExitStack() as stack:
         fc.t = NOW
-        yield Env(app, stack, fc, app_engine)
+        yield Env(app, stack, fc, app_engine, admin_engine)
 
 
 @pytest.fixture(scope="module")
@@ -84,6 +88,14 @@ def story(env: Env) -> Story:
         total_amount=EXPECTED["document_total"],
     )
     reconcile(ws, doc["id"])
+    suggested = [
+        x
+        for x in ws.api.get("/matches", params={"remittance_id": doc["id"]}).json()["data"]
+        if x["status"] == "suggested"
+    ]
+    (match,) = suggested
+    confirm = ws.api.post(f"/matches/{match['id']}/confirm", headers={"If-Match": f'"{match["revision"]}"'})
+    assert confirm.status_code == 200, confirm.text
     assert ws.api.post(f"/remittances/{doc['id']}/finalize", headers=key()).status_code == 200
     SHARED["doc"] = doc
     return s
@@ -133,7 +145,7 @@ def test_filters_narrow_the_figures(env: Env, story: Story) -> None:
         {"branch_id": str(uuid.uuid4())},
     ):
         zero = api.get("/dashboard", params=params).json()
-        assert set(zero["figures"].values()) == {"0.0000"}, params
+        assert {D(v) for v in zero["figures"].values()} == {D(0)}, params
     assert api.get("/dashboard", params={"nonsense": "1"}).status_code == 400
 
 
@@ -142,7 +154,7 @@ def test_every_figure_drills_to_rows_that_sum_to_it(env: Env, story: Story) -> N
     figures = api.get("/dashboard").json()["figures"]
     counts = {
         "claimed": 8,
-        "collected": 4,
+        "collected": 6,
         "short_paid": 3,
         "recovered": 0,
         "written_off": 0,
@@ -173,17 +185,26 @@ def test_every_figure_drills_to_rows_that_sum_to_it(env: Env, story: Story) -> N
 
 
 def test_figures_that_depend_on_the_date_follow_the_refresh_date(env: Env, story: Story) -> None:
+    # the session would expire at that date, so the service is called directly in a tenant transaction
+    tenant = uuid.UUID(story.ws.tenant_id)
     env.clock.t = datetime(2026, 9, 20, 12, 0, tzinfo=UTC)
     try:
-        body = refresh(env, story)
-        assert body["as_of_date"] == "2026-09-20"
-        assert D(body["figures"]["at_risk"]) == AT_RISK_LATER
-        assert D(body["figures"]["expiring"]) == EXPIRING_LATER
-        drill = story.ws.api.get("/dashboard/drilldown", params={"metric": "expiring"}).json()
-        assert sum(D(x["amount"]) for x in drill["data"]) == EXPIRING_LATER and drill["consistent"]
+        with transaction(env.engine, tenant) as db:
+            service.refresh(db, tenant)
+            body = service.dashboard(db, tenant, Filter())
+            drill = service.drilldown(db, tenant, "expiring", Filter(), None, 50)
     finally:
         env.clock.t = NOW
-    assert D(refresh(env, story)["figures"]["at_risk"]) == AT_RISK_NOW  # idempotent and re-datable
+    assert str(body["as_of_date"]) == "2026-09-20"
+    assert body["figures"]["at_risk"] == AT_RISK_LATER
+    assert body["figures"]["expiring"] == EXPIRING_LATER
+    assert sum(r.amount for r in drill["rows"]) == EXPIRING_LATER and drill["consistent"]
+    with transaction(
+        env.engine, tenant
+    ) as db:  # re-dated and idempotent: the same data again gives the same rows
+        service.refresh(db, tenant)
+        again = service.dashboard(db, tenant, Filter())
+    assert again["figures"]["at_risk"] == AT_RISK_NOW and again["figures"]["claimed"] == CLAIMED
 
 
 def _source_row_of(invoice: str, line: str = "1") -> int:
@@ -270,16 +291,13 @@ def test_unknown_ids_and_kinds_are_404_or_422(env: Env, story: Story) -> None:
     assert api.get(f"/trace/invoice/{uuid.uuid4()}").status_code == 422
 
 
-def _batch(api: Api, number: str) -> dict[str, Any]:
-    return next(
-        b
-        for b in api.get("/claim-batches", params={"limit": 50}).json()["data"]
-        if b["batch_number"] == number
-    )
+def _batch_of(story: Story, invoice: str) -> str:
+    """Id of the claim batch holding an invoice's claim line (the system numbers batches itself)."""
+    return str(_nodes(story.ws.api, "claim_line", story.lines[invoice]["id"])["claim_batch"][0]["id"])
 
 
 def _file(env: Env, file_id: str) -> bytes:
-    with env.engine.connect() as conn:
+    with env.admin.connect() as conn:
         row = conn.execute(
             text("SELECT storage_key, kind FROM file_objects WHERE id = :i"), {"i": file_id}
         ).one()
@@ -289,7 +307,7 @@ def _file(env: Env, file_id: str) -> bytes:
 
 def test_the_audit_pack_ties_to_the_batch_and_shows_payments(env: Env, story: Story) -> None:
     api = story.ws.api
-    batch = _batch(api, FIXTURE["batch_number"])
+    batch = {"id": _batch_of(story, "INV-10001")}
     r = api.get(f"/reports/claim-batches/{batch['id']}/audit-pack", params={"format": "csv"})
     assert r.status_code == 202, r.text
     drain(env.app)
@@ -297,15 +315,13 @@ def test_the_audit_pack_ties_to_the_batch_and_shows_payments(env: Env, story: St
     assert len(rows) == 7
     assert sum(D(x["Claim amount"]) for x in rows) == D("10410.00")  # Σ of the fixture lines
     by_invoice = {x["Invoice"]: x for x in rows}
-    paid = {"INV-10001": "2050.00", "INV-10010": "3120.00", "INV-10011": "0.00", "INV-10021": "250.00"}
-    for invoice, amount in paid.items():  # ground truth lines 1-4; the rest are unpaid or only suggested
+    paid = {"INV-10001": "2050.00", "INV-10010": "3120.00", "INV-10011": "0.00", "INV-10021": "250.00",
+            "INV-10050": "1000.00", "INV-10051": "1100.00"}  # fmt: skip
+    for invoice, amount in paid.items():  # ground truth lines 1-5
         assert D(by_invoice[invoice]["Paid (confirmed)"]) == D(amount), invoice
         assert by_invoice[invoice]["Remittance documents"] == "CM-7781"
-    for invoice in ("INV-10050", "INV-10051", "INV-10060"):
-        assert (
-            D(by_invoice[invoice]["Paid (confirmed)"]) == 0
-            and by_invoice[invoice]["Remittance documents"] == ""
-        )
+    assert D(by_invoice["INV-10060"]["Paid (confirmed)"]) == 0  # the unpaid line
+    assert by_invoice["INV-10060"]["Remittance documents"] == ""
     first = by_invoice["INV-10001"]
     assert (first["Source file"], first["Source row"]) == ("sales_part.csv", str(_source_row_of("INV-10001")))
     assert (
@@ -314,7 +330,7 @@ def test_the_audit_pack_ties_to_the_batch_and_shows_payments(env: Env, story: St
     )
     # the second batch carries the -50.00 return reversal, which was netted on remittance line 4 (hand: 250.00 - 50.00)
     second = api.get(
-        f"/reports/claim-batches/{_other_batch(api, batch['id'])}/audit-pack", params={"format": "xlsx"}
+        f"/reports/claim-batches/{_batch_of(story, 'INV-10020')}/audit-pack", params={"format": "xlsx"}
     )
     drain(env.app)
     assert second.status_code == 202 and _file(env, second.json()["file_id"])[:2] == b"PK"
@@ -324,14 +340,6 @@ def test_the_audit_pack_ties_to_the_batch_and_shows_payments(env: Env, story: St
     assert (
         api.get(f"/reports/claim-batches/{batch['id']}/audit-pack", params={"format": "pdf"}).status_code
         == 422
-    )
-
-
-def _other_batch(api: Api, first_id: str) -> str:
-    return next(
-        b["id"]
-        for b in api.get("/claim-batches", params={"limit": 50}).json()["data"]
-        if b["id"] != first_id and b["status"] == "submitted"
     )
 
 
@@ -353,7 +361,7 @@ def test_roles_viewers_follow_every_number_and_only_writers_refresh(env: Env, st
             assert who.get("/dashboard/drilldown", params={"metric": metric}).status_code == 200
         assert who.get(f"/trace/claim_line/{line}").status_code == 200
         assert who.get(f"/trace/variance_case/{case}").status_code == 200
-    batch = _batch(admin, FIXTURE["batch_number"])["id"]
+    batch = _batch_of(story, "INV-10001")
     assert viewer.post("/dashboard/refresh").status_code == 403  # writes by a viewer are always denied
     assert analyst.post("/dashboard/refresh").status_code == 202
     assert viewer.get(f"/reports/claim-batches/{batch}/audit-pack").status_code == 202  # A P V
