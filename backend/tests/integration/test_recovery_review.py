@@ -196,7 +196,7 @@ def test_reminders_skip_a_member_who_left_and_state_the_days_really_left(
     with transaction(env.engine, cases.story.tenant) as db:
         rows = db.execute(text("SELECT user_id, title FROM notifications ORDER BY title")).all()
     assert [str(r.user_id) for r in rows] == [str(cases.story.user)]  # nothing for the ex-member
-    assert rows[0].title.startswith("Unmatched payment 75.00") and rows[0].title.endswith(
+    assert rows[0].title.startswith("Unmatched payment 75.00 (") and rows[0].title.endswith(
         "deadline in 2 days"
     )
     assert digests(approver_mail) == []

@@ -9,6 +9,7 @@
 """
 
 from datetime import date, datetime, time, timedelta
+from decimal import ROUND_HALF_UP, Decimal
 from uuid import UUID
 from zoneinfo import ZoneInfo
 
@@ -54,9 +55,9 @@ def _recipients(db: Session, tenant: UUID, owner: UUID | None) -> list[UUID]:
     )
 
 
-def _title(case_type: str, amount: object, manufacturer: str, days: int) -> str:
+def _title(case_type: str, amount: Decimal, manufacturer: str, days: int) -> str:
     when = "today" if days == 0 else "tomorrow" if days == 1 else f"in {days} days"
-    return f"{case_type.replace('_', ' ').capitalize()} {amount:.2f} ({manufacturer}): deadline {when}"
+    return f"{case_type.replace('_', ' ').capitalize()} {amount.quantize(Decimal('0.01'), ROUND_HALF_UP)} ({manufacturer}): deadline {when}"
 
 
 @job(service.SWEEP_JOB, tenant_scoped=True, on_dead=lambda db, ctx: _sweep_died(db, ctx))
