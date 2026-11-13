@@ -9,7 +9,7 @@ First run `git worktree list`, `git status`, `gh pr list` and `git fetch`. Commi
 ## Update 2026-11-13 (overnight run) — read this first
 State and decisions: `docs/reports/notes/overnight-log.md` MORNING SUMMARY (D-N0 CI billing, D-N1/D-N3 financial hard stops, D-N2, D-N4).
 - Merged: #18. Ready, waiting for CI: PR #20 (s11-docs-drill), PR #21 (s11-audit-seal), PR #22 (s11-security). Merge each only with 6/6 green; re-chain migrations at merge (#21 adds 20261115_0900_audit_seals on calc_runs).
-- s11-perf: S11.2 measurement by P1 (in progress).
+- s11-perf: S11.2 blocked (local Docker VM dies on the 1M import; D-N9).
 - Held by D-N7: s10-reporting c9f971f (stacked on S9).
 - Held by D-N1/D-N3: s7-adjustments 17a70c9 → s7-claims/#15; s8-reconciliation edaa230 (re-chained, 1 head).
 - s9-recovery (stacked on S8): 2nd-pass serious N1 + negctl fixes by J1; then a 2nd-pass check of that diff. s10-reporting (stacked on S9): S10 core backend by M1.
