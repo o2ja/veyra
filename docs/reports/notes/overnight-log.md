@@ -35,6 +35,8 @@
 - ~05:00–06:00Z: Claude 5-hour usage limit hit; M1, J1 and a reviewer stopped, all resumed after reset. CI re-run at 06:01Z still refused (billing, D-N0).
 - K1 S11.1 fixes done (c434023): all 8 findings; full 1740 pass, negctl OK. 2nd-pass review running.
 - J1 S9 fixes done (fd2123e): S1–S4, M1–M6; full suite 2217 pass / 0 fail (no ignores), 1 alembic head. 2nd-pass review running; negctl on s9 running.
+- S11.1 2nd pass: **MERGEABLE WITH MINORS** (3 minor: document role-visibility limit of the settle check; log on deferred run; hook test bypasses queue). Ready to merge once CI runs (D-N0).
+- negctl on s9 (fd2123e): 4 misclassified isolation cases (2 S8 tables, 1 S9 table pass with RLS off; 2 S8 D9 cases fail without RLS). Test-only fix sent to J1.
 
 ---
 
