@@ -22,6 +22,7 @@ router = APIRouter(tags=["reporting"])
 READ = "report.read"
 FILTERS = ("manufacturer_id", "branch_id", "month")
 Limit = Annotated[int, Query(ge=1, le=200)]
+NO_QUERY = Depends(only_query_params())
 
 
 def _filter(manufacturer_id: UUID | None, branch_id: UUID | None, month: date | None) -> Filter:
@@ -74,15 +75,44 @@ def get_drilldown(
     return s.DrilldownOut(**out, data=[s.DrillRow.model_validate(r._mapping) for r in data], page=p)
 
 
-@router.get("/trace/{kind}/{ident}", operation_id="trace_get", dependencies=[Depends(only_query_params())])
-def get_trace(
-    request: Request,
-    kind: s.TraceKind,
-    ident: UUID,
-    principal: Annotated[Principal, Depends(require(READ))],
-) -> s.TraceOut:
+def _trace(request: Request, principal: Principal, kind: s.TraceKind, ident: UUID) -> s.TraceOut:
     chain = service.trace(ctx(request).db, tenant_of(principal), kind, ident)
     return s.TraceOut(kind=kind, id=ident, chain=[s.TraceNode.model_validate(n) for n in chain])
+
+
+# One route per kind (``/trace/{kind}/{id}`` of the API spec, with the kind fixed in the path).
+@router.get("/trace/claim_line/{claim_line_id}", operation_id="trace_claim_line", dependencies=[NO_QUERY])
+def trace_claim_line(
+    request: Request, claim_line_id: UUID, principal: Annotated[Principal, Depends(require(READ))]
+) -> s.TraceOut:
+    return _trace(request, principal, "claim_line", claim_line_id)
+
+
+@router.get(
+    "/trace/remittance_line/{remittance_line_id}",
+    operation_id="trace_remittance_line",
+    dependencies=[NO_QUERY],
+)
+def trace_remittance_line(
+    request: Request, remittance_line_id: UUID, principal: Annotated[Principal, Depends(require(READ))]
+) -> s.TraceOut:
+    return _trace(request, principal, "remittance_line", remittance_line_id)
+
+
+@router.get("/trace/variance_case/{case_id}", operation_id="trace_variance_case", dependencies=[NO_QUERY])
+def trace_variance_case(
+    request: Request, case_id: UUID, principal: Annotated[Principal, Depends(require(READ))]
+) -> s.TraceOut:
+    return _trace(request, principal, "variance_case", case_id)
+
+
+@router.get(
+    "/trace/calculation_result/{result_id}", operation_id="trace_calculation_result", dependencies=[NO_QUERY]
+)
+def trace_calculation_result(
+    request: Request, result_id: UUID, principal: Annotated[Principal, Depends(require(READ))]
+) -> s.TraceOut:
+    return _trace(request, principal, "calculation_result", result_id)
 
 
 @router.get(

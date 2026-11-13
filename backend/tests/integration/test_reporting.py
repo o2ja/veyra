@@ -288,7 +288,8 @@ def test_unknown_ids_and_kinds_are_404_or_422(env: Env, story: Story) -> None:
     api = story.ws.api
     assert api.get(f"/trace/claim_line/{uuid.uuid4()}").status_code == 404
     assert api.get(f"/trace/variance_case/{uuid.uuid4()}").status_code == 404
-    assert api.get(f"/trace/invoice/{uuid.uuid4()}").status_code == 422
+    assert api.get(f"/trace/invoice/{uuid.uuid4()}").status_code == 404  # only the four kinds exist
+    assert api.get("/trace/claim_line/not-a-uuid").status_code == 422
 
 
 def _batch_of(story: Story, invoice: str) -> str:

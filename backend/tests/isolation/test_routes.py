@@ -15,7 +15,9 @@ from fastapi.routing import APIRoute
 from sqlalchemy import Engine, text
 
 from rebate.api.app import MODULE_ROUTERS
+from rebate.core.db import transaction
 from rebate.modules.files import storage
+from rebate.modules.reporting import service
 from tests.conftest import DbUrls
 from tests.integration.agreements_support import activate, payload
 from tests.integration.conftest import Workspace, clean_file, import_file, put, run_import, seed_master, walk
@@ -308,7 +310,12 @@ def _claim_line(admin: Engine, side: Side) -> uuid.UUID:
         )
 
 
-S8_PARAMS = ("remittance_id", "match_id")
+S8_PARAMS = (
+    "remittance_id",
+    "match_id",
+    "remittance_line_id",
+    "claim_line_id",
+)  # the last two: S10 trace routes
 S6_PARAMS = ("extraction_id",)
 S9_PARAMS = ("case_id", "notification_id")
 S7_PARAMS = ("batch_id", "export_template_id", "adjustment_id")
@@ -742,3 +749,30 @@ def test_s9_foreign_cases_and_notifications_are_unreachable(sides: tuple[Side, S
     assert b.api.get(f"/cases/{b.s9['case_id']}").json()["revision"] == 1
     assert b.api.get(f"/cases/{b.s9['case_id']}/events").json()["data"] == []
     assert [n["read_at"] for n in b.api.get("/notifications").json()["data"]] == [None]
+
+
+def test_s10_dashboard_drilldown_and_trace_never_show_the_other_tenant(
+    sides: tuple[Side, Side], app_engine: Engine
+) -> None:
+    """Each side has one unpaid case of 1.00 (no deadline): a leak would show 2.00 or the other's case id."""
+    a, b = sides
+    for side in (a, b):
+        with transaction(app_engine, uuid.UUID(side.tenant_id)) as db:
+            service.refresh(db, uuid.UUID(side.tenant_id))
+    for own, other in ((a, b), (b, a)):
+        body = own.api.get("/dashboard").json()
+        assert [body["figures"][m] for m in ("short_paid", "at_risk")] == ["1.0000", "1.0000"]
+        assert len(body["months"]) == 1
+        drill = own.api.get("/dashboard/drilldown", params={"metric": "short_paid"}).json()
+        assert [x["trace_id"] for x in drill["data"]] == [own.s9["case_id"]], "A sees exactly its own case"
+        assert drill["total"] == "1.0000" and drill["consistent"] is True
+        foreign = {"manufacturer_id": other.s3["manufacturer_id"]}
+        assert set(own.api.get("/dashboard", params=foreign).json()["figures"].values()) == {"0"}
+        assert (
+            own.api.get("/dashboard/drilldown", params={"metric": "short_paid", **foreign}).json()["data"]
+            == []
+        )
+        assert own.api.get(f"/trace/variance_case/{other.s9['case_id']}").status_code == 404
+        assert own.api.get(f"/reports/claim-batches/{other.s7['batch_id']}/audit-pack").status_code == 404
+        mine = own.api.get(f"/trace/variance_case/{own.s9['case_id']}").json()["chain"]
+        assert {n["id"] for n in mine if n["kind"] == "claim_line"} <= {own.s8["claim_line_id"]}
