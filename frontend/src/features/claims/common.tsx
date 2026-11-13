@@ -38,32 +38,26 @@ export function ClaimsNav() {
 
 export function ValidationDetailsAlert({ error }: { error: ApiError | null | undefined }) {
   if (!error) return null;
-  const extraBatchId = (error as unknown as { batch_id?: string }).batch_id;
   return (
     <div className="flex flex-col gap-2">
       <ErrorAlert error={error} />
-      {extraBatchId && (
-        <div className="text-xs">
-          <Link to={`/claims/batches/${extraBatchId}`} className="font-medium text-brand underline">
-            View batch
-          </Link>
-        </div>
-      )}
       {error.details.length > 0 && (
         <Alert>
           <ul className="list-disc pl-5 text-xs">
             {error.details.map((d, idx) => {
-              const detailBatchId = (d as unknown as { batch_id?: string }).batch_id;
+              const extra = d as unknown as { batch_id?: string; entry_id?: string; adjustment_id?: string };
+              const subject = extra.adjustment_id ?? extra.entry_id;
               return (
                 <li key={`${d.field}-${d.code}-${idx}`}>
                   {d.field ? `${d.field}: ` : ""}
+                  {subject && <span className="font-mono">{subject}: </span>}
                   {d.message}
-                  {detailBatchId && (
+                  {extra.batch_id && (
                     <>
                       {" "}
                       —{" "}
                       <Link
-                        to={`/claims/batches/${detailBatchId}`}
+                        to={`/claims/batches/${extra.batch_id}`}
                         className="font-medium text-brand underline"
                       >
                         View batch

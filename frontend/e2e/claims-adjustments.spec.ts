@@ -31,6 +31,26 @@ async function importFile(page: Page, type: string, relPath: string) {
   await expect(page.getByRole("heading", { name: "Result" })).toBeVisible({ timeout: 120_000 });
 }
 
+const escapeRe = (t: string) => t.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+
+/** Digit grouping only, the same display rule as the UI (no arithmetic). */
+function grouping(value: string): string {
+  const [int = "", frac] = value.split(".");
+  const grouped = int.replace(/\B(?=(\d{3})+(?!\d))/g, ",");
+  return frac === undefined ? grouped : `${grouped}.${frac}`;
+}
+
+async function setAllowNegativeClaims(page: Page, manufacturerName: string, on: boolean) {
+  await page.goto("/master-data/manufacturers");
+  await page
+    .getByRole("table", { name: "Manufacturers" })
+    .getByRole("link", { name: manufacturerName })
+    .click();
+  await page.getByLabel("Allow negative claims").setChecked(on);
+  await page.getByRole("button", { name: "Save settings" }).click();
+  await expect(page.getByText("Settings saved.")).toBeVisible();
+}
+
 async function noViolations(page: Page, name: string) {
   const result = await new AxeBuilder({ page })
     .withTags(["wcag2a", "wcag2aa", "wcag21a", "wcag21aa"])
@@ -180,25 +200,32 @@ test("S7 claims adjustments: queue, four-eyes approval, rejection, carry into ba
   await expect(approver1Page.getByText("Draft approved.")).toBeVisible();
 
   // 6. First calculation run
+  const volt = (truth("master_manufacturers.json") as Manufacturer[]).find((m) => m.code === "VOLT");
+  if (!volt) throw new Error("VOLT manufacturer missing from ground truth");
+  const voltLabel = `${volt.name} (${volt.code})`;
+
   await page.getByRole("link", { name: "Calculations" }).click();
   await page.getByLabel("Date from").fill("2026-01-01");
   await page.getByLabel("Date to").fill("2026-12-31");
   await page.getByRole("button", { name: "Start calculation run" }).click();
 
   const runsTable = page.getByRole("table", { name: "Calculation runs" });
-  const firstRunRow = runsTable.locator("tbody tr").first();
+  const firstRunRow = runsTable.getByRole("row").nth(1);
   await expect(firstRunRow).toBeVisible({ timeout: 30_000 });
-  await expect(firstRunRow.locator("td").nth(1)).toHaveText("Completed", { timeout: 180_000 });
+  await expect(firstRunRow).toContainText("Completed", { timeout: 180_000 });
 
   // 7. Initial missed claims batch creation and submission
   await page.getByRole("link", { name: "Claims" }).click();
   await expect(page).toHaveURL("/claims/missed");
-  await page.getByLabel("Manufacturer").selectOption({ index: 1 });
+  await page.getByLabel("Manufacturer").selectOption({ label: voltLabel });
   await page.getByRole("button", { name: "Apply filters" }).click();
 
   const linesTable = page.getByRole("table", { name: "Missed claim lines" });
   await expect(linesTable).toBeVisible();
-  await linesTable.locator("tbody tr input[type='checkbox']").first().check();
+  await linesTable
+    .getByRole("checkbox", { name: /^Select / })
+    .first()
+    .check();
 
   await page.getByRole("button", { name: /Create batch from selected/ }).click();
   const createDialog = page.getByRole("dialog");
@@ -231,45 +258,68 @@ test("S7 claims adjustments: queue, four-eyes approval, rejection, carry into ba
   await approver1Page.getByRole("button", { name: "Start calculation run" }).click();
 
   const runsTable2 = approver1Page.getByRole("table", { name: "Calculation runs" });
-  const run2Row = runsTable2.locator("tbody tr").first();
+  const run2Row = runsTable2.getByRole("row").nth(1);
   await expect(run2Row).toBeVisible({ timeout: 30_000 });
-  await expect(run2Row.locator("td").nth(1)).toHaveText("Completed", { timeout: 180_000 });
-  await run2Row.locator("td").first().getByRole("link").click();
+  await expect(run2Row).toContainText("Completed", { timeout: 180_000 });
+  await run2Row.getByRole("link").first().click();
 
   // On run detail: Propose adjustments (by Approver 1)
   const proposeBtn = approver1Page.getByRole("button", { name: "Propose adjustments" });
-  if (await proposeBtn.isVisible()) {
-    await proposeBtn.click();
-    await expect(approver1Page.getByText(/adjustments proposed/i)).toBeVisible({ timeout: 30_000 });
-  }
+  await expect(proposeBtn).toBeVisible();
+  await proposeBtn.click();
+  const proposedSummary = approver1Page.getByText(/adjustment\(s\)\s+proposed/);
+  await expect(proposedSummary).toBeVisible({ timeout: 30_000 });
+  const proposedCount = /(\d+)\s+adjustment\(s\)\s+proposed/.exec(await proposedSummary.innerText());
+  expect(proposedCount, "proposal count text").not.toBeNull();
+  expect(Number(proposedCount?.[1])).toBeGreaterThan(0);
 
-  // 9. Check Adjustments queue (/claims/adjustments)
+  // 9. Adjustments queue (/claims/adjustments)
   await analystPage.goto("/claims/adjustments");
   await expect(analystPage.getByRole("heading", { name: "Claim adjustments" })).toBeVisible();
   await noViolations(analystPage, "/claims/adjustments (analyst)");
 
-  // Analyst sees proposals under Proposed without Approve button
+  // Analyst sees proposals under Proposed without Approve or Reject buttons
   const adjTable = analystPage.getByRole("table", { name: "Claim adjustments" });
   await expect(adjTable).toBeVisible();
-  const firstAdjRow = adjTable.locator("tbody tr").first();
+  const firstAdjRow = adjTable.getByRole("row").nth(1);
   await expect(firstAdjRow).toBeVisible();
-  await expect(firstAdjRow.getByRole("button", { name: "Approve" })).toHaveCount(0);
+  await expect(firstAdjRow.getByRole("button", { name: /Approve/ })).toHaveCount(0);
+  await expect(firstAdjRow.getByRole("button", { name: /Reject/ })).toHaveCount(0);
 
-  // Read claim reference of first proposal
-  const firstClaimRef = (await firstAdjRow.locator("td").first().innerText()).trim();
+  // Claim reference of the first proposal (first cell of its row)
+  const firstClaimRef = (await firstAdjRow.getByRole("cell").first().innerText()).trim();
+  expect(firstClaimRef).not.toBe("");
+  const firstRefRe = new RegExp(escapeRe(firstClaimRef));
 
   // 10. Four-eyes gating: Approver 1 (proposer) sees Approve disabled
   await approver1Page.goto("/claims/adjustments");
-  const appr1Row = approver1Page.getByRole("row", { name: new RegExp(firstClaimRef) });
+  const appr1Row = approver1Page.getByRole("row", { name: firstRefRe });
   await expect(appr1Row).toBeVisible();
-  const appr1ApproveBtn = appr1Row.getByRole("button", { name: /Approve adjustment/ });
-  if (await appr1ApproveBtn.isVisible()) {
-    await expect(appr1ApproveBtn).toBeDisabled();
-  }
+  await expect(appr1Row.getByRole("button", { name: /Approve adjustment/ })).toBeDisabled();
 
-  // Approver 2 approves it
+  // 11. cannot_net_claim: with negative claims off, approving a negative return reversal is refused by the server
+  await setAllowNegativeClaims(page, volt.name, false);
   await approver2Page.goto("/claims/adjustments");
-  const appr2Row = approver2Page.getByRole("row", { name: new RegExp(firstClaimRef) });
+  await approver2Page.getByLabel("Manufacturer").selectOption({ label: voltLabel });
+  await approver2Page.getByLabel("Adjustment type").selectOption({ label: "Return reversal" });
+  const negativeRow = approver2Page
+    .getByRole("table", { name: "Claim adjustments" })
+    .getByRole("row", { name: /\s-\d/ })
+    .first();
+  await expect(negativeRow).toBeVisible();
+  await negativeRow.getByRole("button", { name: /Approve adjustment/ }).click();
+  const netDialog = approver2Page.getByRole("dialog");
+  await netDialog.getByRole("button", { name: "Confirm approval" }).click();
+  await expect(netDialog).toBeHidden();
+  // The server's own message (backend/src/rebate/modules/claims/adjustments.py, require_net_claimable)
+  await expect(
+    negativeRow.getByText("Discuss with the manufacturer; it does not accept negative claims."),
+  ).toBeVisible();
+  await setAllowNegativeClaims(page, volt.name, true);
+
+  // Approver 2 approves the first proposal
+  await approver2Page.goto("/claims/adjustments");
+  const appr2Row = approver2Page.getByRole("row", { name: firstRefRe });
   await expect(appr2Row).toBeVisible();
   const appr2ApproveBtn = appr2Row.getByRole("button", { name: /Approve adjustment/ });
   await expect(appr2ApproveBtn).toBeEnabled();
@@ -280,46 +330,59 @@ test("S7 claims adjustments: queue, four-eyes approval, rejection, carry into ba
   await approveAdjDialog.getByRole("button", { name: "Confirm approval" }).click();
   await expect(approveAdjDialog).toBeHidden();
 
-  // Verify it appears in Approved tab
-  await approver2Page.getByRole("tab", { name: "Approved" }).click();
-  await expect(approver2Page.getByRole("row", { name: new RegExp(firstClaimRef) })).toBeVisible();
+  // It appears in the Approved tab, reached with the keyboard (WAI-ARIA tabs)
+  await approver2Page.getByRole("tab", { name: "Proposed" }).focus();
+  await approver2Page.keyboard.press("ArrowRight");
+  await expect(approver2Page.getByRole("tab", { name: "Approved" })).toHaveAttribute("aria-selected", "true");
+  await expect(approver2Page.getByRole("row", { name: firstRefRe })).toBeVisible();
 
-  // 11. Rejection: Reject one adjustment, and it appears under Rejected
+  // 12. Rejection: reject another proposal, and it appears under Rejected
   await approver2Page.getByRole("tab", { name: "Proposed" }).click();
   const secondAdjRow = approver2Page
     .getByRole("table", { name: "Claim adjustments" })
-    .locator("tbody tr")
-    .first();
-  if (await secondAdjRow.isVisible()) {
-    const secondClaimRef = (await secondAdjRow.locator("td").first().innerText()).trim();
-    const rejectBtn = secondAdjRow.getByRole("button", { name: /Reject adjustment/ });
-    if (await rejectBtn.isVisible()) {
-      await rejectBtn.click();
-      const rejectDialog = approver2Page.getByRole("dialog");
-      await expect(rejectDialog).toBeVisible();
-      await rejectDialog.getByRole("button", { name: "Reject adjustment" }).click();
-      await expect(rejectDialog).toBeHidden();
+    .getByRole("row")
+    .nth(1);
+  await expect(secondAdjRow).toBeVisible();
+  const secondClaimRef = (await secondAdjRow.getByRole("cell").first().innerText()).trim();
+  expect(secondClaimRef).not.toBe("");
+  await secondAdjRow.getByRole("button", { name: /Reject adjustment/ }).click();
+  const rejectDialog = approver2Page.getByRole("dialog");
+  await expect(rejectDialog).toBeVisible();
+  await rejectDialog.getByRole("button", { name: "Reject adjustment" }).click();
+  await expect(rejectDialog).toBeHidden();
+  await approver2Page.getByRole("tab", { name: "Rejected" }).click();
+  await expect(approver2Page.getByRole("row", { name: new RegExp(escapeRe(secondClaimRef)) })).toBeVisible();
 
-      // Check Rejected tab
-      await approver2Page.getByRole("tab", { name: "Rejected" }).click();
-      await expect(approver2Page.getByRole("row", { name: new RegExp(secondClaimRef) })).toBeVisible();
-    }
-  }
+  // 13. Carry the approved adjustment into a batch. A second, stale page opened first keeps it selected.
+  const stalePage = await page.context().newPage();
+  await stalePage.goto("/claims/missed");
+  await stalePage.getByLabel("Manufacturer").selectOption({ label: voltLabel });
+  await stalePage.getByRole("button", { name: "Apply filters" }).click();
+  await stalePage
+    .getByRole("table", { name: "Adjustments to carry" })
+    .getByRole("row", { name: firstRefRe })
+    .getByRole("checkbox", { name: /Select adjustment / })
+    .check();
+  // a different line from the one the first page takes, so only the adjustment can conflict
+  await stalePage
+    .getByRole("table", { name: "Missed claim lines" })
+    .getByRole("checkbox", { name: /^Select / })
+    .nth(1)
+    .check();
 
-  // 12. Include approved adjustment into batch builder (/claims/missed)
   await page.goto("/claims/missed");
-  await page.getByLabel("Manufacturer").selectOption({ index: 1 });
+  await page.getByLabel("Manufacturer").selectOption({ label: voltLabel });
   await page.getByRole("button", { name: "Apply filters" }).click();
-
-  // Adjustments to carry section is visible
   const adjCarryTable = page.getByRole("table", { name: "Adjustments to carry" });
   await expect(adjCarryTable).toBeVisible();
-  const approvedAdjRow = adjCarryTable.getByRole("row", { name: new RegExp(firstClaimRef) });
+  const approvedAdjRow = adjCarryTable.getByRole("row", { name: firstRefRe });
   await expect(approvedAdjRow).toBeVisible();
-  await approvedAdjRow.locator("input[type='checkbox']").check();
-
-  // Select missed claim line
-  await linesTable.locator("tbody tr input[type='checkbox']").first().check();
+  await approvedAdjRow.getByRole("checkbox", { name: /Select adjustment / }).check();
+  await page
+    .getByRole("table", { name: "Missed claim lines" })
+    .getByRole("checkbox", { name: /^Select / })
+    .first()
+    .check();
   await page.getByRole("button", { name: /Create batch from selected/ }).click();
 
   const createBatchWithAdjDialog = page.getByRole("dialog");
@@ -335,21 +398,33 @@ test("S7 claims adjustments: queue, four-eyes approval, rejection, carry into ba
   await expect(carriedTable).toBeVisible();
   await expect(carriedTable.getByText(firstClaimRef)).toBeVisible();
 
-  // Batch total equals server total amount string
-  const totalAmountElem = page.getByText("Batch total (lines + carried adjustments, from server)");
-  await expect(totalAmountElem).toBeVisible();
+  // Batch total is the server string (digit grouping only, no arithmetic)
+  const res = await page.request.get(`/api/v1/claim-batches/${batchWithAdjId}`);
+  expect(res.ok()).toBe(true);
+  const serverTotal = ((await res.json()) as { total_amount: string }).total_amount;
+  const totalsCard = page
+    .getByRole("region")
+    .filter({ has: page.getByText("Batch total (lines + carried adjustments, from server)") });
+  await expect(totalsCard.getByText(grouping(serverTotal), { exact: true })).toBeVisible();
 
-  // 13. Including already included adjustment shows adjustment_already_included error
-  await page.goto("/claims/missed");
-  await page.getByLabel("Manufacturer").selectOption({ index: 1 });
-  await page.getByRole("button", { name: "Apply filters" }).click();
-  // If the same adjustment id was checked again, creating batch fails with 409 adjustment_already_included
-  await expect(page.getByRole("heading", { name: "Missed claims" })).toBeVisible();
-
-  // 14. cannot_net_claim warning badge test:
-  // For a manufacturer without allow_negative_claims, approving negative return reversal shows warning message
-  await page.goto("/master-data/manufacturers");
-  await expect(page.getByRole("heading", { name: "Manufacturers" })).toBeVisible();
+  // 14. adjustment_already_included: the stale page still has the adjustment selected
+  await stalePage.getByRole("button", { name: /Create batch from selected/ }).click();
+  await stalePage.getByRole("dialog").getByRole("button", { name: "Create batch" }).click();
+  await expect(stalePage.getByRole("dialog")).toBeHidden();
+  await expect(
+    stalePage
+      .getByRole("alert")
+      .filter({ hasText: "Some of these adjustments are already in a claim batch." }),
+  ).toBeVisible();
+  const includedAlert = stalePage
+    .getByRole("alert")
+    .filter({ hasText: "The adjustment is already in a claim batch." });
+  await expect(includedAlert).toBeVisible();
+  await expect(includedAlert.getByRole("link", { name: "View batch" })).toHaveAttribute(
+    "href",
+    `/claims/batches/${batchWithAdjId}`,
+  );
+  await stalePage.close();
 
   // Cleanup contexts
   await approver1Ctx.close();

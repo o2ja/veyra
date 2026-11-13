@@ -84,24 +84,11 @@ export function ClaimAdjustmentsPage() {
       void client.invalidateQueries({ queryKey: ["claim-adjustments"] });
     },
     onError: (err: ApiError) => {
-      if (approvingAdjustment) {
-        const isNetClaimErr =
-          err.status === 409 &&
-          (err.code === "cannot_net_claim" ||
-            err.message.includes("cannot_net_claim") ||
-            err.details.some((d) => d.code === "cannot_net_claim"));
-        if (isNetClaimErr) {
-          const detailMsg = err.details.find((d) => d.code === "cannot_net_claim")?.message;
-          const msg =
-            detailMsg ??
-            (err.message.includes("cannot_net_claim")
-              ? "Cannot be net-claimed: discuss with the manufacturer"
-              : err.message);
-          setCannotNetClaimMap((prev) => ({
-            ...prev,
-            [approvingAdjustment.id]: msg,
-          }));
-        }
+      if (approvingAdjustment && err.code === "cannot_net_claim") {
+        const msg = err.details.find((d) => d.code === "cannot_net_claim")?.message ?? err.message;
+        setCannotNetClaimMap((prev) => ({ ...prev, [approvingAdjustment.id]: msg }));
+        setApprovingAdjustment(null);
+        approveMutation.reset();
       }
     },
   });
@@ -135,6 +122,27 @@ export function ClaimAdjustmentsPage() {
     next.set("status", status);
     setSearchParams(next, { replace: true });
     pager.reset();
+  }
+
+  // WAI-ARIA tabs: arrows/Home/End move focus and select.
+  function onTabKeyDown(e: React.KeyboardEvent) {
+    const i = STATUS_TABS.findIndex((t) => t.id === statusFilter);
+    const last = STATUS_TABS.length - 1;
+    const target =
+      e.key === "ArrowRight"
+        ? (i + 1) % STATUS_TABS.length
+        : e.key === "ArrowLeft"
+          ? (i + last) % STATUS_TABS.length
+          : e.key === "Home"
+            ? 0
+            : e.key === "End"
+              ? last
+              : -1;
+    const tab = STATUS_TABS[target];
+    if (!tab) return;
+    e.preventDefault();
+    setTab(tab.id);
+    document.getElementById(`tab-${tab.id}`)?.focus();
   }
 
   function setManufacturer(mfg: string) {
@@ -174,7 +182,12 @@ export function ClaimAdjustmentsPage() {
         <Card title="Claim adjustments">
           <div className="flex flex-col gap-4">
             {/* Status tabs */}
-            <div role="tablist" aria-label="Adjustment status" className="flex border-b border-line">
+            <div
+              role="tablist"
+              aria-label="Adjustment status"
+              className="flex border-b border-line"
+              onKeyDown={onTabKeyDown}
+            >
               {STATUS_TABS.map((tab) => {
                 const isActive = statusFilter === tab.id;
                 return (

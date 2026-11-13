@@ -32,3 +32,23 @@
 - `BatchOut` schema has no separate lines subtotal or adjustments subtotal; UI displays only the server `total_amount`.
 - Reject endpoint (`POST /claim-adjustments/{id}/reject`) accepts no reason body; UI confirm dialog prompts confirmation without reason input.
 
+
+## Fixes round 1 (review ui-review-s7-adjustments-1.md)
+1. Scenarios 4 (stale second page, adjustment_already_included + View batch link) and 5 (allow_negative_claims off, server cannot_net_claim message on the row) added to the spec. The create dialog now closes on error so the alert is reachable.
+2. All `isVisible()` guards removed; each is an `expect(...).toBeVisible()` plus assertion.
+3. Proposal count text asserted and count > 0.
+4. Batch total: GET claim-batches/{id} via page.request, dd compared to the server string (grouping only).
+5. Role/label/name selectors only; manufacturer chosen by label (VOLT from ground truth), no index.
+6. Adjustment status tabs: ArrowLeft/Right/Home/End move focus and select; spec presses ArrowRight.
+7. Manufacturer change clears selected adjustments and accruals (and resets the accrual pager).
+8. Accrual query keyed on the committed agreementId.
+9. Per-entry errors show adjustment_id / entry_id.
+10. cannot_net_claim matched on err.code; shows the server detail message (fallback err.message); dialog closes, message on the row.
+11. Dead top-level batch_id branch removed.
+12. Carried adjustments use usePager/PagerControls (limit 50); no count in the title.
+13. aria-pressed on the builder mode toggle.
+14. Gap: AdjustmentOut.proposed_by is a bare UUID (no name/email); kept, no per-row calls.
+15. Gap: no batch-line route or anchor exists; the reference links to the batch.
+- Gap: `rebate_accrual_list` / `AccrualOut` have no manufacturer filter, so accruals cannot be limited to the selected manufacturer server-side.
+- Checks: lint, typecheck, vitest (6) PASS. Playwright not run (orchestrator).
+- Risks for the run: scenario 4 needs at least 2 unclaimed VOLT lines; scenario 5 needs a negative return reversal among the proposals; a carried negative adjustment could trip batch_total_not_positive.

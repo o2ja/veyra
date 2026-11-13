@@ -30,6 +30,7 @@ export function ClaimBatchDetailPage() {
   const { can, me } = useSession();
   const client = useQueryClient();
   const pager = usePager();
+  const adjPager = usePager();
   const manufacturers = useManufacturerMap();
 
   const [approveOpen, setApproveOpen] = useState(false);
@@ -68,14 +69,15 @@ export function ClaimBatchDetailPage() {
   });
 
   const adjustments = useQuery({
-    queryKey: ["claim-adjustments", "batch", batchId],
+    queryKey: ["claim-adjustments", "batch", batchId, adjPager.cursor],
     queryFn: () =>
       unwrap(
         api.GET("/api/v1/claim-adjustments", {
           params: {
             query: {
               included_in_batch_id: batchId,
-              limit: 100,
+              limit: 50,
+              cursor: adjPager.cursor,
             },
           },
         }),
@@ -443,7 +445,7 @@ export function ClaimBatchDetailPage() {
           <PagerControls pager={pager} page={lines.data?.page} />
         </Card>
 
-        <Card title={`Carried adjustments (${adjustments.data?.data?.length ?? 0})`}>
+        <Card title="Carried adjustments">
           <DataTable
             caption="Carried adjustments"
             loading={adjustments.isPending}
@@ -473,6 +475,7 @@ export function ClaimBatchDetailPage() {
               },
             ]}
           />
+          <PagerControls pager={adjPager} page={adjustments.data?.page} />
         </Card>
 
         <div>

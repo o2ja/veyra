@@ -98,14 +98,14 @@ export function MissedClaimsPage() {
   });
 
   const accruals = useQuery({
-    queryKey: ["rebate-accruals", agreeInput, accrualPager.cursor],
+    queryKey: ["rebate-accruals", agreementId, accrualPager.cursor],
     enabled: builderMode === "accruals",
     queryFn: () =>
       unwrap(
         api.GET("/api/v1/rebate-accruals", {
           params: {
             query: {
-              agreement_id: agreeInput.trim() || null,
+              agreement_id: agreementId || null,
               limit: 50,
               cursor: accrualPager.cursor,
             },
@@ -191,6 +191,7 @@ export function MissedClaimsPage() {
         }),
       );
     },
+    onError: () => setCreateBatchMode(null),
     onSuccess: (batch) => {
       setCreateBatchMode(null);
       setSelectedIds(new Set());
@@ -214,7 +215,12 @@ export function MissedClaimsPage() {
 
     setSearchParams(next, { replace: true });
     setSelectedIds(new Set());
+    if (mfgInput !== manufacturerId) {
+      setSelectedAdjIds(new Set());
+      setSelectedAccrualIds(new Set());
+    }
     pager.reset();
+    accrualPager.reset();
   }
 
   function toggleSelectRow(id: string, checked: boolean) {
@@ -436,6 +442,7 @@ export function MissedClaimsPage() {
         <div className="flex items-center gap-2">
           <Button
             type="button"
+            aria-pressed={builderMode === "missed"}
             variant={builderMode === "missed" ? "primary" : "secondary"}
             onClick={() => setBuilderMode("missed")}
           >
@@ -443,6 +450,7 @@ export function MissedClaimsPage() {
           </Button>
           <Button
             type="button"
+            aria-pressed={builderMode === "accruals"}
             variant={builderMode === "accruals" ? "primary" : "secondary"}
             onClick={() => setBuilderMode("accruals")}
           >
