@@ -20,7 +20,6 @@ from sqlalchemy import Engine, text
 from sqlalchemy.exc import DBAPIError
 
 from rebate.core.db import transaction
-from rebate.modules.recovery import FinalisedRemittance
 from tests.conftest import DbUrls
 from tests.integration.agreements_support import member
 from tests.integration.conftest import CSV, clean_file
@@ -34,6 +33,7 @@ from tests.integration.recovery_support import (
     confirm_payment,
     finding,
     open_cases,
+    remittance,
     seed_remittance,
 )
 from tests.support import Api, FakeClock, drain, fake_clock, make_app
@@ -92,7 +92,7 @@ def cases(env: Env, admin_engine: Engine) -> Cases:
     ids = open_cases(
         env.engine,
         story,
-        FinalisedRemittance(
+        remittance(
             doc,
             story.manufacturer,
             date(2026, 7, 31),
@@ -247,7 +247,7 @@ def test_a_second_finalisation_does_not_duplicate_a_live_case(
     the line is paid) opens nothing."""
     s = cases.story
     doc, _ = seed_remittance(admin_engine, s, "CM-7782", date(2026, 8, 3), [D("5.00")], [None])
-    again = FinalisedRemittance(
+    again = remittance(
         doc, s.manufacturer, date(2026, 8, 3),
         (finding("unpaid", "660.00", "unpaid_no_remittance", claim_line_id=s.claim_lines[REF["SC-22"]],
                  remittance_line_id=None, claimed=D("660.00"), paid=D("0.00")),),
@@ -430,7 +430,7 @@ def test_reclaim_proposes_an_adjustment_and_payments_recover_the_case(
 
     doc1, rl1 = seed_remittance(admin_engine, s, "CM-7790", date(2026, 8, 20), [D("1000.00")], [None])
     confirm_payment(admin_engine, s, rl1[0], adjustment, D("1000.00"))
-    first = FinalisedRemittance(doc1, s.manufacturer, date(2026, 8, 20), ())
+    first = remittance(doc1, s.manufacturer, date(2026, 8, 20), ())
     open_cases(env.engine, s, first)
     part = case_by(api, cid)
     assert (part["status"], D(part["recovered_amount"]), part["closed_at"]) == (
@@ -453,7 +453,7 @@ def test_reclaim_proposes_an_adjustment_and_payments_recover_the_case(
 
     doc2, rl2 = seed_remittance(admin_engine, s, "CM-7791", date(2026, 9, 10), [D("1080.00")], [None])
     confirm_payment(admin_engine, s, rl2[0], adjustment, D("1080.00"))
-    open_cases(env.engine, s, FinalisedRemittance(doc2, s.manufacturer, date(2026, 9, 10), ()))
+    open_cases(env.engine, s, remittance(doc2, s.manufacturer, date(2026, 9, 10), ()))
     done = case_by(api, cid)
     assert (done["status"], D(done["recovered_amount"])) == ("recovered", D("2080.00")) and done["closed_at"]
     assert [e["to_status"] for e in events(api, cid) if e["event_type"] == "status_changed"][
@@ -549,7 +549,7 @@ def test_database_refuses_what_the_service_never_does(env: Env, cases: Cases, ad
     doc, rl = seed_remittance(admin_engine, s, "CM-7800", date(2026, 9, 1), [D("900.00")], [None])
     (cid,) = open_cases(
         env.engine, s,
-        FinalisedRemittance(doc, s.manufacturer, date(2026, 9, 1),
+        remittance(doc, s.manufacturer, date(2026, 9, 1),
             (finding("short_paid", "100.00", "unknown", claim_line_id=s.claim_lines[REF["SC-20"]],
                      remittance_line_id=rl[0], claimed=D("1000.00"), paid=D("900.00")),)),
     )  # fmt: skip

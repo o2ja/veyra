@@ -114,6 +114,15 @@ class Action(StrEnum):
     EXTRACTION_FINISHED = "extraction.finished"
     IMPORT_MAPPING_SUGGESTED = "import.mapping_suggested"
     AI_INVOCATION = "ai.invocation"
+    REMITTANCE_CREATED = "remittance.created"
+    REMITTANCE_STAGED = "remittance.staged"
+    REMITTANCE_ACCEPTED = "remittance.accepted"
+    REMITTANCE_VOIDED = "remittance.voided"
+    REMITTANCE_FINALISED = "remittance.finalised"
+    RECONCILIATION_RUN = "reconciliation.run"
+    MATCH_CREATED = "reconciliation_match.created"
+    MATCH_CONFIRMED = "reconciliation_match.confirmed"
+    MATCH_REJECTED = "reconciliation_match.rejected"
 
 
 AUDITED_FIELDS: dict[str, frozenset[str]] = {
@@ -298,4 +307,26 @@ AUDITED_FIELDS: dict[str, frozenset[str]] = {
         {"manufacturer_id", "name", "format", "columns", "options", "active", "revision"}
     ),
     "missed_claims_export": frozenset({"format", "filter"}),
+    "remittance": frozenset(
+        {
+            "manufacturer_id",
+            "file_id",
+            "doc_type",
+            "channel",
+            "document_number",
+            "document_date",
+            "payment_date",
+            "total_amount",
+            "status",
+            "extraction_id",
+            "failure",
+            "line_count",
+            "corrections",
+            "findings",
+            "run",
+        }
+    ),
+    "reconciliation_match": frozenset(
+        {"remittance_id", "remittance_line_id", "method", "status", "allocations", "allocated_amount"}
+    ),
 }

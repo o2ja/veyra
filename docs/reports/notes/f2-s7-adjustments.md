@@ -48,9 +48,12 @@ the batch tie-out trigger (lines + signed included adjustments = `total_amount`,
    only the difference to what earlier non-rejected reversals of any version already cover (CN-5002 4 -> 5 units:
    one extra -12.50, not a second -62.50). The sign of a return correction is free (a corrected return can reduce an
    earlier reversal), so the migration has no sign CHECK for `return_reversal`.
-3. **`cannot_be_net_claimed`** (manufacturer without `allow_negative_claims`, §7): the flag is carried in the proposal's
-   reason; approval is *not* blocked. The ground truth includes ADJ-2026-0001 in a batch although VOLT has no
-   `allow_negative_claims`, so "held as proposed" is read as "needs a human decision".
+3. **`cannot_be_net_claimed`** (owner decision 1, 2026-11-12, supersedes the earlier reading): a negative return
+   reversal of a manufacturer without `allow_negative_claims` stays `proposed`: approve and inclusion are refused with
+   409 `cannot_net_claim` (current setting decides, so a withdrawn permission also stops an approved one). A batch whose
+   total is <= 0 is refused with 422 `batch_total_not_positive` unless the manufacturer allows negative claims (checked
+   at create; no DB CHECK, since the setting is per manufacturer). `testdata` VOLT now has `allow_negative_claims: true`
+   (generate.py + `master_manufacturers.json`), which matches ground truth putting ADJ-2026-0001 in the VOLT batch.
 4. **Clawback** is proposed for every negative accrual delta (§5.3 R2), claimed or not; the approver decides.
 5. **Rebate claim lines**: `accrual_entry_ids` claims a positive delta of one ledger entry as one line (no quantity or
    unit amount); `agreement_version_id` is the entry's. Negative deltas are refused (422 `not_claimable`).
@@ -122,3 +125,27 @@ batch creation); `BEFORE INSERT` guard `fn_claim_adjustment_insert` (amended int
 due / already corrected / proposed; owner-SQL test that an included adjustment cannot be re-bound (the S5 trigger
 already refused it; the test pins it); API_SPECIFICATION §2.8, DATABASE_SCHEMA §3.8 and BUSINESS_LOGIC §9.3 (netting
 rule, marked orchestrator decision pending owner confirmation) updated. `cannot_be_net_claimed` behaviour unchanged.
+
+## Owner decision 1 (2026-11-12) - verification
+
+Verified 7631328 against the fix list: stale-run propose, return-reversal netting on the version chain, caps count all
+non-released claim lines, 409 `already_claimed` through the chain, claims advisory lock in propose, insert guard
+trigger, re-bind test, API 2.8 and 9.3 docs: all present with tests, no gap found. WIP ede2b4d corrected: its DB CHECK
+`total_amount > 0` contradicted "unless allow_negative_claims" and was removed; the rebate test was restored (batch 2 =
+10,400.00 - 10,400.00 = 0.00 allowed for VOLT) and now first shows the refusal with the setting off (hand: 0.00 <= 0).
+Tests: `test_a_manufacturer_without_negative_claims_blocks_the_return_reversal` (-50.00 stays proposed, approve and
+inclusion 409), the zero-batch refusal inside `test_rebate_accrual_claims_and_the_r2_clawback`, engine golden
+SC-09r (VOLT -50.00 unflagged; setting off flags). No ground-truth vs BUSINESS_LOGIC money discrepancy found.
+
+## Second financial review fixes
+
+- B1: `frozen._rows` (prior and frozen claims) is back on `_ACTIVE` (frozen, not released); only `consumption` uses `_LIVE`.
+  Test `test_a_draft_batch_is_not_a_frozen_claim` (draft 250.00 + return of 4 -> 200.00, no reversal, 200.00 after void).
+- S1: migration `20261117_0900_neg_claims_guard` (revises `20261116_0900_adjustments_wiring`; new head): the batch tie-out
+  trigger refuses a non-void batch with total <= 0 unless `allow_negative_claims`; the adjustment trigger refuses a
+  negative `return_reversal` moving to approved/included without the setting, and inclusion of an adjustment whose claim
+  line is not frozen or is released. Test `test_the_database_enforces_negative_claims` (owner SQL; positive control).
+  The frozen-line guard has no direct DB test (a frozen/released line state cannot be reached by owner SQL without
+  breaking other triggers).
+- M1: `approve` and `submit` re-check the setting. M2: `frozen.py` docstrings. M3: the proposal reason says "when proposed"
+  (it records the state at proposal; the live setting is enforced at approve and inclusion). M4: JSON line endings restored.

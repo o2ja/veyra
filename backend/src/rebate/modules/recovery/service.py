@@ -7,9 +7,7 @@ variance.
 """
 
 import base64
-from dataclasses import dataclass
 from datetime import date, datetime, timedelta
-from decimal import Decimal
 from typing import Any
 from uuid import UUID
 
@@ -30,6 +28,7 @@ from rebate.core.ids import new_id
 from rebate.core.jobs import enqueue
 from rebate.modules import audit, claims, files, tenancy
 from rebate.modules.masterdata import Who, keyset
+from rebate.modules.reconciliation import FinalisedRemittance, Finding
 from rebate.modules.recovery import assessment
 from rebate.modules.recovery.domain import deadlines
 from rebate.modules.recovery.domain import states as st
@@ -47,28 +46,6 @@ class AuditedFourEyesViolation(FourEyesViolation):
 
 class DedicatedEndpoint(ValidationFailed):
     pass
-
-
-@dataclass(frozen=True)
-class NewFinding:
-    """One §10.3 finding to open a case for (the shape of reconciliation's ``Finding``)."""
-
-    case_type: str
-    amount: Decimal  # positive
-    reason_code: str
-    claim_line_id: UUID | None
-    remittance_line_id: UUID | None
-    claimed: Decimal | None
-    paid: Decimal
-    external_reason_code: str | None = None
-
-
-@dataclass(frozen=True)
-class FinalisedRemittance:
-    remittance_id: UUID
-    manufacturer_id: UUID
-    document_date: date | None
-    findings: tuple[NewFinding, ...]
 
 
 # ---- helpers ------------------------------------------------------------------------------------------------
@@ -199,7 +176,7 @@ def _is_user_of_tenant(db: Session, tenant_id: UUID, user_id: UUID) -> bool:
 
 
 def _case_deadline(
-    db: Session, tenant_id: UUID, rem: FinalisedRemittance, f: NewFinding
+    db: Session, tenant_id: UUID, rem: FinalisedRemittance, f: Finding
 ) -> tuple[date | None, str | None]:
     """Dispute / re-claim deadline per the manufacturer's setting (§12); ``(None, None)`` = ``deadline_unknown``."""
     s = db.execute(

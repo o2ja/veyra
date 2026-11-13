@@ -1,0 +1,83 @@
+{
+  "SYNTHETIC": "Recorded provider answer (tool input) for testdata/generated/remittance/SYNTHETIC_credit_memo_VOLT_CM-7781.pdf. Derived from the document text, as a faithful extractor reads it (OD-2: no live model call was made).",
+  "document_number": "CM-7781",
+  "document_date": "2026-07-31",
+  "payment_date": null,
+  "currency_code": null,
+  "total_amount": "7545.00",
+  "lines": [
+    {
+      "line_number": "1",
+      "claim_reference": null,
+      "invoice_number": "INV-10001",
+      "invoice_line_number": "1",
+      "sku": "BRK-3P-100A",
+      "quantity": "100",
+      "amount_paid": "2050.00",
+      "amount_claimed_stated": "2200.00",
+      "external_reason_code": "E12",
+      "external_reason_text": "SPA price differs from approved price"
+    },
+    {
+      "line_number": "2",
+      "claim_reference": null,
+      "invoice_number": "INV-10010",
+      "invoice_line_number": "1",
+      "sku": "PNL-200A",
+      "quantity": "60",
+      "amount_paid": "3120.00",
+      "amount_claimed_stated": "3120.00",
+      "external_reason_code": null,
+      "external_reason_text": null
+    },
+    {
+      "line_number": "3",
+      "claim_reference": null,
+      "invoice_number": "INV-10011",
+      "invoice_line_number": "1",
+      "sku": "PNL-200A",
+      "quantity": "40",
+      "amount_paid": "0.00",
+      "amount_claimed_stated": "2080.00",
+      "external_reason_code": "E07",
+      "external_reason_text": "Exceeds authorized quantity"
+    },
+    {
+      "line_number": "4",
+      "claim_reference": null,
+      "invoice_number": "INV-10021",
+      "invoice_line_number": "1",
+      "sku": "BRK-3P-60A",
+      "quantity": "16",
+      "amount_paid": "200.00",
+      "amount_claimed_stated": "200.00",
+      "external_reason_code": null,
+      "external_reason_text": "Net of return CN-5002"
+    },
+    {
+      "line_number": "5",
+      "claim_reference": null,
+      "invoice_number": null,
+      "invoice_line_number": null,
+      "sku": null,
+      "quantity": null,
+      "amount_paid": "2100.00",
+      "amount_claimed_stated": null,
+      "external_reason_code": null,
+      "external_reason_text": "Mixed SPA claims - June shipments"
+    },
+    {
+      "line_number": "6",
+      "claim_reference": null,
+      "invoice_number": "INV-99999",
+      "invoice_line_number": "1",
+      "sku": "BRK-3P-100A",
+      "quantity": "3",
+      "amount_paid": "75.00",
+      "amount_claimed_stated": "66.00",
+      "external_reason_code": null,
+      "external_reason_text": "Credit - unidentified"
+    }
+  ],
+  "extractor_notes": []
+}

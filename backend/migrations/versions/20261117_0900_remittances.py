@@ -18,7 +18,7 @@ FORCE via the shared helper.
 Forward-only like the rest of the chain (no downgrade functions).
 
 Revision ID: 20261117_0900_remittances
-Revises: 20261116_0900_adjustments_wiring
+Revises: 20261117_0900_neg_claims_guard
 """
 
 from alembic import op
@@ -26,7 +26,7 @@ from alembic import op
 from migrations._rls import enable_tenant_rls
 
 revision = "20261117_0900_remittances"
-down_revision = "20261116_0900_adjustments_wiring"
+down_revision = "20261117_0900_neg_claims_guard"
 branch_labels = None
 depends_on = None
 

@@ -16,7 +16,7 @@ from sqlalchemy import Engine, text
 from rebate.core.db import transaction
 from rebate.modules import recovery
 from rebate.modules.masterdata import Who
-from rebate.modules.recovery import FinalisedRemittance, NewFinding
+from rebate.modules.reconciliation import FinalisedRemittance, Finding
 from tests.integration.calc_support import (
     activate_all,
     all_settings,
@@ -159,8 +159,17 @@ def open_cases(engine: Engine, story: Story, rem: FinalisedRemittance) -> list[A
         return [c.id for c in recovery.open_cases(db, story.who(), rem)]
 
 
-def finding(case_type: str, amount: str, reason: str, **kw: Any) -> NewFinding:
-    return NewFinding(case_type=case_type, amount=D(amount), reason_code=reason, **kw)
+def finding(case_type: str, amount: str, reason: str, **kw: Any) -> Finding:
+    return Finding(
+        case_type=case_type, amount=D(amount), reason_code=reason, **{"external_reason_code": None, **kw}
+    )
+
+
+def remittance(
+    doc: UUID, manufacturer: UUID, doc_date: date, findings: tuple[Finding, ...]
+) -> FinalisedRemittance:
+    """What reconciliation's finalise hands to the recovery hook."""
+    return FinalisedRemittance(doc, manufacturer, None, doc_date, None, "credit_memo", findings)
 
 
 def case_by(api: Api, case_id: UUID | str) -> dict[str, Any]:

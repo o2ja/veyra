@@ -8,7 +8,7 @@ import base64
 import binascii
 from decimal import Decimal
 from functools import lru_cache
-from ipaddress import ip_address
+from ipaddress import ip_address, ip_network
 from typing import Annotated, Literal, Self
 from urllib.parse import urlsplit
 
@@ -49,6 +49,9 @@ class Settings(BaseSettings):
     encryption_keys: SecretStr
     public_base_url: str = "http://localhost:5173"
     trusted_proxy_ips: Annotated[tuple[str, ...], NoDecode] = ()
+    # Cloudflare edge ranges (CIDR, comma-separated). CF-Connecting-IP is honoured only for requests whose
+    # peer-as-seen-by-Caddy is in one of these. Source and update steps: infra/runbooks/cloudflare-ip-update.md
+    cloudflare_ip_ranges: Annotated[tuple[str, ...], NoDecode] = ()
 
     # Passwords (SECURITY.md §1)
     password_min_length: int = 12
@@ -132,7 +135,7 @@ class Settings(BaseSettings):
     ocr_timeout_seconds: int = Field(default=180, ge=10, le=900)
     ocr_memory_mb: int = Field(default=4096, ge=512)
 
-    @field_validator("trusted_proxy_ips", mode="before")
+    @field_validator("trusted_proxy_ips", "cloudflare_ip_ranges", mode="before")
     @classmethod
     def _split_ips(cls, value: object) -> object:
         if isinstance(value, str):
@@ -144,6 +147,13 @@ class Settings(BaseSettings):
     def _valid_ips(cls, value: tuple[str, ...]) -> tuple[str, ...]:
         for ip in value:
             ip_address(ip)  # raises ValueError for anything that is not an IP
+        return value
+
+    @field_validator("cloudflare_ip_ranges")
+    @classmethod
+    def _valid_ranges(cls, value: tuple[str, ...]) -> tuple[str, ...]:
+        for cidr in value:
+            ip_network(cidr, strict=False)  # raises ValueError for anything that is not a CIDR
         return value
 
     @field_validator("encryption_keys")

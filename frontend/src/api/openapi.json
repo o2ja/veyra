@@ -534,6 +534,57 @@
         "title": "AgreementOut",
         "type": "object"
       },
+      "AllocationOut": {
+        "properties": {
+          "allocated_amount": {
+            "title": "Allocated Amount",
+            "type": "string"
+          },
+          "claim_adjustment_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Claim Adjustment Id"
+          },
+          "claim_line_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Claim Line Id"
+          },
+          "claim_reference": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Claim Reference"
+          }
+        },
+        "required": [
+          "claim_line_id",
+          "claim_adjustment_id",
+          "claim_reference",
+          "allocated_amount"
+        ],
+        "title": "AllocationOut",
+        "type": "object"
+      },
       "AtRisk": {
         "properties": {
           "amount": {
@@ -4180,6 +4231,111 @@
         "title": "FileOut",
         "type": "object"
       },
+      "FinaliseOut": {
+        "properties": {
+          "findings": {
+            "items": {
+              "$ref": "#/components/schemas/FindingOut"
+            },
+            "title": "Findings",
+            "type": "array"
+          },
+          "remittance": {
+            "$ref": "#/components/schemas/RemittanceOut"
+          }
+        },
+        "required": [
+          "remittance",
+          "findings"
+        ],
+        "title": "FinaliseOut",
+        "type": "object"
+      },
+      "FindingOut": {
+        "properties": {
+          "amount": {
+            "title": "Amount",
+            "type": "string"
+          },
+          "case_type": {
+            "enum": [
+              "rejected",
+              "short_paid",
+              "overpaid",
+              "unmatched_payment",
+              "unpaid"
+            ],
+            "title": "Case Type",
+            "type": "string"
+          },
+          "claim_line_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Claim Line Id"
+          },
+          "claimed": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Claimed"
+          },
+          "external_reason_code": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "External Reason Code"
+          },
+          "paid": {
+            "title": "Paid",
+            "type": "string"
+          },
+          "reason_code": {
+            "title": "Reason Code",
+            "type": "string"
+          },
+          "remittance_line_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Remittance Line Id"
+          }
+        },
+        "required": [
+          "case_type",
+          "amount",
+          "reason_code",
+          "claim_line_id",
+          "remittance_line_id",
+          "claimed",
+          "paid",
+          "external_reason_code"
+        ],
+        "title": "FindingOut",
+        "type": "object"
+      },
       "ForgotIn": {
         "additionalProperties": false,
         "properties": {
@@ -5324,6 +5480,162 @@
         "title": "JobRef",
         "type": "object"
       },
+      "LineCorrection": {
+        "additionalProperties": false,
+        "description": "Only the fields sent are changed; ``null`` clears one.",
+        "properties": {
+          "amount_claimed_stated": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Amount Claimed Stated"
+          },
+          "amount_paid": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Amount Paid"
+          },
+          "claim_reference": {
+            "anyOf": [
+              {
+                "maxLength": 200,
+                "minLength": 1,
+                "pattern": "^[^\\x00-\\x1f\\x7f]+$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Claim Reference"
+          },
+          "customer_ref": {
+            "anyOf": [
+              {
+                "maxLength": 200,
+                "minLength": 1,
+                "pattern": "^[^\\x00-\\x1f\\x7f]+$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Customer Ref"
+          },
+          "external_reason_code": {
+            "anyOf": [
+              {
+                "maxLength": 200,
+                "minLength": 1,
+                "pattern": "^[^\\x00-\\x1f\\x7f]+$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "External Reason Code"
+          },
+          "external_reason_text": {
+            "anyOf": [
+              {
+                "maxLength": 500,
+                "minLength": 1,
+                "pattern": "^[^\\x00-\\x1f\\x7f]+$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "External Reason Text"
+          },
+          "invoice_line_number": {
+            "anyOf": [
+              {
+                "maximum": 2000000000.0,
+                "minimum": 0.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Invoice Line Number"
+          },
+          "invoice_number": {
+            "anyOf": [
+              {
+                "maxLength": 200,
+                "minLength": 1,
+                "pattern": "^[^\\x00-\\x1f\\x7f]+$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Invoice Number"
+          },
+          "line_number": {
+            "maximum": 2000000000.0,
+            "minimum": 1.0,
+            "title": "Line Number",
+            "type": "integer"
+          },
+          "quantity": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Quantity"
+          },
+          "sku": {
+            "anyOf": [
+              {
+                "maxLength": 200,
+                "minLength": 1,
+                "pattern": "^[^\\x00-\\x1f\\x7f]+$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Sku"
+          }
+        },
+        "required": [
+          "line_number"
+        ],
+        "title": "LineCorrection",
+        "type": "object"
+      },
       "LineList": {
         "properties": {
           "data": {
@@ -5628,6 +5940,39 @@
           "amount"
         ],
         "title": "LostToExpiry",
+        "type": "object"
+      },
+      "ManualMatchIn": {
+        "additionalProperties": false,
+        "properties": {
+          "allocated_amount": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "string"
+              }
+            ],
+            "title": "Allocated Amount"
+          },
+          "claim_line_id": {
+            "format": "uuid",
+            "title": "Claim Line Id",
+            "type": "string"
+          },
+          "remittance_line_id": {
+            "format": "uuid",
+            "title": "Remittance Line Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "remittance_line_id",
+          "claim_line_id",
+          "allocated_amount"
+        ],
+        "title": "ManualMatchIn",
         "type": "object"
       },
       "ManufacturerIn": {
@@ -6136,6 +6481,158 @@
           "prompt_version"
         ],
         "title": "MappingOut",
+        "type": "object"
+      },
+      "MatchList": {
+        "properties": {
+          "data": {
+            "items": {
+              "$ref": "#/components/schemas/MatchOut"
+            },
+            "title": "Data",
+            "type": "array"
+          },
+          "page": {
+            "$ref": "#/components/schemas/Page"
+          }
+        },
+        "required": [
+          "data",
+          "page"
+        ],
+        "title": "MatchList",
+        "type": "object"
+      },
+      "MatchOut": {
+        "properties": {
+          "allocations": {
+            "items": {
+              "$ref": "#/components/schemas/AllocationOut"
+            },
+            "title": "Allocations",
+            "type": "array"
+          },
+          "confirmed_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Confirmed At"
+          },
+          "confirmed_by": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Confirmed By"
+          },
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "evidence": {
+            "additionalProperties": true,
+            "title": "Evidence",
+            "type": "object"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "method": {
+            "enum": [
+              "exact_reference",
+              "invoice_line",
+              "composite",
+              "fuzzy",
+              "subset_sum",
+              "manual"
+            ],
+            "title": "Method",
+            "type": "string"
+          },
+          "rejected_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Rejected At"
+          },
+          "rejected_by": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Rejected By"
+          },
+          "remittance_line_id": {
+            "format": "uuid",
+            "title": "Remittance Line Id",
+            "type": "string"
+          },
+          "revision": {
+            "title": "Revision",
+            "type": "integer"
+          },
+          "score": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Score"
+          },
+          "status": {
+            "enum": [
+              "suggested",
+              "confirmed",
+              "rejected"
+            ],
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "remittance_line_id",
+          "method",
+          "status",
+          "score",
+          "revision",
+          "evidence",
+          "allocations",
+          "confirmed_by",
+          "confirmed_at",
+          "rejected_by",
+          "rejected_at",
+          "created_at"
+        ],
+        "title": "MatchOut",
         "type": "object"
       },
       "MeOut": {
@@ -7848,6 +8345,60 @@
         "title": "ReclaimOut",
         "type": "object"
       },
+      "ReconciliationLineOut": {
+        "properties": {
+          "line": {
+            "$ref": "#/components/schemas/RemittanceLineOut"
+          },
+          "matches": {
+            "items": {
+              "$ref": "#/components/schemas/MatchOut"
+            },
+            "title": "Matches",
+            "type": "array"
+          },
+          "state": {
+            "enum": [
+              "matched",
+              "suggested",
+              "unmatched"
+            ],
+            "title": "State",
+            "type": "string"
+          }
+        },
+        "required": [
+          "line",
+          "state",
+          "matches"
+        ],
+        "title": "ReconciliationLineOut",
+        "type": "object"
+      },
+      "ReconciliationOut": {
+        "properties": {
+          "data": {
+            "items": {
+              "$ref": "#/components/schemas/ReconciliationLineOut"
+            },
+            "title": "Data",
+            "type": "array"
+          },
+          "page": {
+            "$ref": "#/components/schemas/Page"
+          },
+          "remittance": {
+            "$ref": "#/components/schemas/RemittanceOut"
+          }
+        },
+        "required": [
+          "remittance",
+          "data",
+          "page"
+        ],
+        "title": "ReconciliationOut",
+        "type": "object"
+      },
       "RecoveryCodesOut": {
         "properties": {
           "recovery_codes": {
@@ -7937,6 +8488,653 @@
           "reason"
         ],
         "title": "RejectIn",
+        "type": "object"
+      },
+      "RemittanceAcceptIn": {
+        "additionalProperties": false,
+        "properties": {
+          "corrections": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/LineCorrection"
+            },
+            "maxItems": 5000,
+            "title": "Corrections",
+            "type": "array"
+          },
+          "document_date": {
+            "anyOf": [
+              {
+                "format": "date",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Document Date"
+          },
+          "document_number": {
+            "anyOf": [
+              {
+                "maxLength": 200,
+                "minLength": 1,
+                "pattern": "^[^\\x00-\\x1f\\x7f]+$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Document Number"
+          },
+          "payment_date": {
+            "anyOf": [
+              {
+                "format": "date",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Payment Date"
+          },
+          "total_amount": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Total Amount"
+          }
+        },
+        "title": "RemittanceAcceptIn",
+        "type": "object"
+      },
+      "RemittanceAccepted": {
+        "properties": {
+          "job": {
+            "$ref": "#/components/schemas/RunJobRef"
+          },
+          "remittance": {
+            "$ref": "#/components/schemas/RemittanceOut"
+          }
+        },
+        "required": [
+          "remittance",
+          "job"
+        ],
+        "title": "RemittanceAccepted",
+        "type": "object"
+      },
+      "RemittanceExtractionOut": {
+        "properties": {
+          "lines": {
+            "items": {
+              "$ref": "#/components/schemas/StagedLineOut"
+            },
+            "title": "Lines",
+            "type": "array"
+          },
+          "problems": {
+            "items": {
+              "$ref": "#/components/schemas/RemittanceIssue"
+            },
+            "title": "Problems",
+            "type": "array"
+          },
+          "remittance": {
+            "$ref": "#/components/schemas/RemittanceOut"
+          }
+        },
+        "required": [
+          "remittance",
+          "lines",
+          "problems"
+        ],
+        "title": "RemittanceExtractionOut",
+        "type": "object"
+      },
+      "RemittanceIn": {
+        "additionalProperties": false,
+        "properties": {
+          "channel": {
+            "enum": [
+              "credit_memo",
+              "check",
+              "ach",
+              "deduction"
+            ],
+            "title": "Channel",
+            "type": "string"
+          },
+          "currency_code": {
+            "anyOf": [
+              {
+                "pattern": "^[A-Z]{3}$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Currency Code"
+          },
+          "doc_type": {
+            "enum": [
+              "credit_memo",
+              "remittance_advice",
+              "deduction_notice"
+            ],
+            "title": "Doc Type",
+            "type": "string"
+          },
+          "document_date": {
+            "anyOf": [
+              {
+                "format": "date",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Document Date"
+          },
+          "document_number": {
+            "anyOf": [
+              {
+                "maxLength": 100,
+                "minLength": 1,
+                "pattern": "^[^\\x00-\\x1f\\x7f]+$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Document Number"
+          },
+          "file_id": {
+            "format": "uuid",
+            "title": "File Id",
+            "type": "string"
+          },
+          "manufacturer_id": {
+            "format": "uuid",
+            "title": "Manufacturer Id",
+            "type": "string"
+          },
+          "mapping_template_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Mapping Template Id"
+          },
+          "payment_date": {
+            "anyOf": [
+              {
+                "format": "date",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Payment Date"
+          },
+          "total_amount": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Total Amount"
+          }
+        },
+        "required": [
+          "file_id",
+          "manufacturer_id",
+          "doc_type",
+          "channel"
+        ],
+        "title": "RemittanceIn",
+        "type": "object"
+      },
+      "RemittanceIssue": {
+        "properties": {
+          "code": {
+            "title": "Code",
+            "type": "string"
+          },
+          "field": {
+            "title": "Field",
+            "type": "string"
+          },
+          "message": {
+            "title": "Message",
+            "type": "string"
+          }
+        },
+        "required": [
+          "field",
+          "code",
+          "message"
+        ],
+        "title": "RemittanceIssue",
+        "type": "object"
+      },
+      "RemittanceLineList": {
+        "properties": {
+          "data": {
+            "items": {
+              "$ref": "#/components/schemas/RemittanceLineOut"
+            },
+            "title": "Data",
+            "type": "array"
+          },
+          "page": {
+            "$ref": "#/components/schemas/Page"
+          }
+        },
+        "required": [
+          "data",
+          "page"
+        ],
+        "title": "RemittanceLineList",
+        "type": "object"
+      },
+      "RemittanceLineOut": {
+        "properties": {
+          "amount_claimed_stated": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Amount Claimed Stated"
+          },
+          "amount_paid": {
+            "title": "Amount Paid",
+            "type": "string"
+          },
+          "claim_reference": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Claim Reference"
+          },
+          "customer_ref": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Customer Ref"
+          },
+          "external_reason_code": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "External Reason Code"
+          },
+          "external_reason_text": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "External Reason Text"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "invoice_line_number": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Invoice Line Number"
+          },
+          "invoice_number": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Invoice Number"
+          },
+          "line_number": {
+            "title": "Line Number",
+            "type": "integer"
+          },
+          "quantity": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Quantity"
+          },
+          "reason_code": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reason Code"
+          },
+          "sku_raw": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Sku Raw"
+          },
+          "source_row_number": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source Row Number"
+          }
+        },
+        "required": [
+          "id",
+          "line_number",
+          "source_row_number",
+          "claim_reference",
+          "invoice_number",
+          "invoice_line_number",
+          "sku_raw",
+          "customer_ref",
+          "quantity",
+          "amount_paid",
+          "amount_claimed_stated",
+          "external_reason_code",
+          "external_reason_text",
+          "reason_code"
+        ],
+        "title": "RemittanceLineOut",
+        "type": "object"
+      },
+      "RemittanceList": {
+        "properties": {
+          "data": {
+            "items": {
+              "$ref": "#/components/schemas/RemittanceOut"
+            },
+            "title": "Data",
+            "type": "array"
+          },
+          "page": {
+            "$ref": "#/components/schemas/Page"
+          }
+        },
+        "required": [
+          "data",
+          "page"
+        ],
+        "title": "RemittanceList",
+        "type": "object"
+      },
+      "RemittanceOut": {
+        "properties": {
+          "accepted_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Accepted At"
+          },
+          "accepted_by": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Accepted By"
+          },
+          "channel": {
+            "enum": [
+              "credit_memo",
+              "check",
+              "ach",
+              "deduction"
+            ],
+            "title": "Channel",
+            "type": "string"
+          },
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "currency_code": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Currency Code"
+          },
+          "doc_type": {
+            "enum": [
+              "credit_memo",
+              "remittance_advice",
+              "deduction_notice"
+            ],
+            "title": "Doc Type",
+            "type": "string"
+          },
+          "document_date": {
+            "anyOf": [
+              {
+                "format": "date",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Document Date"
+          },
+          "document_number": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Document Number"
+          },
+          "extraction_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Extraction Id"
+          },
+          "file_id": {
+            "format": "uuid",
+            "title": "File Id",
+            "type": "string"
+          },
+          "finalised_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Finalised At"
+          },
+          "finalised_by": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Finalised By"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "manufacturer_id": {
+            "format": "uuid",
+            "title": "Manufacturer Id",
+            "type": "string"
+          },
+          "mapping_template_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Mapping Template Id"
+          },
+          "payment_date": {
+            "anyOf": [
+              {
+                "format": "date",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Payment Date"
+          },
+          "status": {
+            "enum": [
+              "uploaded",
+              "pending_review",
+              "accepted",
+              "reconciled",
+              "void"
+            ],
+            "title": "Status",
+            "type": "string"
+          },
+          "total_amount": {
+            "title": "Total Amount",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "manufacturer_id",
+          "file_id",
+          "doc_type",
+          "channel",
+          "document_number",
+          "document_date",
+          "payment_date",
+          "total_amount",
+          "currency_code",
+          "status",
+          "extraction_id",
+          "mapping_template_id",
+          "accepted_by",
+          "accepted_at",
+          "finalised_by",
+          "finalised_at",
+          "created_at"
+        ],
+        "title": "RemittanceOut",
         "type": "object"
       },
       "ResetIn": {
@@ -9411,6 +10609,164 @@
           "rounding"
         ],
         "title": "SpaRules",
+        "type": "object"
+      },
+      "StagedLineOut": {
+        "properties": {
+          "amount_claimed_stated": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Amount Claimed Stated"
+          },
+          "amount_paid": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Amount Paid"
+          },
+          "claim_reference": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Claim Reference"
+          },
+          "corrected": {
+            "title": "Corrected",
+            "type": "boolean"
+          },
+          "customer_ref": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Customer Ref"
+          },
+          "external_reason_code": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "External Reason Code"
+          },
+          "external_reason_text": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "External Reason Text"
+          },
+          "invoice_line_number": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Invoice Line Number"
+          },
+          "invoice_number": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Invoice Number"
+          },
+          "issues": {
+            "items": {
+              "$ref": "#/components/schemas/RemittanceIssue"
+            },
+            "title": "Issues",
+            "type": "array"
+          },
+          "line_number": {
+            "title": "Line Number",
+            "type": "integer"
+          },
+          "quantity": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Quantity"
+          },
+          "sku_raw": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Sku Raw"
+          },
+          "source_row_number": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source Row Number"
+          }
+        },
+        "required": [
+          "line_number",
+          "source_row_number",
+          "claim_reference",
+          "invoice_number",
+          "invoice_line_number",
+          "sku_raw",
+          "customer_ref",
+          "quantity",
+          "amount_paid",
+          "amount_claimed_stated",
+          "external_reason_code",
+          "external_reason_text",
+          "issues",
+          "corrected"
+        ],
+        "title": "StagedLineOut",
         "type": "object"
       },
       "SubmitIn": {
@@ -17503,6 +18859,305 @@
         ]
       }
     },
+    "/api/v1/matches": {
+      "get": {
+        "operationId": "match_list",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "remittance_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "format": "uuid",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Remittance Id"
+            }
+          },
+          {
+            "in": "query",
+            "name": "status",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "enum": [
+                    "suggested",
+                    "confirmed",
+                    "rejected"
+                  ],
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Status"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 50,
+              "maximum": 200,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "cursor",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Cursor"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MatchList"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List Matches",
+        "tags": [
+          "reconciliation"
+        ]
+      },
+      "post": {
+        "operationId": "match_create",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ManualMatchIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MatchOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Create Match",
+        "tags": [
+          "reconciliation"
+        ]
+      }
+    },
+    "/api/v1/matches/{match_id}": {
+      "get": {
+        "operationId": "match_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "match_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Match Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MatchOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Match",
+        "tags": [
+          "reconciliation"
+        ]
+      }
+    },
+    "/api/v1/matches/{match_id}/confirm": {
+      "post": {
+        "operationId": "match_confirm",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "match_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Match Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "if-match",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "If-Match"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MatchOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Confirm Match",
+        "tags": [
+          "reconciliation"
+        ]
+      }
+    },
+    "/api/v1/matches/{match_id}/reject": {
+      "post": {
+        "operationId": "match_reject",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "match_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Match Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "if-match",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "If-Match"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MatchOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Reject Match",
+        "tags": [
+          "reconciliation"
+        ]
+      }
+    },
     "/api/v1/missed-claims": {
       "get": {
         "operationId": "missed_claim_list",
@@ -18487,6 +20142,595 @@
         "summary": "Tracker",
         "tags": [
           "calculation"
+        ]
+      }
+    },
+    "/api/v1/remittances": {
+      "get": {
+        "operationId": "remittance_list",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "status",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "enum": [
+                    "uploaded",
+                    "pending_review",
+                    "accepted",
+                    "reconciled",
+                    "void"
+                  ],
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Status"
+            }
+          },
+          {
+            "in": "query",
+            "name": "manufacturer_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "format": "uuid",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Manufacturer Id"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 50,
+              "maximum": 200,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "cursor",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Cursor"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RemittanceList"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List Remittances",
+        "tags": [
+          "reconciliation"
+        ]
+      },
+      "post": {
+        "operationId": "remittance_create",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "idempotency-key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Idempotency-Key"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RemittanceIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RemittanceAccepted"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Create Remittance",
+        "tags": [
+          "reconciliation"
+        ]
+      }
+    },
+    "/api/v1/remittances/{remittance_id}": {
+      "get": {
+        "operationId": "remittance_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "remittance_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Remittance Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RemittanceOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Remittance",
+        "tags": [
+          "reconciliation"
+        ]
+      }
+    },
+    "/api/v1/remittances/{remittance_id}/accept": {
+      "post": {
+        "operationId": "remittance_accept",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "remittance_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Remittance Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "anyOf": [
+                  {
+                    "$ref": "#/components/schemas/RemittanceAcceptIn"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "Body"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RemittanceOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Accept Remittance",
+        "tags": [
+          "reconciliation"
+        ]
+      }
+    },
+    "/api/v1/remittances/{remittance_id}/extraction": {
+      "get": {
+        "operationId": "remittance_extraction_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "remittance_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Remittance Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RemittanceExtractionOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Extraction",
+        "tags": [
+          "reconciliation"
+        ]
+      }
+    },
+    "/api/v1/remittances/{remittance_id}/finalize": {
+      "post": {
+        "operationId": "remittance_finalize",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "remittance_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Remittance Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "idempotency-key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Idempotency-Key"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FinaliseOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Finalize Remittance",
+        "tags": [
+          "reconciliation"
+        ]
+      }
+    },
+    "/api/v1/remittances/{remittance_id}/lines": {
+      "get": {
+        "operationId": "remittance_line_list",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "remittance_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Remittance Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 50,
+              "maximum": 200,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "cursor",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Cursor"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RemittanceLineList"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List Lines",
+        "tags": [
+          "reconciliation"
+        ]
+      }
+    },
+    "/api/v1/remittances/{remittance_id}/reconcile": {
+      "post": {
+        "operationId": "remittance_reconcile",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "remittance_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Remittance Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Reconcile Remittance",
+        "tags": [
+          "reconciliation"
+        ]
+      }
+    },
+    "/api/v1/remittances/{remittance_id}/reconciliation": {
+      "get": {
+        "operationId": "remittance_reconciliation_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "remittance_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Remittance Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 50,
+              "maximum": 200,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "cursor",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Cursor"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReconciliationOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Reconciliation",
+        "tags": [
+          "reconciliation"
+        ]
+      }
+    },
+    "/api/v1/remittances/{remittance_id}/void": {
+      "post": {
+        "operationId": "remittance_void",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "remittance_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Remittance Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RemittanceOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Void Remittance",
+        "tags": [
+          "reconciliation"
         ]
       }
     },

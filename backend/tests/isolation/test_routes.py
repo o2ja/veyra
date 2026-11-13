@@ -39,6 +39,7 @@ class Side:
     s6: dict[str, str] = field(default_factory=dict)  # S6 path parameter -> one id of this tenant
     s7: dict[str, str] = field(default_factory=dict)  # S7 path parameter -> one id of this tenant
     s9: dict[str, str] = field(default_factory=dict)  # S9 path parameter -> one id of this tenant
+    s8: dict[str, str] = field(default_factory=dict)  # S8 path parameter -> one id of this tenant
 
 
 @pytest.fixture(scope="module")
@@ -72,6 +73,7 @@ def sides(migrated_db: DbUrls, admin_engine: Engine) -> Iterator[tuple[Side, Sid
             side.s7 = _seed_s7(api, side.s3)
             side.s7["adjustment_id"] = _seed_adjustment(admin_engine, side)
             side.s9 = _seed_case(admin_engine, side)
+            side.s8 = _seed_s8(app, admin_engine, side)
             out.append(side)
         yield out[0], out[1]
 
@@ -247,6 +249,66 @@ def _seed_case(admin: Engine, side: Side) -> dict[str, str]:
     return {"case_id": str(case), "notification_id": str(note)}
 
 
+def _seed_s8(app: Any, admin: Engine, side: Side) -> dict[str, str]:
+    """An accepted remittance (CSV through the real ingest job, one line of 5.00) and a suggested match of its line to
+    the fixture claim line (inserted by the owner role: a match to a claim needs a submitted batch the isolation world
+    does not have; the routes under test only read and move it)."""
+    api = side.api
+    up = api.client.post(
+        "/api/v1/files",
+        files={
+            "file": (
+                "iso-remittance.csv",
+                (f"invoice_no,paid{chr(10)}INV-ISO-{side.tenant_id},5.00{chr(10)}").encode(),
+                "text/csv",
+            )
+        },
+        data={"kind": "remittance"},
+        headers={"Origin": "https://testserver", "X-CSRF-Token": api.csrf()},
+    )
+    assert up.status_code == 201, up.text
+    drain(app)
+    r = api.post(
+        "/remittances",
+        json={
+            "file_id": up.json()["id"],
+            "manufacturer_id": side.s3["manufacturer_id"],
+            "doc_type": "credit_memo",
+            "channel": "credit_memo",
+            "document_number": "ISO-1",
+        },
+        headers={"Idempotency-Key": str(uuid.uuid4())},
+    )
+    assert r.status_code == 202, r.text
+    drain(app)
+    rid = r.json()["remittance"]["id"]
+    assert api.get(f"/remittances/{rid}").json()["status"] == "accepted"
+    (line,) = api.get(f"/remittances/{rid}/lines").json()["data"]
+    match, claim_line = uuid.uuid4(), _claim_line(admin, side)
+    with admin.begin() as conn:
+        conn.execute(
+            text(
+                "INSERT INTO reconciliation_matches (tenant_id, id, match_id, remittance_line_id, claim_line_id, "
+                "allocated_amount, method, evidence, status) VALUES (:t, :m, :m, :r, :c, 5, 'manual', '{}', 'suggested')"
+            ),
+            {"t": side.tenant_id, "m": match, "r": line["id"], "c": claim_line},
+        )
+    return {"remittance_id": rid, "match_id": str(match), "remittance_line_id": line["id"],
+            "claim_line_id": str(claim_line)}  # fmt: skip
+
+
+def _claim_line(admin: Engine, side: Side) -> uuid.UUID:
+    with admin.connect() as conn:
+        return uuid.UUID(
+            str(
+                conn.execute(
+                    text("SELECT id FROM claim_lines WHERE tenant_id = :t LIMIT 1"), {"t": side.tenant_id}
+                ).scalar_one()
+            )
+        )
+
+
+S8_PARAMS = ("remittance_id", "match_id")
 S6_PARAMS = ("extraction_id",)
 S9_PARAMS = ("case_id", "notification_id")
 S7_PARAMS = ("batch_id", "export_template_id", "adjustment_id")
@@ -266,6 +328,7 @@ PARAM_SOURCES = {
     **{p: f"s6.{p}" for p in S6_PARAMS},
     **{p: f"s7.{p}" for p in S7_PARAMS},
     **{p: f"s9.{p}" for p in S9_PARAMS},
+    **{p: f"s8.{p}" for p in S8_PARAMS},
 }
 
 
@@ -279,6 +342,8 @@ def _attack_value(side: Side, param: str) -> str:
         return side.s7[param]
     if source.startswith("s9."):
         return side.s9[param]
+    if source.startswith("s8."):
+        return side.s8[param]
     if source.startswith("s6."):
         return side.s6[param]
     return side.s4[param] if source.startswith("s4.") else str(getattr(side, source))
@@ -572,6 +637,43 @@ def test_s7_foreign_results_templates_and_batches_are_unreachable(sides: tuple[S
         assert got.status_code == 200 and got.json()["data"] == [], path
     summary = a.api.get("/missed-claims/summary", params={"manufacturer_id": b.s3["manufacturer_id"]}).json()
     assert summary["totals"] == {"lines": 0, "amount": "0"} and summary["groups"] == []
+
+
+def test_s8_foreign_remittances_lines_and_matches_are_unreachable(
+    sides: tuple[Side, Side], admin_engine: Engine
+) -> None:
+    a, b = sides
+    unknown = "00000000-0000-7000-8000-000000000000"
+    # lists never contain the other tenant; filters by a foreign id match nothing
+    assert b.s8["remittance_id"] not in {x["id"] for x in a.api.get("/remittances").json()["data"]}
+    assert b.s8["match_id"] not in {x["id"] for x in a.api.get("/matches").json()["data"]}
+    for path, params in (
+        ("/remittances", {"manufacturer_id": b.s3["manufacturer_id"]}),
+        ("/matches", {"remittance_id": b.s8["remittance_id"]}),
+    ):
+        got = a.api.get(path, params=params)
+        assert got.status_code in (200, 404) and (got.status_code == 404 or got.json()["data"] == []), path
+    # a manual match with a foreign remittance line or claim line looks like one with unknown ids
+    own = {"remittance_line_id": a.s8["remittance_line_id"], "claim_line_id": a.s8["claim_line_id"]}
+    for field_, foreign in (
+        ("remittance_line_id", b.s8["remittance_line_id"]),
+        ("claim_line_id", b.s8["claim_line_id"]),
+    ):
+        body, miss = own | {field_: foreign}, own | {field_: unknown}
+        r = a.api.post("/matches", json={**body, "allocated_amount": "1.00"})
+        m = a.api.post("/matches", json={**miss, "allocated_amount": "1.00"})
+        assert r.status_code == m.status_code and r.status_code in (404, 422), r.text
+        assert r.json()["error"]["code"] == m.json()["error"]["code"]
+    # the other tenant's rows are untouched by all of the above
+    with admin_engine.connect() as conn:
+        st = conn.execute(
+            text("SELECT status FROM reconciliation_matches WHERE id = :m"), {"m": b.s8["match_id"]}
+        ).scalar_one()
+        n = conn.execute(
+            text("SELECT count(*) FROM reconciliation_matches WHERE tenant_id = :t"), {"t": b.tenant_id}
+        ).scalar_one()
+    assert (st, n) == ("suggested", 1)
+    assert b.api.get(f"/remittances/{b.s8['remittance_id']}").json()["status"] == "accepted"
 
 
 def test_s5_tracker_and_run_filters_never_show_the_other_tenant(sides: tuple[Side, Side]) -> None:

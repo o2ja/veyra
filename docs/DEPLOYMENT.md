@@ -65,6 +65,7 @@ Defined by `core/config.py` (pydantic-settings). `.env.example` contains placeho
 | `LLM_PROVIDER`, `LLM_API_KEY`, `LLM_MODEL_PRIMARY`, `LLM_MODEL_SECONDARY`, `AI_DAILY_COST_CAP_USD` | | **Unset by default; AI disabled** until OD-2 approval |
 | `ENCRYPTION_KEYS` | `k1:<base64 32 bytes>` | MFA secrets (AES-256-GCM). Comma-separated `kid:key`; the **first is active** for new encryptions, all listed keys decrypt. **Rotation:** add the new key first in the list, deploy, run the re-encrypt command (added with the first rotation need; until then old keys stay listed), remove the old key. Never reuse a kid |
 | `TRUSTED_PROXY_IPS` | `` (empty) | `X-Forwarded-For` honoured only from these peers (Caddy) |
+| `CLOUDFLARE_IP_RANGES` | `` (empty) | Comma-separated Cloudflare CIDRs. `CF-Connecting-IP` is used only when the peer is in `TRUSTED_PROXY_IPS` and Caddy saw the request arrive from one of these ranges. List source and update: `infra/runbooks/cloudflare-ip-update.md` |
 | `SESSION_IDLE_MINUTES` / `SESSION_ABSOLUTE_HOURS` | `30` / `12` | |
 | `SENTRY_DSN` | | Optional |
 | `PUBLIC_BASE_URL` | `https://app.example.com` | Links in emails, cookie/Origin checks |
@@ -102,6 +103,8 @@ flowchart LR
 - **Postgres (OD-3):** (a) self-run in Compose on a dedicated volume/host with `pgBackRest` or WAL-G; or (b) managed standard Postgres from a plain cloud provider. App connects over TLS (`sslmode=verify-full` when remote). Either way: backups, PITR, tested restores.
 - Network: only Caddy exposes 80/443; Postgres/ClamAV/object storage are not exposed publicly; host firewall default-deny; SSH key-only, no root login, fail2ban; automatic security updates.
 - Scale-up path: bigger instance → move worker to its own host → managed/dedicated Postgres with a read replica for reporting → multiple API replicas behind Caddy/load balancer. Kubernetes only with an ADR and a measured need.
+
+**Implemented (S11):** `infra/docker/compose.prod.yml` + `.env.prod.example` (single host behind Cloudflare; internal-only network, read-only filesystems, healthchecks, `restart: unless-stopped`, owner credentials only in the one-off `migrate` service under profile `ops`). Validated in CI with `docker compose config`; never run against a real host in S11. Runbooks: `infra/runbooks/`.
 
 ### 3.1 Reverse proxy and SSL (Caddy)
 
@@ -165,7 +168,7 @@ Structured JSON to stdout (collected by Docker); fields: `timestamp`, `level`, `
 
 | Scenario | Steps (summary) |
 |---|---|
-| Restore DB to a point in time | Provision clean Postgres → restore base backup → replay WAL to target → verify with row counts and `alembic current` → run isolation/golden smoke tests → switch `DATABASE_URL` |
+| Restore DB to a point in time | Provision clean Postgres → restore base backup → replay WAL to target → verify with row counts and `alembic current` → run isolation/golden smoke tests → set `REBATE_DB_NAME` / `S3_BUCKET` (runbooks/backup-restore.md) |
 | Lost host | Provision new host → install Docker → pull images by tag → restore secrets → attach/restore DB → point DNS → smoke test |
 | Corrupt object store | Restore versions or from the secondary bucket; verify `file_objects.sha256` against restored objects |
 | Failed deployment | Roll back image tag; if a migration ran, assess forward-fix vs restore |

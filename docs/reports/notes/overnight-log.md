@@ -1,4 +1,20 @@
-# Overnight log (2026-11-11/12, unattended)
+# Overnight log (2026-11-13, unattended)
+
+## MORNING SUMMARY
+1. **Merged:** #18 S11 ops (c7d014b). ADR-017 + new `docs/PRODUCTION_PLAN.md`: managed S3-compatible storage in production (e5f0918).
+2. **In progress:** s7-adjustments (fix verification).
+3. **Needs your decision:** none yet.
+4. **Failures / findings / discrepancies:** none yet.
+5. **Antigravity prompts ready:** `antigravity-prompt-qa-1.md` (from 2026-11-12).
+6. **Resume:** `docs/reports/notes/resume-prompt.md`, step 2 (s7-adjustments).
+
+## Log
+- Merged PR #18 (6/6 checks green, third security pass MERGEABLE).
+- Owner storage decision recorded (ADR-017, PRODUCTION_PLAN.md, OD-3/OD-4 rows). PRODUCTION_PLAN.md did not exist; created it short.
+
+---
+
+# Previous night (2026-11-11/12)
 
 ## MORNING SUMMARY
 0. 2026-11-12 evening: merged #16 (S5/S6 UI), #17 (S8 matching); S3–S6 report written. Owner decisions: S5 signed
