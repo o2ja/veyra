@@ -257,7 +257,7 @@ Idempotency-Key: 7d6f…
 ```
 ```json
 { "job": {"id": "0192…", "status": "queued", "progress": 0, "result_url": "/api/v1/calculation-runs/0192…"},
-  "run": {"id": "0192…", "status": "queued", "as_of": "2026-11-09T12:03:11Z", "engine_version": "1.0.0"} }
+  "run": {"id": "0192…", "status": "queued", "as_of": "2026-11-09T12:03:11Z", "engine_version": "1.1.0"} }
 ```
 
 **Calculation result with trace reference**

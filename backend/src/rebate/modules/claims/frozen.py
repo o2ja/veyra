@@ -69,8 +69,10 @@ _ANCESTRY = (
 )
 # what the frozen claim was netted by: the "returns" step of the calculation result the claim was made from
 # (owner decision 2026-11-13, BUSINESS_LOGIC §7)
+# engine 1.0.0 results (before the key existed) were claimed from unclaimed lines: returned_quantity was the basis
 _NETTED = (
-    "(SELECT CAST(e.s->>'netted_returned_quantity' AS numeric) "
+    "(SELECT CAST(COALESCE(e.s->>'netted_returned_quantity', "
+    "CASE WHEN r.trace->>'engine_version' = '1.0.0' THEN e.s->>'returned_quantity' END) AS numeric) "
     "FROM jsonb_array_elements(r.trace->'steps') WITH ORDINALITY AS e(s, n) "
     "WHERE e.s->>'step' = 'returns' ORDER BY e.n LIMIT 1)"
 )
