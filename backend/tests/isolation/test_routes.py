@@ -625,6 +625,11 @@ def test_s8_foreign_remittances_lines_and_matches_are_unreachable(
         m = a.api.post("/matches", json={**miss, "allocated_amount": "1.00"})
         assert r.status_code == m.status_code and r.status_code in (404, 422), r.text
         assert r.json()["error"]["code"] == m.json()["error"]["code"]
+    # a foreign adjustment item looks like an unknown one
+    adj_own = {"remittance_line_id": a.s8["remittance_line_id"], "allocated_amount": "-1.00"}
+    r = a.api.post("/matches", json={**adj_own, "claim_adjustment_id": b.s7["adjustment_id"]})
+    m = a.api.post("/matches", json={**adj_own, "claim_adjustment_id": unknown})
+    assert r.status_code == m.status_code == 422 and r.json()["error"]["code"] == m.json()["error"]["code"]
     # the other tenant's rows are untouched by all of the above
     with admin_engine.connect() as conn:
         st = conn.execute(

@@ -1,10 +1,14 @@
 """S8 guards on reconciliation_matches: the payment invariant ignores cross-batch adjustment items, and a categorised
 line cannot be matched.
 
-- ``fn_reconciliation_match_within_paid``: per remittance line, the confirmed allocations to claim lines plus those to an
-  adjustment carried by its original line's own batch sum to at most ``amount_paid``. An allocation to an adjustment
-  carried by ANOTHER batch (owner decision 2026-11-13; interim, pending D-N11) is a separate item and is not cash on a
-  claim line, so a negative one never frees room for claim lines (mirrors ``validate_matches`` in rebate_matching).
+- ``fn_reconciliation_match_within_paid``: serialised per remittance line (``FOR NO KEY UPDATE`` on the line) and per
+  adjustment item (advisory lock); the confirmed allocations of one adjustment item sum to at most its amount in
+  absolute value; per line, the
+  confirmed allocations to claim lines plus those to an adjustment carried by its original line's own batch (which must
+  equal the adjustment's amount exactly: ``allocate()`` writes face value) plus ``GREATEST(amount, 0)`` of those to an
+  adjustment carried by ANOTHER batch (owner decision 2026-11-13; interim, pending D-N11) sum to at most ``amount_paid``:
+  a negative cross-batch allocation never frees room for claim lines, a positive one consumes room (mirrors
+  ``validate_matches`` in rebate_matching).
 - ``fn_reconciliation_match_insert`` / ``fn_reconciliation_match_change``: a ``confirmed`` match on a line with a
   ``category`` is refused (categorisation is final).
 
@@ -29,20 +33,43 @@ def upgrade() -> None:
         DECLARE
             paid numeric;
             allocated numeric;
+            adj_total numeric;
         BEGIN
             IF NEW.status <> 'confirmed' THEN
                 RETURN NULL;
             END IF;
+            IF NEW.claim_adjustment_id IS NOT NULL AND EXISTS (
+                SELECT 1 FROM claim_adjustments a JOIN claim_lines c
+                  ON c.tenant_id = a.tenant_id AND c.id = a.claim_line_id
+                WHERE a.tenant_id = NEW.tenant_id AND a.id = NEW.claim_adjustment_id
+                  AND c.batch_id = a.included_in_batch_id AND a.amount <> NEW.allocated_amount) THEN
+                RAISE EXCEPTION 'reconciliation_matches: a same-batch adjustment allocation equals the adjustment amount'
+                    USING ERRCODE = 'check_violation';
+            END IF;
+            IF NEW.claim_adjustment_id IS NOT NULL THEN
+                PERFORM pg_advisory_xact_lock(hashtextextended('recon-adj:' || NEW.claim_adjustment_id::text, 0));
+                SELECT COALESCE(sum(allocated_amount), 0) INTO adj_total FROM reconciliation_matches
+                WHERE tenant_id = NEW.tenant_id AND claim_adjustment_id = NEW.claim_adjustment_id
+                  AND status = 'confirmed';
+                IF abs(adj_total) > (SELECT abs(amount) FROM claim_adjustments
+                                     WHERE tenant_id = NEW.tenant_id AND id = NEW.claim_adjustment_id) THEN
+                    RAISE EXCEPTION 'reconciliation_matches: confirmed allocations % exceed the adjustment amount',
+                        adj_total USING ERRCODE = 'check_violation';
+                END IF;
+            END IF;
             SELECT amount_paid INTO paid FROM remittance_lines
-            WHERE tenant_id = NEW.tenant_id AND id = NEW.remittance_line_id;
-            SELECT COALESCE(sum(m.allocated_amount), 0) INTO allocated FROM reconciliation_matches m
-            WHERE m.tenant_id = NEW.tenant_id AND m.remittance_line_id = NEW.remittance_line_id
-              AND m.status = 'confirmed'
-              AND (m.claim_line_id IS NOT NULL OR EXISTS (
+            WHERE tenant_id = NEW.tenant_id AND id = NEW.remittance_line_id FOR NO KEY UPDATE;
+            SELECT COALESCE(sum(CASE WHEN m.claim_line_id IS NOT NULL OR same_batch.ok THEN m.allocated_amount
+                                     ELSE GREATEST(m.allocated_amount, 0) END), 0) INTO allocated
+            FROM reconciliation_matches m
+            LEFT JOIN LATERAL (
+                SELECT EXISTS (
                     SELECT 1 FROM claim_adjustments a JOIN claim_lines c
                       ON c.tenant_id = a.tenant_id AND c.id = a.claim_line_id
                     WHERE a.tenant_id = m.tenant_id AND a.id = m.claim_adjustment_id
-                      AND c.batch_id = a.included_in_batch_id));
+                      AND c.batch_id = a.included_in_batch_id) AS ok) same_batch ON true
+            WHERE m.tenant_id = NEW.tenant_id AND m.remittance_line_id = NEW.remittance_line_id
+              AND m.status = 'confirmed';
             IF allocated > paid THEN
                 RAISE EXCEPTION 'reconciliation_matches: confirmed allocations % exceed the amount paid %',
                     allocated, paid USING ERRCODE = 'check_violation';

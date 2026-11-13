@@ -14,7 +14,7 @@ from typing import Any
 from uuid import UUID
 from zoneinfo import ZoneInfo
 
-from sqlalchemy import delete, func, insert, select, update
+from sqlalchemy import delete, func, insert, select, text, update
 from sqlalchemy.orm import Session
 
 from rebate.core import clock
@@ -428,15 +428,13 @@ def remittance_reconcile(db: Session, ctx: JobContext) -> None:
 # ---- decisions --------------------------------------------------------------------------------------------------
 
 
-def _group(db: Session, tenant_id: UUID, match_id: UUID) -> list[ReconciliationMatch]:
-    rows = list(
-        db.scalars(
-            select(ReconciliationMatch)
-            .where(ReconciliationMatch.tenant_id == tenant_id, ReconciliationMatch.match_id == match_id)
-            .order_by(ReconciliationMatch.id)
-            .with_for_update()
-        )
+def _group(db: Session, tenant_id: UUID, match_id: UUID, *, lock: bool = True) -> list[ReconciliationMatch]:
+    query = (
+        select(ReconciliationMatch)
+        .where(ReconciliationMatch.tenant_id == tenant_id, ReconciliationMatch.match_id == match_id)
+        .order_by(ReconciliationMatch.id)
     )
+    rows = list(db.scalars(query.with_for_update() if lock else query))
     if not rows:
         raise NotFound()
     return rows
@@ -465,7 +463,7 @@ def match_audit(rows: Sequence[ReconciliationMatch], status: str) -> dict[str, A
 def decide(db: Session, who: Who, match_id: UUID, revision: int, decision: str) -> list[ReconciliationMatch]:
     """``decision``: ``confirm`` or ``reject`` a suggested match (``If-Match`` revision)."""
     t = who.tenant_id
-    probe = _group(db, t, match_id)
+    probe = _group(db, t, match_id, lock=False)  # no row locks before the document lock (manual() order)
     doc = _locked(db, t, _doc_of_line(db, t, probe[0].remittance_line_id))
     rows = _group(db, t, match_id)  # re-read under the document lock
     if rows[0].status != "suggested":
@@ -545,6 +543,23 @@ def manual(
                 "allocated_amount",
                 "invalid",
                 "The amount must have the adjustment's sign and not exceed its amount.",
+            )
+        db.execute(
+            text("SELECT pg_advisory_xact_lock(hashtextextended(:k, 0))"),
+            {"k": f"recon-adj:{claim_adjustment_id}"},
+        )
+        already = db.scalar(
+            select(func.coalesce(func.sum(ReconciliationMatch.allocated_amount), ZERO)).where(
+                ReconciliationMatch.tenant_id == t,
+                ReconciliationMatch.claim_adjustment_id == claim_adjustment_id,
+                ReconciliationMatch.status == "confirmed",
+            )
+        )
+        if abs((already or ZERO) + amount) > abs(adjustment.amount):
+            raise _invalid(
+                "allocated_amount",
+                "invalid",
+                "The adjustment is already allocated; the total cannot exceed its amount.",
             )
     claim = st.claims.get(adjustment.claim_line_id if adjustment else str(claim_line_id))
     if claim is None:
