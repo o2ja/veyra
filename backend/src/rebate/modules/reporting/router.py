@@ -89,6 +89,15 @@ def trace_claim_line(
 
 
 @router.get(
+    "/trace/claim_adjustment/{adjustment_id}", operation_id="trace_claim_adjustment", dependencies=[NO_QUERY]
+)
+def trace_claim_adjustment(
+    request: Request, adjustment_id: UUID, principal: Annotated[Principal, Depends(require(READ))]
+) -> s.TraceOut:
+    return _trace(request, principal, "claim_adjustment", adjustment_id)
+
+
+@router.get(
     "/trace/remittance_line/{remittance_line_id}",
     operation_id="trace_remittance_line",
     dependencies=[NO_QUERY],

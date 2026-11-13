@@ -51,6 +51,7 @@ class SummaryClaimsMonthly(Base):
     short_paid: Mapped[Decimal] = mapped_column(Numeric(18, 4), server_default="0")
     recovered: Mapped[Decimal] = mapped_column(Numeric(18, 4), server_default="0")
     written_off: Mapped[Decimal] = mapped_column(Numeric(18, 4), server_default="0")
+    recovered_after_write_off: Mapped[Decimal] = mapped_column(Numeric(18, 4), server_default="0")
     at_risk: Mapped[Decimal] = mapped_column(Numeric(18, 4), server_default="0")
     expiring: Mapped[Decimal] = mapped_column(Numeric(18, 4), server_default="0")
     as_of_date: Mapped[date] = mapped_column(Date)

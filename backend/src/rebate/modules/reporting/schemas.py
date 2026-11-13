@@ -11,8 +11,19 @@ from rebate.core.money import Money
 from rebate.modules.claims import RunJobRef
 from rebate.modules.masterdata import Page
 
-Metric = Literal["claimed", "collected", "short_paid", "recovered", "written_off", "at_risk", "expiring"]
-TraceKind = Literal["claim_line", "remittance_line", "variance_case", "calculation_result"]
+Metric = Literal[
+    "claimed",
+    "collected",
+    "short_paid",
+    "recovered",
+    "written_off",
+    "recovered_after_write_off",
+    "at_risk",
+    "expiring",
+]
+TraceKind = Literal[
+    "claim_line", "claim_adjustment", "remittance_line", "variance_case", "calculation_result"
+]
 ExportFormat = Literal["csv", "xlsx"]
 
 
@@ -22,6 +33,7 @@ class Figures(BaseModel):
     short_paid: Money
     recovered: Money
     written_off: Money
+    recovered_after_write_off: Money
     at_risk: Money
     expiring: Money
 

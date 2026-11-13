@@ -83,6 +83,7 @@ def test_dashboard_totals_equal_the_underlying_rows(
         "short_paid": sum((a for k, a, _ in live if k in RECLAIMABLE), D(0)),
         "recovered": D(0),
         "written_off": D(0),
+        "recovered_after_write_off": D(0),
         "at_risk": sum(
             (
                 a

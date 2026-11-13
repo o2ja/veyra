@@ -19,6 +19,7 @@ from sqlalchemy import Engine, text
 from rebate.core.db import transaction
 from rebate.core.figures import Filter
 from rebate.modules.files import storage
+from rebate.modules.recovery import service as recovery_service
 from rebate.modules.reporting import service
 from tests.conftest import DbUrls
 from tests.integration.agreements_support import member
@@ -42,21 +43,22 @@ NOW = datetime(2026, 7, 10, 15, 0, tzinfo=UTC)
 CM_CSV = data("remittance/credit_memo_VOLT_CM-7781.csv")
 SHARED: dict[str, Any] = {}
 
-# Hand derivation from the ground truth (all in July 2026: submitted 07-05 / 07-09, paid 07-31, cases opened 07-10)
-CLAIMED = D("10410.00") + D(
-    "312.50"
-)  # the seven fixture lines (sum of claim_batches_fixture.json) + INV-10020/1
-# confirmed allocations to claim lines: lines 1-3 as paid, line 4's 250.00 (its -50.00 goes to the adjustment), and
-# line 5's subset 1000.00 + 1100.00 once the person confirmed it (7,545.00 - 75.00 unmatched + 50.00 netted)
-COLLECTED = D("2050.00") + D("3120.00") + D("0.00") + D("250.00") + D("1000.00") + D("1100.00")
-SHORT_PAID = (
-    D("150.00") + D("2080.00") + D("660.00")
-)  # short_paid + rejected + unpaid; the 75.00 unmatched payment is not owed to us
-AT_RISK_NOW = D(
-    "660.00"
-)  # only the unpaid case has no deadline; the others expire on 2026-09-29, > 14 days away
-AT_RISK_LATER = SHORT_PAID  # on 2026-09-20 all three are overdue/unknown or within 14 days of 2026-09-29
-EXPIRING_LATER = D("150.00") + D("2080.00")  # known deadline 2026-09-29 within 14 days of 2026-09-20
+# Hand derivation (owner decision 2026-11-13, D-N6: an adjustment belongs to the batch that carries it). Story =
+# build_story + CM-7781 (paid 2026-07-31), refreshed on 2026-07-10; ADJ-2026-0001 (-50.00) rides in B2 with INV-10020/1.
+# claimed: CB-VOLT 2200 + 3120 + 2080 + 250 + 1000 + 1100 + 660 = 10,410.00 (the GT batch_total 10,360.00 puts the
+# adjustment inside CB-VOLT, an ordering the real flow cannot produce); B2 = 312.50 - 50.00 = 262.50; total 10,672.50.
+CB_VOLT = D("10410.00")
+CLAIMED = CB_VOLT + D("312.50") + D("-50.00")
+# collected = confirmed allocations of the accepted remittance to claim lines AND adjustments: 2050 + 3120 + 0 + 200
+# (line 4: 250 to the line, -50 to the adjustment) + (1000 + 1100 line 5) = 7,470.00 (= 7,545.00 - 75.00 unmatched)
+COLLECTED = D("2050.00") + D("3120.00") + D("0.00") + D("250.00") + D("-50.00") + D("1000.00") + D("1100.00")
+# short_paid = 150.00 + 2,080.00 + 50.00 (CL-4, G2) + 660.00 = 2,940.00 (the 75.00 unmatched payment is not owed to us)
+SHORT_PAID = D("150.00") + D("2080.00") + D("50.00") + D("660.00")
+# cross-check: claimed - collected = 3,202.50 = short_paid 2,940.00 + 262.50 (B2, not yet due)
+# deadlines: CM-7781 cases 2026-07-31 + 60 = 2026-09-29; CL-7 unpaid (G3) = submission 2026-07-05 + 60 = 2026-09-03
+AT_RISK_NOW = D("0.00")  # 07-10 (horizon 07-24): every deadline is later; the unpaid case now has one (G3)
+AT_RISK_LATER = SHORT_PAID  # 09-20 (horizon 10-04): all four are due by then (CL-7 is overdue)
+EXPIRING_LATER = D("150.00") + D("2080.00") + D("50.00")  # 09-20 .. 10-04: 09-29 (CL-7, 09-03, is overdue)
 
 
 class Env:
@@ -128,6 +130,7 @@ def test_finalising_queued_a_refresh_and_the_dashboard_matches_the_ground_truth(
         "short_paid": SHORT_PAID,
         "recovered": D(0),
         "written_off": D(0),
+        "recovered_after_write_off": D(0),
         "at_risk": AT_RISK_NOW,
         "expiring": D(0),
     }
@@ -153,12 +156,13 @@ def test_every_figure_drills_to_rows_that_sum_to_it(env: Env, story: Story) -> N
     api = story.ws.api
     figures = api.get("/dashboard").json()["figures"]
     counts = {
-        "claimed": 8,
-        "collected": 6,
-        "short_paid": 3,
+        "claimed": 9,  # 7 + INV-10020/1 + the adjustment
+        "collected": 7,
+        "short_paid": 4,
         "recovered": 0,
         "written_off": 0,
-        "at_risk": 1,
+        "recovered_after_write_off": 0,
+        "at_risk": 0,
         "expiring": 0,
     }
     for metric, figure in figures.items():
@@ -184,6 +188,19 @@ def test_every_figure_drills_to_rows_that_sum_to_it(env: Env, story: Story) -> N
     assert api.get("/dashboard/drilldown", params={"metric": "profit"}).status_code == 422
 
 
+def test_a_claimed_adjustment_row_traces_to_its_batch_and_the_line_it_corrects(
+    env: Env, story: Story
+) -> None:
+    api = story.ws.api
+    rows = api.get("/dashboard/drilldown", params={"metric": "claimed", "limit": 50}).json()["data"]
+    (adj,) = [x for x in rows if x["trace_kind"] == "claim_adjustment"]
+    assert D(adj["amount"]) == D("-50.00")
+    kinds = {n["kind"]: n for n in api.get(f"/trace/claim_adjustment/{adj['trace_id']}").json()["chain"]}
+    assert D(kinds["claim_adjustment"]["fields"]["amount"]) == D("-50.00")
+    assert kinds["claim_batch"]["fields"]["status"] == "submitted" and "source_row" in kinds
+    assert api.get(f"/trace/claim_adjustment/{uuid.uuid4()}").status_code == 404
+
+
 def test_figures_that_depend_on_the_date_follow_the_refresh_date(env: Env, story: Story) -> None:
     # the session would expire at that date, so the service is called directly in a tenant transaction
     tenant = uuid.UUID(story.ws.tenant_id)
@@ -193,18 +210,23 @@ def test_figures_that_depend_on_the_date_follow_the_refresh_date(env: Env, story
             service.refresh(db, tenant)
             body = service.dashboard(db, tenant, Filter())
             drill = service.drilldown(db, tenant, "expiring", Filter(), None, 50)
+            summary = recovery_service.summary(db, tenant)  # ONE at-risk definition: the same figure here
     finally:
         env.clock.t = NOW
     assert str(body["as_of_date"]) == "2026-09-20"
     assert body["figures"]["at_risk"] == AT_RISK_LATER
     assert body["figures"]["expiring"] == EXPIRING_LATER
     assert sum(r.amount for r in drill["rows"]) == EXPIRING_LATER and drill["consistent"]
+    assert (summary["at_risk"]["count"], summary["at_risk"]["amount"]) == (4, AT_RISK_LATER)
     with transaction(
         env.engine, tenant
     ) as db:  # re-dated and idempotent: the same data again gives the same rows
         service.refresh(db, tenant)
         again = service.dashboard(db, tenant, Filter())
     assert again["figures"]["at_risk"] == AT_RISK_NOW and again["figures"]["claimed"] == CLAIMED
+    with transaction(env.engine, tenant) as db:
+        now_summary = recovery_service.summary(db, tenant)["at_risk"]
+    assert (now_summary["count"], now_summary["amount"]) == (0, AT_RISK_NOW)  # 07-10: same as the dashboard
 
 
 def _source_row_of(invoice: str, line: str = "1") -> int:
@@ -314,7 +336,9 @@ def test_the_audit_pack_ties_to_the_batch_and_shows_payments(env: Env, story: St
     drain(env.app)
     rows = list(csv.DictReader(io.StringIO(_file(env, r.json()["file_id"]).decode())))
     assert len(rows) == 7
-    assert sum(D(x["Claim amount"]) for x in rows) == D("10410.00")  # Σ of the fixture lines
+    assert (
+        sum(D(x["Claim amount"]) for x in rows) == CB_VOLT
+    )  # Σ of the fixture lines; the adjustment is in B2
     by_invoice = {x["Invoice"]: x for x in rows}
     paid = {"INV-10001": "2050.00", "INV-10010": "3120.00", "INV-10011": "0.00", "INV-10021": "250.00",
             "INV-10050": "1000.00", "INV-10051": "1100.00"}  # fmt: skip
@@ -336,6 +360,7 @@ def test_the_audit_pack_ties_to_the_batch_and_shows_payments(env: Env, story: St
     drain(env.app)
     assert second.status_code == 202 and _file(env, second.json()["file_id"])[:2] == b"PK"
     xl = _xlsx_rows(_file(env, second.json()["file_id"]))
+    assert len(xl) == 3  # header + INV-10020/1 + the adjustment row (the carrying batch lists it)
     assert sum((D(str(r[13])) for r in xl[1:]), D(0)) == D("312.50") + D("-50.00")
     assert api.get(f"/reports/claim-batches/{uuid.uuid4()}/audit-pack").status_code == 404
     assert (

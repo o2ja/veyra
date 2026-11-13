@@ -8,8 +8,11 @@ Figures, all by the month the case was opened (business time zone), branch = the
   ``overpaid``, ``unmatched_payment`` and ``source_changed`` are not money owed to us.
 * ``recovered`` / ``written_off``: the cases' ``recovered_amount`` / ``written_off_amount``.
 * ``at_risk``: open variance (variance minus recovered) of live reclaimable cases whose deadline is unknown or at
-  most ``AT_RISK_DAYS`` days after the as-of date (overdue included), the definition of ``GET /cases/summary``
-  restricted to reclaimable types.
+  most ``AT_RISK_DAYS`` days after the as-of date (overdue included): ``AT_RISK_WHERE``, also used by
+  ``GET /cases/summary``.
+* ``recovered_after_write_off`` (D-N5): confirmed allocations to the ``recovery_reclaim`` adjustment of a case that is
+  ``written_off`` from a remittance that recorded no ``amount_recovered`` for it (closed cases stay immutable); by the
+  payment month like ``collected``.
 * ``expiring``: the part of ``at_risk`` with a known deadline from the as-of date up to ``AT_RISK_DAYS`` days."""
 
 from typing import Any
@@ -25,6 +28,11 @@ AT_RISK_DAYS = 14
 RECLAIMABLE = "('short_paid', 'rejected', 'unpaid')"
 LIVE = "('open', 'to_reclaim', 'submitted')"
 _OPEN = f"v.status IN {LIVE} AND v.case_type IN {RECLAIMABLE}"
+# THE at-risk definition (owner decision 2026-11-13, D-N6): the dashboard figure and ``GET /cases/summary`` both use it
+AT_RISK_WHERE = (
+    f"{_OPEN} AND (v.deadline_date IS NULL OR v.deadline_date <= CAST(:as_of AS date) + {AT_RISK_DAYS})"
+)
+REMAINING = "v.variance_amount - v.recovered_amount"
 
 
 def _source(amount: str, where: str) -> str:
@@ -40,18 +48,36 @@ def _source(amount: str, where: str) -> str:
     )
 
 
-_REMAINING = "v.variance_amount - v.recovered_amount"
+# D-N5: money paid on a reclaim after the case was written off; ``record_recoveries`` skips closed cases, so such a
+# remittance has no ``amount_recovered`` event for the case. The month expression is the one of ``collected``.
+_AFTER_WRITE_OFF = (
+    "SELECT m.id, 'variance_case' AS trace_kind, v.id AS trace_id, v.manufacturer_id, sd.branch_id, "
+    "date_trunc('month', COALESCE(d.payment_date, d.document_date, (d.created_at AT TIME ZONE :tz)::date)"
+    "::timestamp)::date AS month, m.allocated_amount AS amount, "
+    "v.case_type || ' ' || v.reason_code AS label "
+    "FROM reconciliation_matches m "
+    "JOIN remittance_lines l ON l.tenant_id = m.tenant_id AND l.id = m.remittance_line_id "
+    "JOIN remittance_documents d ON d.tenant_id = l.tenant_id AND d.id = l.remittance_document_id "
+    "JOIN claim_adjustments a ON a.tenant_id = m.tenant_id AND a.id = m.claim_adjustment_id "
+    "JOIN variance_cases v ON v.tenant_id = a.tenant_id AND v.id = a.variance_case_id "
+    "LEFT JOIN claim_lines c ON c.tenant_id = v.tenant_id AND c.id = v.claim_line_id "
+    "LEFT JOIN sales_document_lines s ON s.tenant_id = c.tenant_id AND s.id = c.sales_document_line_id "
+    "LEFT JOIN sales_documents sd ON sd.tenant_id = s.tenant_id AND sd.id = s.document_id "
+    "WHERE m.tenant_id = :t AND m.status = 'confirmed' AND d.status IN ('accepted', 'reconciled') "
+    "AND a.adjustment_type = 'recovery_reclaim' AND v.status = 'written_off' "
+    "AND NOT EXISTS (SELECT 1 FROM variance_case_events e WHERE e.tenant_id = v.tenant_id AND e.case_id = v.id "
+    "AND e.event_type = 'amount_recovered' AND e.payload ->> 'remittance_id' = d.id::text)"
+)
+
 figures = FigureSet(
     {
+        "recovered_after_write_off": _AFTER_WRITE_OFF,
         "short_paid": _source("v.variance_amount", f"v.case_type IN {RECLAIMABLE}"),
         "recovered": _source("v.recovered_amount", "v.recovered_amount > 0"),
         "written_off": _source("v.written_off_amount", "v.written_off_amount > 0"),
-        "at_risk": _source(
-            _REMAINING,
-            f"{_OPEN} AND (v.deadline_date IS NULL OR v.deadline_date <= CAST(:as_of AS date) + {AT_RISK_DAYS})",
-        ),
+        "at_risk": _source(REMAINING, AT_RISK_WHERE),
         "expiring": _source(
-            _REMAINING,
+            REMAINING,
             f"{_OPEN} AND v.deadline_date BETWEEN CAST(:as_of AS date) AND CAST(:as_of AS date) + {AT_RISK_DAYS}",
         ),
     }

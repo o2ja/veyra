@@ -1,9 +1,11 @@
 """Read-only reconciliation data for the dashboard, trace resolver and audit pack (S10; FR-RP-01/03, W14). The
 ``reporting`` module calls these through ``rebate.modules.reconciliation``, never the tables.
 
-Figure ``collected``: confirmed allocations to claim lines (not to adjustments) of accepted or reconciled remittances,
-by the month of the payment date (else the document date, else the day the document was created in the business time
-zone). The branch is the invoice's branch."""
+Figure ``collected`` (owner decision 2026-11-13, D-N6): cash on matched lines = confirmed allocations of accepted or
+reconciled remittances to claim lines and to adjustments (return reversals, recovery reclaims); an unallocated
+remainder is not collected. Month = the payment date (else the document date, else the day the document was created in
+the business time zone), truncated explicitly (the dates are business dates; the session zone must not move them). The
+branch is the invoice's branch of the claim line, or of the adjustment's original line."""
 
 from typing import Any
 from uuid import UUID
@@ -19,15 +21,16 @@ figures = FigureSet(
         "collected": (
             "SELECT m.id, 'remittance_line' AS trace_kind, m.remittance_line_id AS trace_id, d.manufacturer_id, "
             "sd.branch_id, date_trunc('month', COALESCE(d.payment_date, d.document_date, "
-            "(d.created_at AT TIME ZONE :tz)::date))::date AS month, m.allocated_amount AS amount, "
+            "(d.created_at AT TIME ZONE :tz)::date)::timestamp)::date AS month, m.allocated_amount AS amount, "
             "COALESCE(d.document_number, 'remittance') || ' line ' || l.line_number AS label "
             "FROM reconciliation_matches m "
             "JOIN remittance_lines l ON l.tenant_id = m.tenant_id AND l.id = m.remittance_line_id "
             "JOIN remittance_documents d ON d.tenant_id = l.tenant_id AND d.id = l.remittance_document_id "
-            "JOIN claim_lines c ON c.tenant_id = m.tenant_id AND c.id = m.claim_line_id "
+            "LEFT JOIN claim_adjustments a ON a.tenant_id = m.tenant_id AND a.id = m.claim_adjustment_id "
+            "LEFT JOIN claim_lines c ON c.tenant_id = m.tenant_id AND c.id = COALESCE(m.claim_line_id, a.claim_line_id) "
             "LEFT JOIN sales_document_lines s ON s.tenant_id = c.tenant_id AND s.id = c.sales_document_line_id "
             "LEFT JOIN sales_documents sd ON sd.tenant_id = s.tenant_id AND sd.id = s.document_id "
-            "WHERE m.tenant_id = :t AND m.status = 'confirmed' AND m.claim_line_id IS NOT NULL "
+            "WHERE m.tenant_id = :t AND m.status = 'confirmed' "
             "AND d.status IN ('accepted', 'reconciled')"
         )
     }

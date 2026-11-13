@@ -2,8 +2,10 @@
 """Read-only claim data for the dashboard, trace resolver and audit pack (S10; FR-RP-01/03, W14). Set-based and
 tenant-scoped; the ``reporting`` module calls these through ``rebate.modules.claims``, never the tables.
 
-Figure ``claimed``: the claim lines of submitted batches that are still active (``released_at IS NULL``), by the
-month the batch was submitted; adjustments are corrections, not claims, and are not part of the figure."""
+Figure ``claimed`` (owner decision 2026-11-13, D-N6): an adjustment belongs to the batch that carries it, so the figure
+is the claim lines of submitted batches that are still active (``released_at IS NULL``) plus the adjustments included
+in a submitted batch (``recovery_reclaim`` too), by the month that batch was submitted (a DATE, truncated explicitly
+so the session time zone cannot move it). Branch = the invoice branch of the original claim line, if any."""
 
 from typing import Any
 from uuid import UUID
@@ -23,10 +25,19 @@ figures = FigureSet(
     {
         "claimed": (
             "SELECT c.id, 'claim_line' AS trace_kind, c.id AS trace_id, b.manufacturer_id, d.branch_id, "
-            "date_trunc('month', b.submitted_at)::date AS month, c.claim_amount AS amount, "
+            "date_trunc('month', b.submitted_at::timestamp)::date AS month, c.claim_amount AS amount, "
             "c.claim_reference AS label "
             f"FROM claim_lines c JOIN claim_batches b ON b.tenant_id = c.tenant_id AND b.id = c.batch_id {_BRANCH}"
-            "WHERE c.tenant_id = :t AND b.status = 'submitted' AND c.released_at IS NULL"
+            "WHERE c.tenant_id = :t AND b.status = 'submitted' AND c.released_at IS NULL "
+            "UNION ALL "
+            "SELECT a.id, 'claim_adjustment' AS trace_kind, a.id AS trace_id, b.manufacturer_id, d.branch_id, "
+            "date_trunc('month', b.submitted_at::timestamp)::date AS month, a.amount AS amount, "
+            "a.adjustment_type || ' adjustment' AS label "
+            "FROM claim_adjustments a JOIN claim_batches b ON b.tenant_id = a.tenant_id "
+            "AND b.id = a.included_in_batch_id "
+            "LEFT JOIN claim_lines c ON c.tenant_id = a.tenant_id AND c.id = a.claim_line_id "
+            f"{_BRANCH}"
+            "WHERE a.tenant_id = :t AND a.status = 'included' AND b.status = 'submitted'"
         )
     }
 )
@@ -59,6 +70,41 @@ def _sales_nodes(r: Any) -> list[dict[str, Any]]:
             import_batch_id=r.import_batch_id,
         ),
     ]
+
+
+def trace_claim_adjustment(
+    db: Session, tenant: UUID, adjustment_id: UUID
+) -> tuple[list[dict[str, Any]], UUID | None] | None:
+    """The adjustment, its carrying batch and the claim line it corrects (to follow on). ``None`` if unknown."""
+    r = db.execute(
+        text(
+            "SELECT a.id, a.adjustment_type, a.amount, a.status, a.reason, a.claim_line_id, a.variance_case_id, "
+            "b.id AS batch_id, b.batch_number, b.status AS batch_status, b.submitted_at "
+            "FROM claim_adjustments a LEFT JOIN claim_batches b ON b.tenant_id = a.tenant_id "
+            "AND b.id = a.included_in_batch_id WHERE a.tenant_id = :t AND a.id = :id"
+        ),
+        {"t": tenant, "id": adjustment_id},
+    ).first()
+    if r is None:
+        return None
+    nodes = [
+        node(
+            "claim_adjustment",
+            r.id,
+            f"{r.adjustment_type} adjustment",
+            amount=r.amount,
+            status=r.status,
+            reason=r.reason,
+            variance_case_id=r.variance_case_id,
+        )
+    ]
+    if r.batch_id is not None:
+        nodes.append(
+            node(
+                "claim_batch", r.batch_id, r.batch_number, status=r.batch_status, submitted_at=r.submitted_at
+            )
+        )
+    return nodes, r.claim_line_id
 
 
 def trace_claim_line(db: Session, tenant: UUID, claim_line_id: UUID) -> list[dict[str, Any]] | None:

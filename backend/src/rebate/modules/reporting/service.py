@@ -30,6 +30,7 @@ SOURCES: dict[str, FigureSet] = {
     "written_off": recovery.figures,
     "at_risk": recovery.figures,
     "expiring": recovery.figures,
+    "recovered_after_write_off": recovery.figures,
 }
 METRICS = tuple(SOURCES)
 FOLLOW_LIMIT = 50  # claim lines followed from one remittance line in a trace
@@ -150,6 +151,12 @@ def trace(db: Session, tenant: UUID, kind: str, ident: UUID) -> list[dict[str, A
         chain = _claim_chain(db, tenant, ident)
     elif kind == "remittance_line":
         chain = _remittance_chain(db, tenant, ident)
+    elif kind == "claim_adjustment":
+        adj = claims.trace_claim_adjustment(db, tenant, ident)
+        if adj is None:
+            raise NotFound()
+        nodes, claim_line_id = adj
+        chain = merge(nodes, _claim_chain(db, tenant, claim_line_id) or []) if claim_line_id else nodes
     elif kind == "calculation_result":
         chain = claims.trace_calculation_result(db, tenant, ident)
     elif kind == "variance_case":
@@ -163,7 +170,7 @@ def trace(db: Session, tenant: UUID, kind: str, ident: UUID) -> list[dict[str, A
         if remittance_line_id is not None:
             parts.append(_remittance_chain(db, tenant, remittance_line_id) or [])
         chain = merge(*parts)
-    else:  # unreachable: the route restricts ``kind`` to these four
+    else:  # unreachable: the route restricts ``kind`` to these five
         raise NotFound()
     if chain is None:
         raise NotFound()

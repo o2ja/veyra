@@ -11,6 +11,7 @@ from rebate.modules.claims.reporting_reads import (
     audit_pack_rows,
     figures,
     trace_calculation_result,
+    trace_claim_adjustment,
     trace_claim_line,
 )
 from rebate.modules.claims.router import router
@@ -30,5 +31,6 @@ __all__ = [
     "router",
     "submitted_claim_lines",
     "trace_calculation_result",
+    "trace_claim_adjustment",
     "trace_claim_line",
 ]
