@@ -55,6 +55,7 @@
 - M1 S10 core done (c9f971f): ground-truth figures claimed 10,722.50 / collected 7,520.00 / short-paid 2,890.00 / at-risk 660.00; Hypothesis Σ drill-down = figure; isolation extended. Full 2280 pass. Opus review (money+security+DB) running.
 - S10 review: NOT MERGEABLE: **HARD STOP D-N7** (claimed/collected exclude adjustments vs §10.3 + ground truth). Figures re-derived: 10,722.50 / 7,520 / 2,890 / 660 match the code but not the net-of-adjustment rule. S10 stopped.
 - S11.3 ASVS L2 review of main (`docs/reports/S11_3_ASVS_L2_REVIEW.md` on s11-security): 3 serious (DB params in error logs; no parse memory/CPU limits; headers untested), 7 minor, 2 nit; 697 security/api/route tests pass. Builder N1 fixing on s11-security.
+- N1 S11.3 fixes done (s11-security 8e74238): hide_parameters + type-only 500 logs, worker mem/cpu/pids limits in compose.prod, XLSX uncompressed cap 300→100 MB, header + Caddyfile tests, doc-transcribed permission matrix (matches; SECURITY.md §3 lacks manufacturer_settings.write), XML DTD + PDF/ZIP polyglot refusal, per-IP login limit 20/min. Full 1731 pass / 1 fail (encrypted-PDF, reverted by design; affected tests re-run pass); negctl OK. Review running.
 
 ---
 
