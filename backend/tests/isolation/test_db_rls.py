@@ -374,6 +374,7 @@ S8_UPDATABLE = {
     "remittance_documents": "status = status",
     "remittance_extraction_staging": "corrected = corrected",
     "reconciliation_matches": "status = status",
+    "remittance_lines": "category = category",
 }
 
 
@@ -833,6 +834,17 @@ def test_d3_s8_update_foreign_row_affects_nothing(app_engine: Engine, world: Wor
             conn, f"UPDATE {table} SET {S8_UPDATABLE[table]} WHERE {column} = :id", {"id": world.b.s8[key]}
         )
     assert got == "n=0", breach(f"A updated B's {table} row ({got})")
+
+
+def test_d3_s8_the_app_role_cannot_change_remittance_line_evidence(app_engine: Engine, world: World) -> None:
+    """Only the three categorisation columns are granted; the money and identifiers of a line are evidence."""
+    with as_app(app_engine, world.a.tenant_id) as conn:
+        got = _outcome(
+            conn,
+            "UPDATE remittance_lines SET amount_paid = 1 WHERE id = :id",
+            {"id": world.a.s8["rline"]},
+        )
+    assert got.startswith("error: permission denied"), got
 
 
 S8_INSERT_AS_NEW = {  # what a copy must change so that the table's own BEFORE INSERT trigger lets it reach the policy

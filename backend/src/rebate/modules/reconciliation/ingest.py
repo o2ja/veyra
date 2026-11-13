@@ -74,6 +74,12 @@ class CannotAccept(Conflict):
     message = "The remittance has open problems and cannot be accepted."
 
 
+class TotalRequired(ValidationFailed):
+    commit = True  # the user's corrections are kept
+    code = "total_required"
+    message = "The document states no total; enter total_amount to accept it."
+
+
 def _audit(
     db: Session,
     tenant_id: UUID,
@@ -381,11 +387,15 @@ def ingest(db: Session, ctx: JobContext) -> None:
     total = doc.total_amount
     if not ctx.payload.get("total_given"):
         stated = header.get("total_amount")
-        total = (
-            stated
-            if stated is not None
-            else sum((r.get("amount_paid") or Decimal(0) for r in rows), Decimal(0))
-        )
+        if stated is None:
+            # no stated total anywhere: the arithmetic check would be empty, so a person must enter it (422
+            # total_required at acceptance); the sum of the lines is only a placeholder until then
+            total = sum((r.get("amount_paid") or Decimal(0) for r in rows), Decimal(0))
+            rows[0]["issues"].append(
+                intake.issue("total_amount", "total_required", "The document states no total; enter it.")
+            )
+        else:
+            total = stated
     doc.document_number = number
     doc.document_date = doc.document_date or header.get("document_date")
     doc.payment_date = doc.payment_date or header.get("payment_date")
@@ -437,6 +447,8 @@ def _accept(
 ) -> None:
     rows = staged(db, doc.tenant_id, doc.id)
     if issues := problems(doc, rows):
+        if any(i["code"] == "total_required" for i in issues):
+            raise TotalRequired(details=issues[:50])
         raise CannotAccept(details=issues[:50])
     mapping = _reason_map(db, doc.tenant_id, doc.manufacturer_id)
     lines = []

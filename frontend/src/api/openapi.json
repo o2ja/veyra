@@ -1688,6 +1688,21 @@
         "title": "CasePatch",
         "type": "object"
       },
+      "CategoriseIn": {
+        "additionalProperties": false,
+        "properties": {
+          "category": {
+            "const": "unmatched_payment",
+            "title": "Category",
+            "type": "string"
+          }
+        },
+        "required": [
+          "category"
+        ],
+        "title": "CategoriseIn",
+        "type": "object"
+      },
       "Change": {
         "properties": {
           "after": {
@@ -5956,10 +5971,29 @@
             ],
             "title": "Allocated Amount"
           },
+          "claim_adjustment_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Claim Adjustment Id"
+          },
           "claim_line_id": {
-            "format": "uuid",
-            "title": "Claim Line Id",
-            "type": "string"
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Claim Line Id"
           },
           "remittance_line_id": {
             "format": "uuid",
@@ -5969,7 +6003,6 @@
         },
         "required": [
           "remittance_line_id",
-          "claim_line_id",
           "allocated_amount"
         ],
         "title": "ManualMatchIn",
@@ -8780,6 +8813,30 @@
             "title": "Amount Paid",
             "type": "string"
           },
+          "categorised_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Categorised At"
+          },
+          "category": {
+            "anyOf": [
+              {
+                "const": "unmatched_payment",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Category"
+          },
           "claim_reference": {
             "anyOf": [
               {
@@ -8914,7 +8971,9 @@
           "amount_claimed_stated",
           "external_reason_code",
           "external_reason_text",
-          "reason_code"
+          "reason_code",
+          "category",
+          "categorised_at"
         ],
         "title": "RemittanceLineOut",
         "type": "object"
@@ -20147,6 +20206,59 @@
         "summary": "Tracker",
         "tags": [
           "calculation"
+        ]
+      }
+    },
+    "/api/v1/remittance-lines/{line_id}/categorise": {
+      "post": {
+        "operationId": "remittance_line_categorise",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "line_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Line Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CategoriseIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RemittanceLineOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Categorise Line",
+        "tags": [
+          "reconciliation"
         ]
       }
     },

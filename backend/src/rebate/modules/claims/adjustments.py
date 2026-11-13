@@ -393,7 +393,7 @@ def propose(
             "SELECT count(*) FROM calculation_results r "
             "JOIN sales_document_lines s ON s.tenant_id = r.tenant_id AND s.id = r.sales_document_line_id "
             "WHERE r.tenant_id = :t AND r.run_id = :r "
-            "AND r.status IN ('eligible', 'exception', 'not_applicable', 'adjustment') "
+            "AND r.status IN ('eligible', 'exception', 'not_applicable', 'adjustment', 'netted') "
             "AND (NOT s.is_current OR EXISTS (SELECT 1 FROM calculation_results r2 "
             "JOIN calculation_runs cr2 ON cr2.tenant_id = r2.tenant_id AND cr2.id = r2.run_id "
             "AND cr2.status = 'completed' WHERE r2.tenant_id = r.tenant_id "
@@ -462,9 +462,24 @@ def propose(
         if a is not None:
             made.append(a)
 
-    # return_reversal (§7): a return line after the original was claimed
-    returns = [r for r in rows if r.status == "adjustment" and r.original_line_id is not None]
-    originals = source.frozen_claims(db, t, sorted({r.original_line_id for r in returns}))
+    # return_reversal (§7): a return line after the original was claimed. Returns now netted into the claim are
+    # included too: a reversal proposed earlier for a return that is netted now (a netted return was reduced) is undone
+    netted_returns = db.execute(
+        text(
+            "SELECT r.id, r.sales_document_line_id, r.document_number, r.line_number, r.status, r.exception_code, "
+            "r.claim_amount, r.flags, s.original_line_id FROM calculation_results r "
+            "JOIN sales_document_lines s ON s.tenant_id = r.tenant_id AND s.id = r.sales_document_line_id "
+            "WHERE r.tenant_id = :t AND r.run_id = :r AND r.status = 'netted' "
+            "AND s.original_line_id IS NOT NULL ORDER BY r.id"
+        ),
+        {"t": t, "r": run_id},
+    ).all()
+    returns = [r for r in rows if r.status == "adjustment" and r.original_line_id is not None] + list(
+        netted_returns
+    )
+    # every linked return row of the run, whatever its status (an exception row proposes nothing but is not "gone")
+    linked = [r for r in (*rows, *netted_returns) if r.original_line_id is not None]
+    originals = source.frozen_claims(db, t, sorted({r.original_line_id for r in linked}))
     compared += len(returns)
     for row in returns:
         orig = originals.get(row.original_line_id)
@@ -489,6 +504,8 @@ def propose(
             f"Return {row.document_number}/{row.line_number} after the original was claimed: "
             f"reversal due {row.claim_amount}, already proposed {done}, proposed {amount}"
         )
+        if row.status == "netted":
+            reason += "; the return is netted into the frozen claim now"
         if CANNOT_BE_NET_CLAIMED in row.flags:
             reason += "; when proposed, the manufacturer did not accept negative claims: cannot be net-claimed, discuss with the manufacturer"
         a = _insert(
@@ -501,6 +518,56 @@ def propose(
             calculation_result_id=row.id,
             amount=amount,
             reason=reason,
+        )
+        if a is not None:
+            made.append(a)
+
+    # a reversal whose return line is no longer a return of that claim (re-imported unlinked or as something else)
+    # is undone: due 0, proposed = minus what is already proposed (judged only when the run covers that line)
+    covered = {r.sales_document_line_id for r in rows} | {r.sales_document_line_id for r in netted_returns}
+    # (return line, claim line) pairs that are still open returns of a frozen claim
+    current = {
+        (r.sales_document_line_id, originals[r.original_line_id].claim_line_id)
+        for r in linked
+        if r.original_line_id in originals
+    }
+    claim_ids = sorted(
+        {c.claim_line_id for c in claims.values()} | {o.claim_line_id for o in originals.values()}
+    )
+    for o in db.execute(
+        text(
+            "WITH RECURSIVE fwd(start, cur) AS ("
+            "SELECT r2.sales_document_line_id, r2.sales_document_line_id FROM claim_adjustments a "
+            "JOIN calculation_results r2 ON r2.tenant_id = a.tenant_id AND r2.id = a.calculation_result_id "
+            "WHERE a.tenant_id = :t AND a.adjustment_type = 'return_reversal' AND a.status <> 'rejected' "
+            "AND a.claim_line_id = ANY(CAST(:cls AS uuid[])) "
+            "UNION ALL SELECT fwd.start, s.superseded_by_id FROM fwd "
+            "JOIN sales_document_lines s ON s.tenant_id = :t AND s.id = fwd.cur "
+            "WHERE s.superseded_by_id IS NOT NULL) "
+            "SELECT a.claim_line_id, a.calculation_result_id, a.manufacturer_id, sum(a.amount) AS done, "
+            "(SELECT f.cur FROM fwd f JOIN sales_document_lines s2 ON s2.tenant_id = :t AND s2.id = f.cur "
+            "WHERE f.start = r2.sales_document_line_id AND s2.superseded_by_id IS NULL LIMIT 1) AS head "
+            "FROM claim_adjustments a "
+            "JOIN calculation_results r2 ON r2.tenant_id = a.tenant_id AND r2.id = a.calculation_result_id "
+            "WHERE a.tenant_id = :t AND a.adjustment_type = 'return_reversal' AND a.status <> 'rejected' "
+            "AND a.claim_line_id = ANY(CAST(:cls AS uuid[])) "
+            "GROUP BY a.claim_line_id, a.calculation_result_id, a.manufacturer_id, r2.sales_document_line_id "
+            "ORDER BY a.claim_line_id, a.calculation_result_id"
+        ),
+        {"t": t, "cls": claim_ids},
+    ).all():
+        if o.head not in covered or (o.head, o.claim_line_id) in current or o.done == 0:
+            continue
+        a = _insert(
+            db,
+            who,
+            run_id,
+            manufacturer_id=o.manufacturer_id,
+            adjustment_type="return_reversal",
+            claim_line_id=o.claim_line_id,
+            calculation_result_id=o.calculation_result_id,
+            amount=-o.done,
+            reason=f"The returned line is no longer a return of this claim: reversal due 0, already proposed {o.done}, proposed {-o.done}",
         )
         if a is not None:
             made.append(a)

@@ -102,6 +102,8 @@ class RemittanceLineOut(BaseModel):
     external_reason_code: str | None
     external_reason_text: str | None
     reason_code: str | None
+    category: Literal["unmatched_payment"] | None
+    categorised_at: datetime | None
 
 
 class RemittanceLineList(BaseModel):
@@ -200,15 +202,18 @@ class ManualMatchIn(BaseModel):
     model_config = STRICT
 
     remittance_line_id: JsonUUID
-    claim_line_id: JsonUUID
+    claim_line_id: JsonUUID | None = None
+    claim_adjustment_id: JsonUUID | None = (
+        None  # interim (D-N11): an adjustment item carried by another batch
+    )
     allocated_amount: Money
+    # sign and zero rules depend on the target and the line's amount_paid; the service validates them
 
-    @field_validator("allocated_amount")
-    @classmethod
-    def _positive(cls, v: Decimal) -> Decimal:
-        if v <= 0:
-            raise ValueError("The allocated amount must be positive.")
-        return v
+
+class CategoriseIn(BaseModel):
+    model_config = STRICT
+
+    category: Literal["unmatched_payment"]
 
 
 class ReconciliationLineOut(BaseModel):
