@@ -299,14 +299,14 @@ def test_finalising_classifies_the_variances_of_the_ground_truth(story: Story) -
 
 def test_finalising_opened_the_recovery_cases_of_the_ground_truth(story: Story) -> None:
     """S9 hooks into the finalisation: expected_reconciliation.json gives 150.00 short-paid (E12), 2,080.00 rejected
-    (E07), 75.00 unmatched and 660.00 unpaid; the dispute deadline is 2026-07-31 + 60 days = 2026-09-29 (the unpaid
-    line has no remittance to count from)."""
+    (E07), 75.00 unmatched and 660.00 unpaid; the dispute deadline is 2026-07-31 + 60 days = 2026-09-29; the unpaid
+    line has no remittance, so it counts from the claim submission: 2026-07-05 + 60 = 2026-09-03 (D-N2)."""
     got = story.ws.api.get("/cases", params={"limit": 50}).json()["data"]
     assert sorted((c["case_type"], c["variance_amount"], c["deadline_date"]) for c in got) == [
         ("rejected", "2080.0000", "2026-09-29"),
         ("short_paid", "150.0000", "2026-09-29"),
         ("unmatched_payment", "75.0000", "2026-09-29"),
-        ("unpaid", "660.0000", None),
+        ("unpaid", "660.0000", "2026-09-03"),
     ]
     assert {c["remittance_document_id"] for c in got} == {SHARED["doc"]["id"]}
 

@@ -2,7 +2,8 @@
 
 Hand values: the three dated cases (price 150.00, quantity 2,080.00, unmatched 75.00) fall due on 2026-09-29. The
 reminders are 14, 7 and 3 days before: 2026-09-15, 2026-09-22, 2026-09-26; the deadline day itself repeats the 3-day
-reminder, which is deduped. The unpaid case (660.00) has no deadline and never reminds. The recipients are the
+reminder, which is deduped. The unpaid case (660.00) falls due 2026-09-03 (submitted 07-05 + 60, D-N2); its reminders would be 08-20, 08-27
+and 08-31, but the earliest sweep here is 2026-09-14, already past that deadline, so it never reminds. The recipients are the
 tenant's active admins and approvers (two users) until a case has an owner. Tests run in file order."""
 
 from datetime import UTC, datetime
@@ -66,7 +67,9 @@ def test_14_day_reminder_notifies_admins_and_approvers_and_mails_one_digest(env:
         assert all(n["read_at"] is None for n in got)
         assert any("150.00" in n["title"] and n["title"].endswith("deadline in 14 days") for n in got)
         assert any("2080.00" in n["title"] for n in got) and any("75.00" in n["title"] for n in got)
-        assert not any("660.00" in n["title"] for n in got)  # the unpaid case has no deadline
+        assert not any(
+            "660.00" in n["title"] for n in got
+        )  # the unpaid case (due 2026-09-03) is past its deadline at every sweep date
     (m,) = digests(email(cases.api))
     assert m["Subject"] == "Veyra Recover: 3 recovery deadline reminder(s)"
     for amount in ("150.00", "2080.00", "75.00"):
