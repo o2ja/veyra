@@ -70,6 +70,11 @@ TENANT_TABLES: dict[str, str] = {
     "remittance_lines": "tenant_id",
     "remittance_extraction_staging": "tenant_id",
     "reconciliation_matches": "tenant_id",
+    # S9 recovery
+    "variance_cases": "tenant_id",
+    "variance_case_events": "tenant_id",
+    "case_attachments": "tenant_id",
+    "notifications": "tenant_id",
     # S6 AI extraction
     "document_extractions": "tenant_id",
     "ai_invocations": "tenant_id",
@@ -93,6 +98,7 @@ class TenantData:
     s6: dict[str, UUID] = field(default_factory=dict)  # one row id per S6 tenant table
     s7: dict[str, UUID] = field(default_factory=dict)  # one row id per S7 tenant table
     s8: dict[str, UUID] = field(default_factory=dict)  # one row id per S8 tenant table
+    s9: dict[str, UUID] = field(default_factory=dict)  # one row id per S9 tenant table
 
 
 @dataclass
@@ -155,6 +161,7 @@ def _tenant(conn: Connection, name: str, admin_email: str) -> TenantData:
     data.s6 = _s6_rows(conn, tid, admin, fid)
     data.s7 = _s7_rows(conn, tid, admin, data.s3, data.s4, data.s5)
     data.s8 = _s8_rows(conn, tid, admin, fid, data.s3, data.s7)
+    data.s9 = _s9_rows(conn, tid, admin, data.s3, data.s8)
     data.s5["adj"] = data.s7.pop("adj")  # a proposal needs its claim line (S7.4 FK), so S7 inserts it
     conn.execute(
         text(
@@ -336,6 +343,39 @@ def _s8_rows(
         "INSERT INTO reconciliation_matches (tenant_id, id, match_id, remittance_line_id, claim_line_id, "
         "allocated_amount, method, evidence, status) VALUES (:t, :match, :match, :rline, :line, 1, 'manual', "
         "'{}', 'suggested')",
+    ):
+        conn.execute(text(sql), p)
+    return ids
+
+
+def _s9_rows(
+    conn: Connection, t: UUID, user: UUID, s3: dict[str, UUID], s8: dict[str, UUID]
+) -> dict[str, UUID]:
+    """One row in each S9 tenant table: an open unmatched-payment case of 1.00 on the S8 remittance line, its
+    created event, a clean-scanned attachment on it, and a deadline reminder for the admin."""
+    ids = {k: new_id() for k in ("case", "event", "attachment", "notification", "file")}
+    p = {
+        "t": t,
+        "u": user,
+        "mfr": s3["mfr"],
+        "rline": s8["rline"],
+        "doc": s8["doc"],
+        "k": f"quarantine/{t}/{ids['file']}",
+        **ids,
+    }
+    for sql in (
+        "INSERT INTO variance_cases (tenant_id, id, manufacturer_id, remittance_line_id, remittance_document_id, "
+        "case_type, reason_code, paid_amount, variance_amount, created_by) VALUES (:t, :case, :mfr, :rline, :doc, "
+        "'unmatched_payment', 'unmatched_payment', 1, 1, :u)",
+        "INSERT INTO variance_case_events (tenant_id, id, case_id, event_type, actor_user_id) "
+        "VALUES (:t, :event, :case, 'created', :u)",
+        "INSERT INTO file_objects (tenant_id, id, kind, original_name, storage_key, size_bytes, sha256, "
+        "detected_mime, uploaded_by, scan_status, scanned_at) VALUES (:t, :file, 'attachment', 'iso.pdf', :k, 10, "
+        "repeat('a', 64), 'application/pdf', :u, 'clean', now())",
+        "INSERT INTO case_attachments (tenant_id, id, case_id, file_id, added_by) "
+        "VALUES (:t, :attachment, :case, :file, :u)",
+        "INSERT INTO notifications (tenant_id, id, user_id, kind, entity_type, entity_id, title, dedupe_key) "
+        "VALUES (:t, :notification, :u, 'deadline_reminder', 'variance_case', :case, 'iso', 'iso:deadline_reminder:14')",
     ):
         conn.execute(text(sql), p)
     return ids

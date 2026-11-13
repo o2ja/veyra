@@ -377,6 +377,19 @@ S8_UPDATABLE = {
 }
 
 
+# ---- S9 tables (recovery cases) --------------------------------------------------------------------------
+S9_ROWS: dict[str, tuple[str, str]] = {
+    "variance_cases": ("id", "case"),
+    "variance_case_events": ("id", "event"),
+    "case_attachments": ("id", "attachment"),
+    "notifications": ("id", "notification"),
+}
+S9_UPDATABLE = {  # the columns the app role may update at all; events and attachments are append-only
+    "variance_cases": "status = status",
+    "notifications": "read_at = now()",
+}
+
+
 def test_every_tenant_isolated_table_is_in_the_isolation_suite(admin_engine: Engine) -> None:
     """Every table carrying the tenant_isolation policy is attacked by D1/D7/D8/D12, and every S3 one by the
     S3 D-series below (policies survive the negative control's DISABLE ROW LEVEL SECURITY)."""
@@ -396,7 +409,9 @@ def test_every_tenant_isolated_table_is_in_the_isolation_suite(admin_engine: Eng
         "file_objects",
     }
     assert policed == set(TENANT_TABLES), policed ^ set(TENANT_TABLES)
-    everything = set(S3_ROWS) | set(S4_ROWS) | set(S5_ROWS) | set(S6_ROWS) | set(S7_ROWS) | set(S8_ROWS)
+    everything = (
+        set(S3_ROWS) | set(S4_ROWS) | set(S5_ROWS) | set(S6_ROWS) | set(S7_ROWS) | set(S8_ROWS) | set(S9_ROWS)
+    )
     assert policed - s2 == everything, (policed - s2) ^ everything
 
 
@@ -865,3 +880,69 @@ def test_d9_s8_delete_and_tenant_column_rules(app_engine: Engine, world: World, 
         assert moved == "rls", moved
     else:
         assert moved.startswith("error: permission denied"), moved
+
+
+# ---- S9 attacks ------------------------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize("table", sorted(S9_ROWS))
+def test_d2_s9_select_by_foreign_id_returns_nothing(app_engine: Engine, world: World, table: str) -> None:
+    column, key = S9_ROWS[table]
+    with as_app(app_engine, world.a.tenant_id) as conn:
+        own = conn.execute(text(f"SELECT 1 FROM {table} WHERE {column} = :id"), {"id": world.a.s9[key]}).all()
+        rows = conn.execute(
+            text(f"SELECT 1 FROM {table} WHERE {column} = :id"), {"id": world.b.s9[key]}
+        ).all()
+    assert len(own) == 1 and rows == [], breach(f"A read B's {table} row")
+
+
+@pytest.mark.parametrize("table", sorted(S9_UPDATABLE))
+def test_d3_s9_update_foreign_row_affects_nothing(app_engine: Engine, world: World, table: str) -> None:
+    column, key = S9_ROWS[table]
+    with as_app(app_engine, world.a.tenant_id) as conn:
+        got = _outcome(
+            conn, f"UPDATE {table} SET {S9_UPDATABLE[table]} WHERE {column} = :id", {"id": world.b.s9[key]}
+        )
+    assert got == "n=0", breach(f"A updated B's {table} row ({got})")
+
+
+@pytest.mark.parametrize("table", sorted(S9_ROWS))
+def test_d5_s9_insert_into_foreign_tenant_is_rejected(app_engine: Engine, world: World, table: str) -> None:
+    with as_app(app_engine, world.a.tenant_id) as conn:
+        cols = ", ".join(
+            conn.execute(
+                text(
+                    "SELECT column_name FROM information_schema.columns WHERE table_schema = 'public' "
+                    "AND table_name = :t AND is_generated = 'NEVER' ORDER BY ordinal_position"
+                ),
+                {"t": table},
+            ).scalars()
+        )
+        got = _outcome(
+            conn,
+            f"INSERT INTO {table} ({cols}) SELECT {cols} FROM jsonb_populate_record(NULL::{table}, "
+            f"(SELECT to_jsonb(x) || jsonb_build_object('tenant_id', CAST(:b AS uuid), 'id', gen_random_uuid()) "
+            f"FROM {table} x WHERE tenant_id = :a LIMIT 1))",
+            {"a": world.a.tenant_id, "b": world.b.tenant_id},
+        )
+    # the copy keeps its source file: the attachment insert trigger may refuse it (no such file in B) before RLS does
+    refused = got == "rls" or "only a clean-scanned attachment" in got
+    assert refused, breach(f"insert of a {table} row into tenant B was not rejected ({got})")
+
+
+@pytest.mark.parametrize("table", sorted(S9_ROWS))
+def test_d9_s9_nothing_is_deleted_and_the_tenant_column_cannot_move(
+    app_engine: Engine, world: World, table: str
+) -> None:
+    """No S9 table grants DELETE to the app role; none lets the tenant column be updated (cases and notifications
+    grant only their own columns; events and attachments no UPDATE at all)."""
+    column, key = S9_ROWS[table]
+    with as_app(app_engine, world.a.tenant_id) as conn:
+        foreign = _outcome(conn, f"DELETE FROM {table} WHERE {column} = :id", {"id": world.b.s9[key]})
+        moved = _outcome(
+            conn,
+            f"UPDATE {table} SET tenant_id = :b WHERE {column} = :id",
+            {"b": world.b.tenant_id, "id": world.a.s9[key]},
+        )
+    assert foreign.startswith("error: permission denied"), foreign
+    assert moved.startswith("error: permission denied") or moved == "rls" or "are fixed" in moved, moved
