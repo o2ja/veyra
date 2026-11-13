@@ -1,6 +1,8 @@
 .env*
 !.env.example
+!.env.prod.example
 *.zip
+/backups/
 __pycache__/
 .venv/
 node_modules/

@@ -126,7 +126,13 @@ def request_context(request: Request) -> Iterator[RequestContext]:
         db=session,
         settings=settings,
         request_id=getattr(request.state, "request_id", ""),
-        ip=client_ip(peer, request.headers.get("x-forwarded-for"), settings.trusted_proxy_ips),
+        ip=client_ip(
+            peer,
+            request.headers.get("x-forwarded-for"),
+            settings.trusted_proxy_ips,
+            request.headers.get("cf-connecting-ip"),
+            settings.cloudflare_ip_ranges,
+        ),
         user_agent=(request.headers.get("user-agent") or "")[:512] or None,
     )
     request.state.ctx = c
