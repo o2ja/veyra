@@ -1,4 +1,4 @@
-# Resume prompt (2026-11-13 evening): paste into a new session started in D:\veyra\rebate-recovery-docs\rebate-recovery
+# Resume prompt (2026-11-14 early): paste into a new session started in D:\veyra\rebate-recovery-docs\rebate-recovery
 
 Resume the Veyra Recover build. The deadline is 2026-11-15.
 
@@ -6,24 +6,24 @@ Read ONLY these: this file, the SUMMARY at the top of `docs/reports/notes/overni
 
 First run `git worktree list`, `git status`, `gh pr list` and `git fetch`. Commit and push any leftovers. Start the dev stack if it is down: `docker compose --env-file .env -f infra/docker/compose.dev.yml --profile s2 up -d` (from main).
 
-## State (2026-11-13 evening)
-- **Main:** 6a3e7a6 (#20 merged). GitHub Actions unpaid → merge gate = `make ci-local` 6/6 (CLAUDE.md §19). `gh pr merge` is blocked by the auto-mode classifier → the owner merges (or adds a permission rule).
-- **#21 S11.1** `s11-audit-seal` 4f95e43: **ci-local 6/6 PASS** (comment on the PR), reviews passed → waits for the owner's merge. 4f95e43 also fixes the e2e flake (Vite reloaded the page when Playwright wrote junit-e2e.xml into frontend/).
-- **#22 S11.3** `s11-security` a7f7f6a: reviewed; needs latest main + gate after #21. **#24** D-N8 (draft).
-- **S7** `s7-claims` = `s7-adjustments` e43aefd: owner money rule D-N1/D-N3/D-N7 + D-N10 applied; 5th financial review **MERGEABLE**. PR #15 (draft): merge main in, gate, merge.
-- **S8** `s8-reconciliation` 40dc42f: reviews 3–5 (`docs/reports/notes/s8-financial-review-{3,4,5}.md`): no financial discrepancy; serious (positive cross-batch adjustment allocation uncounted, §10.2) and all minors fixed; final pass MERGEABLE WITH MINORS, minors fixed + orchestrator-verified. Interim H2 = owner question D-N11. Merge after #15: merge main in, gate.
-- **S9** `s9-recovery` adbe374 (0d8021b reviewed 3× + G3 D-N2 unpaid-deadline reminder test): merge final S8 in, review the D-N2 change with that merge, gate.
-- **S10** `s10-reporting` e4715c5: owner figure decisions; 3 tests fail until real S8/S9 numbers are in. Rebase/merge S9 in, confirm those 3 pass, run the S10 reviewer.
-- **Antigravity:** branches pre-built on their backend + `ui/s7` (briefs + prompts committed on each): `ui/s7-adjustments`, `ui/s8`, `ui/s9`, `ui/s10` (worktrees `D:/veyra/veyra-ui-*`). Its sandbox cannot reach localhost → it never runs Playwright; the orchestrator runs every UI branch's e2e. `ui/s7` (ac49bd7) and `ui/qa-1` round 2 (423d306) are done, not verified: `ui/qa-1` e2e needs main incl. #21 (dev DB is at the audit_seals head).
-- **Other owner items:** D-N4 retention design, D-N8 ZAP/pen test, D-N9 Docker memory for S11.2, D-N11 (S8 H2).
+## State (2026-11-14 early)
+- **Main:** 19b26c4. Merge gate = `make ci-local` 6/6 (CLAUDE.md §19). `gh pr merge` is blocked by the auto-mode classifier → the owner merges. Plan: `docs/reports/notes/FINISH_PLAN.md`.
+- **Machine:** C: (temp/Docker) nearly full (3 GB free) and RAM tight: Docker crashed once (restarted). Run at most a gate + 1 agent; one test container at a time.
+- **#21 S11.1** `s11-audit-seal` c35c2e5 (main merged): gate re-run was interrupted by the session end → merge latest main, re-run ci-local, post, owner merges. (Earlier 6/6 at 4f95e43 is stale: main moved.)
+- **#22 S11.3** a7f7f6a reviewed; gate after #21. **#24** D-N8 draft.
+- **S7** `s7-claims` e43aefd: 5th financial review MERGEABLE. PR #15: merge main, gate.
+- **S8** `s8-reconciliation` 40dc42f: reviews 3–5 done (`s8-financial-review-{3,4,5}.md`), MERGEABLE (minors fixed + verified). D-N11 interim open (owner).
+- **S9** `s9-recovery` 1983f5a: final S8 merged (single head), D-N2 + fifth case (CL-4 short_paid 50.00, due 2026-09-29) reviewed MERGEABLE WITH MINORS → fixed (real-flow reclaim test). Review note `s9-review-final-s8.md`.
+- **S10** `s10-reporting` 7054beb: S9 merged; reporting tests 16 pass at ccb103c (expectations per D-N3: 6 collected rows, CL-4 paid 200.00). Unverified after the last S9 merge (disk full): re-run test_reporting*.py + alembic heads, then the full S10 review (money + security + DB).
+- **UI (all built, none verified by Playwright yet — external agents cannot reach localhost):** `ui/s7` ea0b3e2, `ui/s7-adjustments` dccc040 (review 1 fixed), `ui/s8` 063e0c4, `ui/s9` 9f8a39d (OpenCode), `ui/s10` 0084ee0, `ui/qa-1` 423d306. Each: merge main in after its backend lands, reviewer, Playwright (JOBS=e2e ci-local script), merge.
+- **Other owner items:** D-N4 retention design, D-N8 ZAP/pen test, D-N9 Docker memory (S11.2), D-N11 (S8 H2).
 
 ## Next steps, in order
-1. Owner merges #21. Then: merge main into `ui/qa-1`, run its e2e (`JOBS=e2e` ci-local script), fix or write a round-3 prompt.
-2. #15 (S7): merge main in, ci-local 6/6, post, owner merges. Then S8 PR: merge main in, ci-local, merge. Then S9 (+D-N2 review), then S10 (+S10 reviewer). One at a time; full suite + negctl inside each gate.
-3. #22 after #21 (merge main in, gate).
-4. Verify each Antigravity UI branch when it reports (merge main in first; lint, typecheck, vitest, Playwright in batches of 4), reviewer, merge after its backend.
-5. Remaining S11: S11.2 perf (D-N9), S11.4 a11y, S11.5 deploy (owner hosting), S11.8 pilot review. Then `docs/reports/RELEASE_1_REPORT.md`.
-6. Housekeeping: `s11-docs-drill/backups/` holds a gitignored synthetic dump with password hashes; delete only if the owner agrees.
+1. Free space on C: if possible (owner). Re-run #21's gate (merge main first); owner merges.
+2. S10: re-run test_reporting*.py + heads; full S10 review (opus) → fixes.
+3. Reviews of ui/s8, ui/s9, ui/s10 (opus, one at a time) → fixes by a Claude UI fixer.
+4. Merge chain, one gate each: #15 S7 (+ui/s7, ui/s7-adjustments) → S8 (+ui/s8) → S9 (+ui/s9) → S10 (+ui/s10) → #22 → ui/qa-1. Playwright for each UI branch inside its gate.
+5. S11.4 a11y pass (builder), RELEASE_1_REPORT.md. Owner: S11.5 deploy, S11.8 pilot, D-N items.
 
 ## Test helpers (session scratchpad, recreate if gone)
 - One-off pytest in a worktree: see `docs/reports/notes/briefs/COMMON.md`; pass `-e REBATE_AI_WRITER_PASSWORD` and your own `REBATE_TEST_DB`. Tests reading `infra/` need `-v <worktree>/infra:/infra:ro` with `MSYS_NO_PATHCONV=1` in Git Bash.
