@@ -5794,6 +5794,8 @@ export interface components {
             recovered_amount: string;
             /** Variance Amount */
             variance_amount: string;
+            /** Written Off Amount */
+            written_off_amount: string;
         };
         /** SummaryTotals */
         SummaryTotals: {

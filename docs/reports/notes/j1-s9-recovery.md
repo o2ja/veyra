@@ -66,3 +66,19 @@ approvers are notified; the dedupe key is (user, case:kind:offset).
 Routes in API_SPECIFICATION 2.8; case JSON carries `etag`, `revision`, `deadline_unknown`, `deadline_basis`, `dispute_assessment`;
 all case writes need `If-Match`; write-off also `Idempotency-Key`. Notifications: `GET /notifications?unread=true`,
 `POST /notifications/{id}/read`.
+
+## Review 1 follow-up (docs/reports/notes/s9-review-1.md)
+Merged origin/s8-reconciliation (edaa230 lineage); one alembic head (`20261118_0900_recovery_cases` on `20261117_0910_recon_matches`).
+- S1: `reconciliation.on_finalise` hook registered in `recovery/__init__.py`; the copied dataclasses are gone (reconciliation's `Finding` /
+  `FinalisedRemittance` are used). Test: finalising CM-7781 gives 150.00 / 2,080.00 / 75.00 / 660.00 via `GET /cases`
+  (tests/reconciliation/test_reconciliation_csv.py). Repeated findings (the overdue `unpaid` 660.00 at every VOLT finalisation) are skipped by
+  `ON CONFLICT DO NOTHING` on the live-case unique indexes, never an error: `test_a_second_finalisation_does_not_duplicate_a_live_case`.
+  No S8 money logic was touched.
+- S2: `claims.retire_recovery_reclaims` (rejects proposed/approved reclaims, 409 `reclaim_included` while in a batch) is called by the write-off in the same transaction.
+- S3: audit allow-list now has `reason` and `write_off_reason`; asserted in the write-off audit test.
+- S4: owner only while an active member (else active admins/approvers); digest and unsent selection only for active members.
+- M1 DB CHECK `ck_variance_cases_written_off_amount`; M2 proposal voided on any recovery/status change (service, tested); M3 title states the real
+  days ("in 2 days", "tomorrow", "today"); M4 `on_dead` of the sweep schedules the next day; M5 ETag on replay, `written_off_amount` in the summary,
+  Decimal through the Money schema; M6 tests (submission_date basis, foreign file, blank text).
+- DATABASE_SCHEMA.md 3.10 and API_SPECIFICATION 2.8 updated for the deviations.
+- M7 (OWNER, not decided): with `remittance_date` basis an unpaid case has no deadline, so no reminders. Behaviour left as is.

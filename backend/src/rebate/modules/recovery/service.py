@@ -69,6 +69,7 @@ def view(c: VarianceCase) -> dict[str, Any]:
         "owner_user_id": c.owner_user_id,
         "deadline_date": c.deadline_date,
         "write_off_proposed_by": c.write_off_proposed_by,
+        "write_off_reason": c.write_off_reason,
         "revision": c.revision,
     }
 
@@ -131,6 +132,15 @@ def _locked(db: Session, who: Who, case_id: UUID, revision: int | None) -> Varia
 
 def _change(db: Session, c: VarianceCase, **values: Any) -> None:
     """Apply ``values`` and bump the revision (the database refuses an update that does not)."""
+    if c.write_off_proposed_by is not None and (
+        "recovered_amount" in values or values.get("status", c.status) not in (c.status, "written_off")
+    ):  # a four-eyes proposal is for the outstanding amount at that time: any recovery or move voids it
+        values = {
+            "write_off_proposed_by": None,
+            "write_off_proposed_at": None,
+            "write_off_reason": None,
+            **values,
+        }
     for k, v in values.items():
         setattr(c, k, v)
     c.revision += 1
@@ -379,11 +389,15 @@ def summary(db: Session, tenant_id: UUID) -> dict[str, Any]:
 
     def group(col: Any) -> list[dict[str, Any]]:
         q = select(
-            col, func.count(), func.sum(VarianceCase.variance_amount), func.sum(VarianceCase.recovered_amount)
+            col,
+            func.count(),
+            func.sum(VarianceCase.variance_amount),
+            func.sum(VarianceCase.recovered_amount),
+            func.sum(VarianceCase.written_off_amount),
         )
         return [
-            {"key": k, "count": n, "variance_amount": str(v), "recovered_amount": str(r)}
-            for k, n, v, r in db.execute(
+            {"key": k, "count": n, "variance_amount": v, "recovered_amount": r, "written_off_amount": w}
+            for k, n, v, r, w in db.execute(
                 q.where(VarianceCase.tenant_id == tenant_id).group_by(col).order_by(col)
             )
         ]
@@ -398,7 +412,7 @@ def summary(db: Session, tenant_id: UUID) -> dict[str, Any]:
     return {
         "by_status": group(VarianceCase.status),
         "by_reason": group(VarianceCase.reason_code),
-        "at_risk": {"count": at_risk[0], "amount": str(at_risk[1]), "deadline_within_days": AT_RISK_DAYS},
+        "at_risk": {"count": at_risk[0], "amount": at_risk[1], "deadline_within_days": AT_RISK_DAYS},
     }
 
 
@@ -591,6 +605,9 @@ def write_off(db: Session, who: Who, case_id: UUID, reason: str, revision: int) 
         raise AuditedFourEyesViolation() from None
     except st.TransitionError as exc:
         raise _refuse(exc) from None
+    claims.retire_recovery_reclaims(
+        db, who, c.id
+    )  # same transaction: no reclaim can be batched after the write-off
     _move(
         db, who, c, st.CaseStatus.WRITTEN_OFF, reason,
         written_off_by=who.user_id, written_off_at=clock.now(),

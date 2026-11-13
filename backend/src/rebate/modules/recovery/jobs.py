@@ -22,6 +22,7 @@ from rebate.core.jobs import JobContext, PermanentError, enqueue, job
 from rebate.core.mail import Mail, deliver
 from rebate.modules import tenancy
 from rebate.modules.recovery import service
+from rebate.modules.recovery.domain import deadlines
 from rebate.modules.recovery.domain import notifications as dn
 from rebate.modules.recovery.models import Notification, VarianceCase
 
@@ -36,7 +37,11 @@ def _tenant(ctx: JobContext) -> UUID:
 
 
 def _recipients(db: Session, tenant: UUID, owner: UUID | None) -> list[UUID]:
-    if owner is not None:
+    """The owner while they are an active member, else every active admin and approver."""
+    if owner is not None and db.scalar(
+        text("SELECT 1 FROM memberships WHERE tenant_id = :t AND user_id = :u AND status = 'active'"),
+        {"t": tenant, "u": owner},
+    ):
         return [owner]
     return list(
         db.scalars(
@@ -49,11 +54,12 @@ def _recipients(db: Session, tenant: UUID, owner: UUID | None) -> list[UUID]:
     )
 
 
-def _title(case_type: str, amount: object, manufacturer: str, offset: int) -> str:
-    return f"{case_type.replace('_', ' ').capitalize()} {amount} ({manufacturer}): deadline in {offset} days"
+def _title(case_type: str, amount: object, manufacturer: str, days: int) -> str:
+    when = "today" if days == 0 else "tomorrow" if days == 1 else f"in {days} days"
+    return f"{case_type.replace('_', ' ').capitalize()} {amount} ({manufacturer}): deadline {when}"
 
 
-@job(service.SWEEP_JOB, tenant_scoped=True)
+@job(service.SWEEP_JOB, tenant_scoped=True, on_dead=lambda db, ctx: _sweep_died(db, ctx))
 def recovery_sweep(db: Session, ctx: JobContext) -> None:
     tenant = _tenant(ctx)
     today = service.business_today(db, tenant)
@@ -84,7 +90,12 @@ def recovery_sweep(db: Session, ctx: JobContext) -> None:
                     kind=dn.KIND,
                     entity_type="variance_case",
                     entity_id=c.id,
-                    title=_title(c.case_type, c.variance_amount - c.recovered_amount, manufacturer, r.offset),
+                    title=_title(
+                        c.case_type,
+                        c.variance_amount - c.recovered_amount,
+                        manufacturer,
+                        deadlines.days_remaining(c.deadline_date, today) or 0,
+                    ),
                     body=f"Deadline {r.due.isoformat()}; reason {c.reason_code}.",
                     due_date=c.deadline_date,
                     dedupe_key=r.dedupe_key,
@@ -94,7 +105,13 @@ def recovery_sweep(db: Session, ctx: JobContext) -> None:
             )
     for user_id in db.scalars(
         select(Notification.user_id)
-        .where(Notification.tenant_id == tenant, Notification.emailed_at.is_(None))
+        .where(
+            Notification.tenant_id == tenant,
+            Notification.emailed_at.is_(None),
+            text(
+                "notifications.user_id IN (SELECT user_id FROM memberships WHERE tenant_id = :t AND status = 'active')"
+            ).bindparams(t=tenant),
+        )
         .distinct()
         .order_by(Notification.user_id)
     ):
@@ -105,9 +122,19 @@ def recovery_sweep(db: Session, ctx: JobContext) -> None:
             payload={"user_id": str(user_id)},
             dedupe_key=f"{DIGEST_JOB}:{tenant}:{user_id}:{today.isoformat()}",
         )
+    _schedule_next(db, tenant, today)
+
+
+def _schedule_next(db: Session, tenant: UUID, today: date) -> None:
     tomorrow = today + timedelta(days=1)
     tz = ZoneInfo(tenancy.get_settings(db, tenant).business_timezone)
     service.schedule_sweep(db, tenant, tomorrow, run_at=datetime.combine(tomorrow, SWEEP_AT, tz))
+
+
+def _sweep_died(db: Session, ctx: JobContext) -> None:
+    """A dead-lettered sweep must not end the chain (reminders would stop until a new case opens)."""
+    tenant = _tenant(ctx)
+    _schedule_next(db, tenant, service.business_today(db, tenant))
 
 
 @job(DIGEST_JOB, tenant_scoped=True)
@@ -123,7 +150,13 @@ def recovery_digest(db: Session, ctx: JobContext) -> None:
         )
         .order_by(Notification.due_date, Notification.id)
     ).all()
-    to = db.scalar(text("SELECT email FROM users WHERE id = :u"), {"u": user_id})
+    to = db.scalar(  # only active members of this workspace get financial mail
+        text(
+            "SELECT u.email FROM users u JOIN memberships m ON m.user_id = u.id AND m.tenant_id = :t "
+            "AND m.status = 'active' WHERE u.id = :u"
+        ),
+        {"t": tenant, "u": user_id},
+    )
     if not unsent or to is None:
         return
     entries = [

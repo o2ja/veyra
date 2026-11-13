@@ -189,7 +189,7 @@ def write_off(
     )
     replayed = ingestion.replay(c.db, who.tenant_id, key, endpoint, payload)
     if replayed is not None:
-        return JSONResponse(replayed[1], replayed[0])
+        return JSONResponse(replayed[1], replayed[0], headers={"ETag": f'"{replayed[1]["revision"]}"'})
     out = _out(response, service.write_off(c.db, who, case_id, body.reason, _revision(if_match)))
     ingestion.store(c.db, who.tenant_id, key, endpoint, payload, 200, out.model_dump(mode="json"))
     return out

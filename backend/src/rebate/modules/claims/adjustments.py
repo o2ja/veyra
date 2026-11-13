@@ -36,6 +36,11 @@ class AdjustmentAlreadyIncluded(Conflict):
     message = "Some of these adjustments are already in a claim batch."
 
 
+class ReclaimIncluded(Conflict):
+    code = "reclaim_included"
+    message = "The case's reclaim is already in a claim batch; void the batch or wait for the payment first."
+
+
 class CannotNetClaim(Conflict):
     code = "cannot_net_claim"
     message = "This manufacturer does not accept negative claims: the return reversal cannot be net-claimed."
@@ -337,6 +342,28 @@ def propose_recovery_reclaim(
         raise InvalidState("This case already has a reclaim waiting for approval or inclusion.")
     _audit(db, who, audit.Action.CLAIM_ADJUSTMENT_PROPOSED, a, after=view(a))
     return a
+
+
+def retire_recovery_reclaims(db: Session, who: Who, variance_case_id: UUID) -> None:
+    """S9 write-off: the case no longer asks for its money. Reject its proposed/approved reclaim adjustments (so they
+    cannot be batched later); 409 ``reclaim_included`` while one sits in a live batch."""
+    rows = list(
+        db.scalars(
+            select(ClaimAdjustment)
+            .where(
+                ClaimAdjustment.tenant_id == who.tenant_id,
+                ClaimAdjustment.variance_case_id == variance_case_id,
+                ClaimAdjustment.adjustment_type == "recovery_reclaim",
+                ClaimAdjustment.status.in_(("proposed", "approved", "included")),
+            )
+            .order_by(ClaimAdjustment.id)
+            .with_for_update()
+        )
+    )
+    if any(a.status == "included" for a in rows):
+        raise ReclaimIncluded()
+    for a in rows:
+        reject(db, who, a.id)
 
 
 def propose(

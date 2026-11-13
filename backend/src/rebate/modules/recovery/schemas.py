@@ -5,7 +5,7 @@ from datetime import date, datetime
 from typing import Annotated, Any, Literal
 from uuid import UUID
 
-from pydantic import BaseModel, ConfigDict, Field, computed_field
+from pydantic import BaseModel, ConfigDict, StringConstraints, computed_field
 
 from rebate.core.money import Money
 from rebate.core.validation import STRICT, JsonUUID
@@ -13,7 +13,7 @@ from rebate.modules.masterdata import Page
 
 CaseStatus = Literal["open", "to_reclaim", "submitted", "recovered", "written_off", "closed_no_action"]
 CaseType = Literal["short_paid", "rejected", "unpaid", "overpaid", "unmatched_payment", "source_changed"]
-Text = Annotated[str, Field(min_length=1, max_length=2000)]
+Text = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=2000)]
 
 
 class CaseOut(BaseModel):
@@ -89,6 +89,7 @@ class SummaryRow(BaseModel):
     count: int
     variance_amount: Money
     recovered_amount: Money
+    written_off_amount: Money  # what was written off, not the variance of written-off cases
 
 
 class AtRisk(BaseModel):
@@ -131,7 +132,7 @@ class AttachmentIn(BaseModel):
 class WriteOffIn(BaseModel):
     model_config = STRICT
 
-    reason: Annotated[str, Field(min_length=1, max_length=1000)]
+    reason: Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=1000)]
 
 
 class ReclaimOut(BaseModel):

@@ -129,7 +129,8 @@ AUDITED_FIELDS: dict[str, frozenset[str]] = {
     "variance_case": frozenset(
         {
             "case_type",
-            "reason_code",
+            "reason",  # not "reason_code": any key containing "code" is refused as a secret by the audit guard
+            "write_off_reason",
             "status",
             "claim_line_id",
             "remittance_line_id",

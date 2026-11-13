@@ -725,6 +725,14 @@ def test_s9_foreign_cases_and_notifications_are_unreachable(sides: tuple[Side, S
     assert [(r["key"], r["count"], r["variance_amount"]) for r in summary["by_status"]] == [
         ("open", 1, "1.0000")
     ]
+    # another tenant's file cannot be attached: it looks exactly like an unknown file
+    foreign = a.api.post(f"/cases/{a.s9['case_id']}/attachments", json={"file_id": b.file_id})
+    missing = a.api.post(
+        f"/cases/{a.s9['case_id']}/attachments", json={"file_id": "00000000-0000-7000-8000-000000000000"}
+    )
+    assert foreign.status_code == missing.status_code and foreign.status_code in (404, 422)
+    assert foreign.json()["error"]["code"] == missing.json()["error"]["code"]
+    assert foreign.json()["error"]["message"] == missing.json()["error"]["message"]
     # a foreign owner is not a member of this workspace
     r = a.api.patch(
         f"/cases/{a.s9['case_id']}", json={"owner_user_id": b.user_id}, headers={"If-Match": '"1"'}

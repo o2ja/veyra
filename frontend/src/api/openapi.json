@@ -10941,13 +10941,18 @@
           "variance_amount": {
             "title": "Variance Amount",
             "type": "string"
+          },
+          "written_off_amount": {
+            "title": "Written Off Amount",
+            "type": "string"
           }
         },
         "required": [
           "key",
           "count",
           "variance_amount",
-          "recovered_amount"
+          "recovered_amount",
+          "written_off_amount"
         ],
         "title": "SummaryRow",
         "type": "object"

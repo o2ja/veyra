@@ -117,6 +117,8 @@ def upgrade() -> None:
                 (status = 'written_off') = (written_off_by IS NOT NULL AND written_off_at IS NOT NULL)
                 AND (written_off_amount = 0 OR status = 'written_off')
                 AND (write_off_proposed_by IS NULL) = (write_off_proposed_at IS NULL)),
+            CONSTRAINT ck_variance_cases_written_off_amount CHECK (
+                status <> 'written_off' OR written_off_amount = variance_amount - recovered_amount),
             CONSTRAINT ck_variance_cases_four_eyes CHECK (
                 written_off_by IS NULL OR write_off_proposed_by IS NULL OR written_off_by <> write_off_proposed_by),
             CONSTRAINT ck_variance_cases_reason_len CHECK (char_length(write_off_reason) BETWEEN 1 AND 1000)

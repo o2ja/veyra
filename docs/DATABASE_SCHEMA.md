@@ -196,14 +196,16 @@ Constraints (S7.4): `rebate_accrual_entry_id` is set exactly for `rebate_clawbac
 
 ### 3.10 Recovery
 
-**variance_cases**: `id`, `manufacturer_id NN`, `claim_line_id`, `remittance_line_id`, `case_type NN` (`short_paid`,`rejected`,`unpaid`,`overpaid`,`unmatched_payment`,`source_changed`,`deadline_unknown`), `reason_code NN FK reason_codes`, `claimed_amount NUMERIC(18,4)`, `paid_amount NUMERIC(18,4)`, `variance_amount NUMERIC(18,4) NN`, `deadline_date date`, `deadline_basis`, `owner_user_id`, `status NN` (`open`,`to_reclaim`,`submitted`,`recovered`,`written_off`,`closed_no_action`), `recovered_amount NUMERIC(18,4) default 0`, `written_off_amount NUMERIC(18,4) default 0`, `dispute_assessment jsonb`, `created_by_run_id`, `created_at`, `closed_at`.
+**variance_cases**: `id`, `manufacturer_id NN`, `claim_line_id`, `remittance_line_id`, `case_type NN` (`short_paid`,`rejected`,`unpaid`,`overpaid`,`unmatched_payment`,`source_changed`), `reason_code NN FK reason_codes`, `claimed_amount NUMERIC(18,4)`, `paid_amount NUMERIC(18,4)`, `variance_amount NUMERIC(18,4) NN`, `deadline_date date`, `deadline_basis`, `owner_user_id`, `status NN` (`open`,`to_reclaim`,`submitted`,`recovered`,`written_off`,`closed_no_action`), `recovered_amount NUMERIC(18,4) default 0`, `written_off_amount NUMERIC(18,4) default 0`, `dispute_assessment jsonb`, `remittance_document_id` (the finalised remittance that opened the case; replaces `created_by_run_id`), `external_reason_code`, `revision int NN` (If-Match; every update bumps it by one), write-off columns `write_off_proposed_by/_at`, `write_off_reason`, `written_off_by/_at`, `created_by`, `created_at`, `closed_at`.
+
+`deadline_unknown` is **not** a case type (BUSINESS_LOGIC §12 calls it a flag): it is `deadline_date IS NULL` (and then `deadline_basis IS NULL`; basis is `remittance_date` or `submission_date`). Invariants in the database: the state edges of §12.1 (closed cases never change), identity/amount/link columns fixed, `recovered_amount` never decreases, `recovered` only when recovered >= variance, `written_off` only with `written_off_by`/`_at` and `written_off_amount = variance_amount - recovered_amount`, the write-off approver differs from the proposer (four-eyes), no DELETE. A four-eyes proposal is voided by the service on any recovery or status change.
 Partial unique `(tenant_id, claim_line_id, case_type) WHERE status NOT IN ('recovered','written_off','closed_no_action')` (one live case per claim line and type). Index `(tenant_id, status, deadline_date)`.
 
-**variance_case_events** (append-only): `id`, `case_id NN`, `event_type NN` (`created`,`status_changed`,`note`,`assigned`,`attachment`,`amount_recovered`,`assessment_updated`), `from_status`, `to_status`, `note`, `payload jsonb`, `actor_user_id`, `created_at`.
+**variance_case_events** (append-only): `id`, `case_id NN`, `event_type NN` (`created`,`status_changed`,`note`,`assigned`,`attachment`,`amount_recovered`,`assessment_updated`,`write_off_proposed`,`reclaim_proposed`), `from_status`, `to_status`, `note`, `payload jsonb`, `actor_user_id`, `created_at`.
 
-**case_attachments**: `case_id`, `file_id`, `added_by`, `added_at`.
+**case_attachments** (append-only): `case_id`, `file_id`, `added_by`, `added_at`; the file must be a clean-scanned `attachment`; `UNIQUE (tenant_id, case_id, file_id)`.
 
-**notifications**: `id`, `user_id NN`, `kind NN`, `entity_type`, `entity_id`, `title NN`, `body`, `due_date`, `dedupe_key NN`, `read_at`, `emailed_at`, `created_at`. `UNIQUE (tenant_id, user_id, dedupe_key)`.
+**notifications**: `id`, `user_id NN`, `kind NN`, `entity_type`, `entity_id`, `title NN`, `body`, `due_date`, `dedupe_key NN`, `read_at`, `emailed_at`, `created_at`. `UNIQUE (tenant_id, user_id, dedupe_key)`. `kind` is `deadline_reminder`; only `read_at` and `emailed_at` can be updated, each once. `claim_adjustments.variance_case_id` references `variance_cases` (composite FK); a `recovery_reclaim` adjustment always has a case, a positive amount, and at most one is proposed/approved per case.
 
 ### 3.11 Reporting
 

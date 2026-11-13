@@ -535,6 +535,7 @@ def test_with_four_eyes_off_one_approver_writes_off_at_once(cases: Cases) -> Non
     # same key and body: the first answer again (without the key it would be 409, the case is closed)
     again = cases.api.post(path, json=body, headers={"If-Match": etag, "Idempotency-Key": key})
     assert again.status_code == 200 and again.json() == r.json()
+    assert again.headers["ETag"] == r.headers["ETag"] == f'"{r.json()["revision"]}"'
     other = cases.api.post(path, json={"reason": "x"}, headers={"If-Match": etag, "Idempotency-Key": key})
     assert other.status_code == 409 and other.json()["error"]["code"] == "idempotency_conflict"
     four_eyes(cases.api, True)
