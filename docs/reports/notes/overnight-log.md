@@ -1,17 +1,24 @@
 # Overnight log (2026-11-13, unattended)
 
 ## MORNING SUMMARY
-1. **Merged:** #18 S11 ops (c7d014b). ADR-017 + new `docs/PRODUCTION_PLAN.md`: managed S3-compatible storage in production (e5f0918).
-2. **In progress:** builders F2 `s7-adjustments`, I1 `s8-reconciliation`, J1 `s9-recovery` (sonnet). `ui/qa-1` returned to Antigravity (Playwright 8/18 fail).
+1. **Merged:** #18 S11 ops only (c7d014b). Docs on main: ADR-017 + `docs/PRODUCTION_PLAN.md` (managed S3 in production). **Nothing else could merge: GitHub Actions refuses every job for billing (D-N0).**
+2. **In progress / ready (branch → state):**
+   - `s7-adjustments` 17a70c9: F2 fixes done, full 1897 pass, negctl OK. **Held by D-N1.** PR #15 not merged.
+   - `s8-reconciliation` edaa230: S8.3–S8.6 done, re-chained (1 head), full 2023 pass. **Held by D-N3.**
+   - `s9-recovery`: S9 done + review-1 fixes (full 2217 pass); 2nd-pass serious N1 + negctl misclassifications being fixed by J1. Stacked on S8.
+   - `s10-reporting`: S10 core backend in progress (M1), stacked on S9.
+   - PR #20 `s11-docs-drill` (restore drill + guides): reviewed, ready; waits for CI.
+   - PR #21 `s11-audit-seal` (S11.1): reviewed twice, MERGEABLE WITH MINORS; waits for CI.
+   - `ui/qa-1`: Playwright 8/18 fail → back to Antigravity. `ui/s7`: waits for #15.
 3. **Needs your decision:**
    - **D-N0 GitHub Actions billing (blocks ALL merges):** since ~02:19Z every CI job is refused: "The job was not started because recent account payments have failed or your spending limit needs to be increased" (Billing & plans). Spending = yours. Until it runs, no PR can show 6/6 green, so I merged nothing after #18. Main's own CI runs on my doc commits also show failure for this reason only (no job started).
    - **D-N1 FINANCIAL DISCREPANCY (HARD STOP, S7):** a return netted BEFORE the original line is claimed. Run 1 nets INV-10021 to 200.00 (CN-5002 netted) and the claim freezes at 200.00; run 2 reports 250.00 / −50.00, so propose emits +50.00 `agreement_change` AND −50.00 `return_reversal` on the same line. BUSINESS_LOGIC §7 read literally = 150.00; hand-correct = 200.00; with allow_negative_claims=false the −50.00 is held and the +50.00 approvable → 250.00 claimed for 16 net units. Ground truth (`claim_batches_fixture.json`) freezes 250.00 (return after claim) and does not cover this ordering. Code: rebate_engine/spa.py:320, claims/adjustments.py:398-436. Review: PR #15 comment 6841512829. **Blocked:** merge of s7-adjustments → s7-claims → #15, and therefore the S8/S9 merges to main (stacked). Recommendation (not applied): §7 states that adjustments compare against the *frozen* amount using the same netting view the claim was made with (a claim frozen net of a return proposes no return_reversal for that return).
    - **D-N3 FINANCIAL DISCREPANCY (HARD STOP, S8):** BUSINESS_LOGIC §10.3 says claimed = claim amount "plus approved adjustments included in the **same batch**"; code (`claims/recon_reads.py:32-45`, `reconciliation/matching.py:130-148`) applies an adjustment to its original claim line whatever submitted batch carries it. Ground truth only has the same-batch case (all agree). Different-batch case: rule → CL-4 claimed 250.00 / paid 200.00 / short_paid 50.00; code → 200.00, no case; and if the later batch is paid 262.50 against INV-10020 the code reports a 50.00 short pay there too, so the −50.00 counts twice. Decide which batch an adjustment's amount belongs to. Recommendation: to the batch that carries it (the rule as written), with the original line reconciled at its frozen amount. Linked to D-N1. Review: `docs/reports/notes/s8-financial-review-1.md`. **S8 stopped**; other findings there (serious: finalise auto-categorises unmatched lines without the §10.3 explicit categorisation step; 5 minors) wait for the same decision.
    - **D-N4 (S11.1 retention, not built):** the docs don't specify the deletion path. Five questions are in `k1-s11-audit-seal.md` on branch s11-audit-seal: (1) which tables and dates count as financial records, (2) the workspace deletion flow (request, approval, 30-day grace, who can cancel), (3) the deletion-certificate fields and where it lives outside tenant RLS, (4) which role may delete, plus object-store and backup purge, (5) how a purged audit range anchors the seal chain. Only the dry-run report is built.
    - **D-N2 (S9, M7):** with the `remittance_date` deadline basis (all seeded manufacturers) an *unpaid* case has deadline NULL, so it never gets a reminder. Ground truth is silent (gap, not contradiction). Decide what the unpaid-case deadline counts from. Recommendation: claim submission date + the manufacturer's dispute window.
-4. **Failures / findings / discrepancies:** ui/qa-1 Playwright: qa-admin, qa-agreements, qa-auth, qa-calculations, qa-files (axe `dl`), qa-imports, a11y fail; lint/typecheck/vitest pass. Not merged.
-5. **Antigravity prompts ready:** `antigravity-prompt-qa-1-fixes.md` (ui/qa-1 round 2).
-6. **Resume:** `docs/reports/notes/resume-prompt.md`, step 2 (s7-adjustments).
+4. **Failures / findings / discrepancies:** two financial HARD STOPs (D-N1 S7, D-N3 S8; details above). ui/qa-1 Playwright failures. All reviewer findings fixed except the open minors listed per PR. Claude usage limit hit once (~05:00Z), agents resumed.
+5. **Antigravity prompts ready:** `antigravity-prompt-qa-1-fixes.md`. S7/S8/S9 UI briefs NOT written: their backends have not merged (rule: brief after merge).
+6. **Resume:** fix CI billing → merge #20, #21 (6/6 green) → decide D-N1, D-N3 → then s7 → #15 → S8 → S9 → S10 in order. `docs/reports/notes/resume-prompt.md`.
 
 ## Log
 - Merged PR #18 (6/6 checks green, third security pass MERGEABLE).
