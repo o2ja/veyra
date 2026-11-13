@@ -17,6 +17,8 @@
 - ui/qa-1: merged main in (ec83e66); lint/typecheck/vitest PASS; Playwright 18 specs in batches of 4: 10 pass, 8 fail (Antigravity had not run Playwright). Fix prompt eeea8e1.
 - F2 done (s7-adjustments 17a70c9): B1/S1/M1-M4 + mypy fixed; main merged in; full 1897 passed, isolation 360, negctl OK, ruff/mypy/lint-imports clean. bandit/pip-audit not run. Opus financial 2nd pass on fix diff launched.
 - Financial 2nd pass on F2 fix diff: **FAIL / HARD STOP** (D-N1). Minors: M4 file back to CRLF in 71279fc; S1 batch guard also refuses writes to submitted batches with total <= 0 (no current path). S7 work stopped. S8/S9 continue on branches; merges to main blocked.
+- K1 launched: S11.1 audit_seal + verify tool + retention (branch s11-audit-seal from main).
+- J1 done (s9-recovery a9eab7b, not re-merged with S8): jobs tests, isolation (4 tables + routes), write-off Idempotency-Key (spec 2.8 required it), audit snapshot key bug fixed. Full suite 2081 pass / 2 fail (audit bug, fixed + affected files re-run; reconciliation import-linter contract missing → sent to I1); test_end_to_end ignored (FixtureClaims, fixed on s7-adjustments). Opus security+DB+money review of the S9 diff running.
 
 ---
 
