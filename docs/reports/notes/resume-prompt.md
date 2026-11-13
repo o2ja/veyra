@@ -45,7 +45,7 @@ First run `git worktree list`, `git status`, `gh pr list` and `git fetch`. Commi
   - The full suite once per merged wave.
   - Commit and push after every merged piece.
 - **Agents:**
-  - At most 3 at once.
+  - At most 2 at once (CLAUDE.md §19).
   - Use the cheaper model (sonnet) for builders and opus for reviewers.
   - Ponytail rules apply: shortest working diff, reuse before writing, no new dependencies or abstractions. They never relax quality.
 - **Decisions:**
