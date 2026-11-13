@@ -163,8 +163,9 @@ async def _request_context(request: Request, call_next: Callable[[Request], Awai
     try:
         early = await _upload_gate(request) or await _body_gate(request)
         response = early if early is not None else await call_next(request)
-    except Exception:
-        log.exception("unhandled_error")
+    except Exception as exc:
+        # type only: the message of a DB error can carry SQL parameters or row values (SECURITY.md section 5)
+        log.error("unhandled_error", error=type(exc).__name__)
         response = JSONResponse(
             error_body("internal_error", "An unexpected error occurred.", request_id), 500
         )

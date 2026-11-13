@@ -38,7 +38,8 @@ CONTENT_TYPE: dict[str, str] = {"csv": "text/csv", "xlsx": XLSX, "pdf": "applica
 
 # Zip-bomb guard for XLSX containers.
 MAX_ZIP_ENTRIES = 10_000
-MAX_UNCOMPRESSED = 300 * 1024 * 1024
+# 100 MB: openpyxl holds shared strings as Python objects (~10x), so 300 MB inflated past the worker memory limit
+MAX_UNCOMPRESSED = 100 * 1024 * 1024
 MAX_RATIO = 100
 
 
@@ -114,6 +115,8 @@ def check_content(ext: str, head: bytes, body: IO[bytes]) -> Checked:
             body.seek(0)
     if ext == "xlsx":
         _check_xlsx(body)
+    if ext == "pdf":
+        _check_pdf(body)
     return Checked(ext, detected, CONTENT_TYPE[ext])
 
 
@@ -165,6 +168,20 @@ def detect_text_encoding(data: bytes) -> str:
 ACTIVE_PARTS = ("xl/macrosheets/", "xl/embeddings/", "xl/activex/", "xl/externallinks/")
 
 
+def _check_pdf(body: IO[bytes]) -> None:
+    """Encrypted PDFs cannot be read (refuse early); a ZIP end-of-central-directory record in the tail makes a
+    PDF/ZIP polyglot that other tools would open as an archive."""
+    body.seek(0)
+    try:
+        data = body.read()  # bounded by the size limit checked before
+    finally:
+        body.seek(0)
+    if b"/Encrypt" in data:
+        raise _reject("encrypted")
+    if b"PK\x05\x06" in data[-65557:]:
+        raise _reject("content_type_mismatch")
+
+
 def _check_xlsx(body: IO[bytes]) -> None:
     body.seek(0)
     try:
@@ -196,6 +213,12 @@ def _check_xlsx(body: IO[bytes]) -> None:
                 content_types = ct.read(65536).lower()
             if b"macroenabled" in content_types or b"macrosheet" in content_types:
                 raise _reject("macros")
+            for info in infos:  # OOXML never needs a DTD; refuse entity bombs / XXE before any parser runs
+                if info.filename.lower().endswith((".xml", ".rels")):
+                    with zf.open(info) as part:  # bounded read of the prolog, where a DOCTYPE must be
+                        prolog = part.read(65536).lower()
+                    if b"<!doctype" in prolog or b"<!entity" in prolog:
+                        raise _reject("xml_dtd")  # ponytail: a prolog padded past 64 KB is left to defusedxml
     except zipfile.BadZipFile:
         raise _reject("content_type_mismatch") from None
     finally:

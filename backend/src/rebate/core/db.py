@@ -31,7 +31,8 @@ class UnsafeDatabaseRole(RuntimeError):
 
 
 def make_engine(url: str) -> Engine:
-    return create_engine(url, pool_pre_ping=True)
+    # hide_parameters: bound values (emails, hashes, amounts) must never appear in an exception message or log
+    return create_engine(url, pool_pre_ping=True, hide_parameters=True)
 
 
 def set_tenant(session: Session, tenant_id: UUID | None) -> None:
