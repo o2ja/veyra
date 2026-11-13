@@ -11,7 +11,7 @@ from decimal import Decimal
 
 import pytest
 from fastapi import FastAPI
-from openpyxl import load_workbook
+from openpyxl import load_workbook  # type: ignore[import-untyped]  # no stubs shipped
 
 from tests.conftest import DbUrls
 from tests.integration.calc_support import (

@@ -267,9 +267,13 @@ def _seed_s8(app: Any, admin: Engine, side: Side) -> dict[str, str]:
 
 def _claim_line(admin: Engine, side: Side) -> uuid.UUID:
     with admin.connect() as conn:
-        return conn.execute(
-            text("SELECT id FROM claim_lines WHERE tenant_id = :t LIMIT 1"), {"t": side.tenant_id}
-        ).scalar_one()
+        return uuid.UUID(
+            str(
+                conn.execute(
+                    text("SELECT id FROM claim_lines WHERE tenant_id = :t LIMIT 1"), {"t": side.tenant_id}
+                ).scalar_one()
+            )
+        )
 
 
 S8_PARAMS = ("remittance_id", "match_id")
