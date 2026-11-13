@@ -453,6 +453,8 @@ All figures are per manufacturer, branch (the invoice branch of the claim line; 
 - **at_risk**: variance minus recovered of live cases (`open`, `to_reclaim`, `submitted`) of the reclaimable types above whose deadline is unknown or at most 14 days after the as-of date (overdue included).
 - **expiring**: the part of at-risk with a known deadline from the as-of date to 14 days after it.
 
+At-risk and expiring are bucketed by the month of the case's creation (the same month as short_paid), not by the deadline month.
+
 ## 13. Trace format
 
 ```json

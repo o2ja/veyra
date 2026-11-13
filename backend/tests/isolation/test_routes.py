@@ -797,6 +797,6 @@ def test_s10_dashboard_drilldown_and_trace_never_show_the_other_tenant(
             == []
         )
         assert own.api.get(f"/trace/variance_case/{other.s9['case_id']}").status_code == 404
-        assert own.api.get(f"/reports/claim-batches/{other.s7['batch_id']}/audit-pack").status_code == 404
+        assert own.api.post(f"/reports/claim-batches/{other.s7['batch_id']}/audit-pack").status_code == 404
         mine = own.api.get(f"/trace/variance_case/{own.s9['case_id']}").json()["chain"]
         assert {n["id"] for n in mine if n["kind"] == "claim_line"} <= {own.s8["claim_line_id"]}

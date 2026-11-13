@@ -2086,10 +2086,10 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** Audit Pack */
-        get: operations["claim_batch_audit_pack"];
+        get?: never;
         put?: never;
-        post?: never;
+        /** Audit Pack */
+        post: operations["claim_batch_audit_pack"];
         delete?: never;
         options?: never;
         head?: never;
@@ -2632,6 +2632,15 @@ export interface components {
             /** Data */
             data: components["schemas"]["AuditEntry"][];
             page: components["schemas"]["Page"];
+        };
+        /** AuditPackIn */
+        AuditPackIn: {
+            /**
+             * Format
+             * @default csv
+             * @enum {string}
+             */
+            format: "csv" | "xlsx";
         };
         /** BatchExportIn */
         BatchExportIn: {
@@ -11482,16 +11491,18 @@ export interface operations {
     };
     claim_batch_audit_pack: {
         parameters: {
-            query?: {
-                format?: "csv" | "xlsx";
-            };
+            query?: never;
             header?: never;
             path: {
                 batch_id: string;
             };
             cookie?: never;
         };
-        requestBody?: never;
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["AuditPackIn"] | null;
+            };
+        };
         responses: {
             /** @description Successful Response */
             202: {

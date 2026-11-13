@@ -815,6 +815,22 @@
         "title": "AuditList",
         "type": "object"
       },
+      "AuditPackIn": {
+        "additionalProperties": false,
+        "properties": {
+          "format": {
+            "default": "csv",
+            "enum": [
+              "csv",
+              "xlsx"
+            ],
+            "title": "Format",
+            "type": "string"
+          }
+        },
+        "title": "AuditPackIn",
+        "type": "object"
+      },
       "BatchExportIn": {
         "additionalProperties": false,
         "properties": {
@@ -21439,7 +21455,7 @@
       }
     },
     "/api/v1/reports/claim-batches/{batch_id}/audit-pack": {
-      "get": {
+      "post": {
         "operationId": "claim_batch_audit_pack",
         "parameters": [
           {
@@ -21451,22 +21467,25 @@
               "title": "Batch Id",
               "type": "string"
             }
-          },
-          {
-            "in": "query",
-            "name": "format",
-            "required": false,
-            "schema": {
-              "default": "csv",
-              "enum": [
-                "csv",
-                "xlsx"
-              ],
-              "title": "Format",
-              "type": "string"
-            }
           }
         ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "anyOf": [
+                  {
+                    "$ref": "#/components/schemas/AuditPackIn"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "Body"
+              }
+            }
+          }
+        },
         "responses": {
           "202": {
             "content": {

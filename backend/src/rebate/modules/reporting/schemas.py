@@ -8,6 +8,7 @@ from uuid import UUID
 from pydantic import BaseModel
 
 from rebate.core.money import Money
+from rebate.core.validation import STRICT
 from rebate.modules.claims import RunJobRef
 from rebate.modules.masterdata import Page
 
@@ -86,6 +87,12 @@ class TraceOut(BaseModel):
 
 class RefreshAccepted(BaseModel):
     job_id: UUID | None  # null: a refresh was already queued this minute
+
+
+class AuditPackIn(BaseModel):
+    model_config = STRICT
+
+    format: ExportFormat = "csv"
 
 
 class AuditPackAccepted(BaseModel):
