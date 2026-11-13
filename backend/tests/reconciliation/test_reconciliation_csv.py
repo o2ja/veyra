@@ -491,7 +491,7 @@ def test_an_adjustment_item_is_matched_only_by_a_person_and_yields_no_finding(st
     assert view(ws, doc["id"])[1]["state"] == "matched"
     # Hand: the line paid 100.00 and only an adjustment item is confirmed on it. Under the D-N11 interim that
     # allocation is not cash on a claim line, so claim parts = 0 and the whole line is the remainder: one
-    # unmatched_payment of 100.00 (= amount_paid, never more, never 150.00 = 100.00 - (-50.00)). No categorisation is
+    # unmatched_payment of 100.00 (= amount_paid, never more, never 120.00 = 100.00 - (-20.00)). No categorisation is
     # needed (the line has a confirmed match) and the adjustment item itself yields no finding.
     final = finalize(ws.api, doc["id"])
     assert final.status_code == 200, final.text
@@ -526,11 +526,12 @@ def _raw_confirmed(
 
 
 def test_cross_batch_adjustment_allocation_never_frees_room_for_claim_lines_and_categorised_lines_stay_closed(
-    story: Story, admin_engine: Engine
+    story: Story, admin_engine: Engine, app_engine: Engine
 ) -> None:
-    """Line 1 pays 200.00. A person gives 200.00 to INV-10010 and confirms the cross-batch ADJ -50.00 on it. A further
-    50.00 to INV-10011 would make claim parts 200.00 + 50.00 = 250.00 > 200.00: refused (409 match_invariant), although
-    the signed sum 200.00 - 50.00 + 50.00 = 200.00 would fit. The database trigger refuses the same insert.
+    """Line 1 pays 200.00. A person gives 200.00 to INV-10010 and confirms -20.00 of the cross-batch ADJ on it. A further
+    20.00 to INV-10011 would make 200.00 + 20.00 = 220.00 > 200.00 (the -20.00 counts 0): refused (409 match_invariant),
+    although the signed sum 200.00 - 20.00 + 20.00 = 200.00 would fit. The database trigger refuses the same insert.
+    The ADJ (-50.00) can be allocated up to its amount over all lines and no further (422; trigger as rebate_app).
     Line 3 (300.00, within 5% of the 312.50 carrier claim by invoice + SKU + quantity) is only suggested (T3); once a
     person categorises it, confirming the suggestion is refused (409 line_categorised), in the service and in the
     database, and rejecting still works."""
@@ -559,23 +560,37 @@ def test_cross_batch_adjustment_allocation_never_frees_room_for_claim_lines_and_
 
     assert post(claim_line_id=a, allocated_amount="200.00").status_code == 201
     assert post(claim_adjustment_id=story.adjustment["id"], allocated_amount="-20.00").status_code == 201
-    refused = post(claim_line_id=b, allocated_amount="50.00")
+    refused = post(claim_line_id=b, allocated_amount="20.00")
     assert refused.status_code == 409 and refused.json()["error"]["code"] == "match_invariant"
-    # the ADJ (-50.00) now carries -10.00 + -20.00 + -20.00 = -50.00 over three lines: another -10.00, from line 2, is
-    # one allocation too many (|-60.00| > |-50.00|)
-    over = ws.api.post(
-        "/matches",
-        json={
-            "remittance_line_id": line2,
-            "claim_adjustment_id": story.adjustment["id"],
-            "allocated_amount": "-10.00",
-        },
-    )
+    # the ADJ's cap: allocate exactly the room left (whatever earlier tests spent), then one cent more is refused
+    adj = story.adjustment["id"]
+    with admin_engine.connect() as conn:
+        spent = conn.execute(
+            text(
+                "SELECT COALESCE(sum(allocated_amount), 0) FROM reconciliation_matches "
+                "WHERE claim_adjustment_id = :i AND status = 'confirmed'"
+            ),
+            {"i": adj},
+        ).scalar_one()
+    room = Decimal("-50.00") - spent  # <= 0
+    on_line1 = {"remittance_line_id": line1, "claim_adjustment_id": adj}
+    if room != 0:
+        assert ws.api.post("/matches", json={**on_line1, "allocated_amount": str(room)}).status_code == 201
+    over = ws.api.post("/matches", json={**on_line1, "allocated_amount": "-0.01"})
     assert over.status_code == 422, over.text
+    with app_engine.connect() as conn:  # the database refuses the same over-allocation (as rebate_app)
+        tx = conn.begin()
+        try:
+            conn.execute(text("SELECT set_config('app.tenant_id', :t, true)"), {"t": ws.tenant_id})
+            _raw_confirmed(conn, ws, line1, None, "-0.01", adj)
+            with pytest.raises(Exception, match="exceed the adjustment amount"):
+                conn.execute(text("SET CONSTRAINTS ALL IMMEDIATE"))
+        finally:
+            tx.rollback()
     with admin_engine.begin() as conn:
         _raw_confirmed(conn, ws, line1, a, "0.00")  # no effect on the sum
         sp = conn.begin_nested()
-        _raw_confirmed(conn, ws, line1, b, "50.00")
+        _raw_confirmed(conn, ws, line1, b, "20.00")
         with pytest.raises(Exception, match="exceed the amount paid"):
             conn.execute(text("SET CONSTRAINTS ALL IMMEDIATE"))
         sp.rollback()
@@ -615,13 +630,13 @@ def test_cross_batch_adjustment_allocation_never_frees_room_for_claim_lines_and_
 
 
 def test_a_positive_cross_batch_adjustment_allocation_consumes_room_and_a_same_batch_one_is_face_value(
-    story: Story, admin_engine: Engine, app_engine: Engine
+    story: Story, admin_engine: Engine
 ) -> None:
-    """Hand derivation. A line pays 225.00; CL-4 (frozen 250.00) gets 225.00 and the cross-batch ADJ (here +25.00, set
-    on the fixture row for this test only) gets 25.00: 225.00 + 25.00 = 250.00 > 225.00, refused by the service (409
-    match_invariant) and by the database (as rebate_app, at commit). A same-batch adjustment allocation must equal the
-    adjustment's amount: -50.00 passes, -1000.00 is refused (adjustment moved into CL-4's batch inside a rolled-back
-    transaction)."""
+    """Hand derivation, all in ONE admin transaction that is always rolled back (nothing is committed; the S7 flow of this
+    module has no positive adjustment, so +25.00 is set on the fixture row inside the transaction, with triggers off for
+    that statement only). A line pays 225.00. (a) 200.00 -> CL-4 and +25.00 -> the cross-batch ADJ: 225.00 <= 225.00,
+    accepted. (b) 225.00 -> CL-4 and +25.00 -> ADJ: 250.00 > 225.00, refused, as rebate_app. Then a same-batch
+    adjustment allocation must equal the adjustment's amount (-50.00 passes, -1000.00 is refused)."""
     ws, volt = story.ws, story.mfr["VOLT"]
     adj, cl4 = story.adjustment["id"], story.lines["INV-10021"]["id"]
     body = HEADER + "1,,,,,,225.00,,pays CL-4\n"
@@ -629,55 +644,53 @@ def test_a_positive_cross_batch_adjustment_allocation_consumes_room_and_a_same_b
         ws, upload(ws, "plus.csv", body.encode(), CSV), volt, document_number="PLUS-1", total_amount="225.00"
     )
     line = view(ws, doc["id"])[1]["line"]["id"]
-    sql_set = "UPDATE claim_adjustments SET amount = :a WHERE id = :i"
 
-    def set_amount(value: str) -> None:  # triggers off in this session: the adjustment is immutable otherwise
-        with admin_engine.begin() as conn:
+    def check(conn: Any) -> None:
+        conn.execute(text("SET CONSTRAINTS ALL IMMEDIATE"))
+        conn.execute(text("SET CONSTRAINTS ALL DEFERRED"))
+
+    with admin_engine.connect() as conn:
+        tx = conn.begin()
+        try:
             conn.execute(text("SET LOCAL session_replication_role = replica"))
-            conn.execute(text(sql_set), {"a": value, "i": adj})
-
-    set_amount("25.00")
-    try:
-        posted = ws.api.post(
-            "/matches", json={"remittance_line_id": line, "claim_line_id": cl4, "allocated_amount": "225.00"}
-        )
-        assert posted.status_code == 201, posted.text
-        refused = ws.api.post(
-            "/matches",
-            json={"remittance_line_id": line, "claim_adjustment_id": adj, "allocated_amount": "25.00"},
-        )
-        assert refused.status_code == 409 and refused.json()["error"]["code"] == "match_invariant", (
-            refused.text
-        )
-        with app_engine.connect() as conn:
-            tx = conn.begin()
-            try:
-                conn.execute(text("SELECT set_config('app.tenant_id', :t, true)"), {"t": ws.tenant_id})
-                _raw_confirmed(conn, ws, line, None, "25.00", adj)
-                with pytest.raises(Exception, match="exceed the amount paid"):
-                    conn.execute(text("SET CONSTRAINTS ALL IMMEDIATE"))
-            finally:
-                tx.rollback()
-    finally:
-        set_amount("-50.00")
-    # a same-batch allocation of any size but the adjustment's own is refused
-    with admin_engine.begin() as conn:
-        conn.execute(text("SET LOCAL session_replication_role = replica"))
-        conn.execute(
-            text(
-                "UPDATE claim_adjustments SET included_in_batch_id = (SELECT batch_id FROM claim_lines WHERE id = :c) "
-                "WHERE id = :i"
-            ),
-            {"c": cl4, "i": adj},
-        )
-        conn.execute(text("SET LOCAL session_replication_role = origin"))
-        sp = conn.begin_nested()
-        _raw_confirmed(conn, ws, line, None, "-50.00", adj)
-        conn.execute(text("SET CONSTRAINTS ALL IMMEDIATE"))  # face value: accepted
-        sp.rollback()
-        sp = conn.begin_nested()
-        _raw_confirmed(conn, ws, line, None, "-1000.00", adj)
-        with pytest.raises(Exception, match="same-batch adjustment allocation"):
-            conn.execute(text("SET CONSTRAINTS ALL IMMEDIATE"))
-        sp.rollback()
-        conn.rollback()
+            conn.execute(text("UPDATE claim_adjustments SET amount = 25.00 WHERE id = :i"), {"i": adj})
+            # other tests' allocations on the ADJ are irrelevant to this case
+            conn.execute(
+                text("DELETE FROM reconciliation_matches WHERE claim_adjustment_id = :i"), {"i": adj}
+            )
+            conn.execute(text("SET LOCAL session_replication_role = origin"))
+            conn.execute(text("SELECT set_config('app.tenant_id', :t, true)"), {"t": ws.tenant_id})
+            conn.execute(text("SET LOCAL ROLE rebate_app"))
+            sp = conn.begin_nested()
+            _raw_confirmed(conn, ws, line, cl4, "200.00")
+            _raw_confirmed(conn, ws, line, None, "25.00", adj)
+            check(conn)  # (a) 225.00 <= 225.00
+            sp.rollback()
+            sp = conn.begin_nested()
+            _raw_confirmed(conn, ws, line, cl4, "225.00")
+            _raw_confirmed(conn, ws, line, None, "25.00", adj)
+            with pytest.raises(Exception, match="exceed the amount paid"):
+                check(conn)  # (b) 250.00 > 225.00
+            sp.rollback()
+            conn.execute(text("RESET ROLE"))
+            conn.execute(text("SET LOCAL session_replication_role = replica"))
+            conn.execute(text("UPDATE claim_adjustments SET amount = -50.00 WHERE id = :i"), {"i": adj})
+            conn.execute(
+                text(
+                    "UPDATE claim_adjustments SET included_in_batch_id = "
+                    "(SELECT batch_id FROM claim_lines WHERE id = :c) WHERE id = :i"
+                ),
+                {"c": cl4, "i": adj},
+            )
+            conn.execute(text("SET LOCAL session_replication_role = origin"))
+            sp = conn.begin_nested()
+            _raw_confirmed(conn, ws, line, None, "-50.00", adj)
+            check(conn)  # face value: accepted
+            sp.rollback()
+            sp = conn.begin_nested()
+            _raw_confirmed(conn, ws, line, None, "-1000.00", adj)
+            with pytest.raises(Exception, match="same-batch adjustment allocation"):
+                check(conn)
+            sp.rollback()
+        finally:
+            tx.rollback()

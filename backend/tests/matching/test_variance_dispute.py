@@ -323,7 +323,7 @@ def test_the_remainder_counts_claim_parts_only_and_stays_within_the_payment() ->
 
 
 def test_a_positive_cross_batch_adjustment_allocation_consumes_the_payment() -> None:
-    """Line pays 225.00, CL-4 frozen 200.00, cross-batch ADJ +25.00. (a) 200.00 -> CL-4 and 25.00 -> ADJ: 200 + 25 = 225
+    """Hypothetical line pays 225.00, claim line CL-x 200.00 (not the GT CL-4, 250.00), cross-batch ADJ +25.00. (a) 200.00 -> CL-4 and 25.00 -> ADJ: 200 + 25 = 225
     <= 225 accepted, unmatched remainder 225 - (200 + 25) = 0.00 (no finding, not 25.00). (b) 225.00 -> CL-4 and
     25.00 -> ADJ: 250 > 225, refused."""
     cl4 = ClaimLine("c4", "M", "CL-4", "INV-10021", 1, D("200.00"))
@@ -338,3 +338,18 @@ def test_a_positive_cross_batch_adjustment_allocation_consumes_the_payment() -> 
             remits,
             claims,
         )
+
+
+def test_a_negative_cross_batch_adjustment_allocation_never_frees_room() -> None:
+    """Line pays 200.00: 200.00 to a claim line, -50.00 to a cross-batch ADJ, +50.00 to another claim line. The signed
+    sum 200 - 50 + 50 = 200 would fit; by the rule the -50.00 counts 0, so 200 + 0 + 50 = 250 > 200: refused."""
+    c1 = ClaimLine("c1", "M", "CL-1", "I1", 1, D("200.00"))
+    c2 = ClaimLine("c2", "M", "CL-2", "I2", 1, D("50.00"))
+    r = RemittanceLine("r", "M", D("200.00"))
+    ms = [
+        manual_match(r, [(c1, D("200.00"))]),
+        manual_adjustment_match(r, c1, "adj", D("-50.00")),
+        manual_match(r, [(c2, D("50.00"))]),
+    ]
+    with pytest.raises(InvariantViolation):
+        validate_matches(ms, {"r": r}, {"c1": c1, "c2": c2})

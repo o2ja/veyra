@@ -14,7 +14,7 @@ from typing import Any
 from uuid import UUID
 from zoneinfo import ZoneInfo
 
-from sqlalchemy import delete, func, insert, select, update
+from sqlalchemy import delete, func, insert, select, text, update
 from sqlalchemy.orm import Session
 
 from rebate.core import clock
@@ -546,6 +546,7 @@ def manual(
                 "invalid",
                 "The amount must have the adjustment's sign and not exceed its amount.",
             )
+        db.execute(text("SELECT pg_advisory_xact_lock(hashtext(:k))"), {"k": str(claim_adjustment_id)})
         already = db.scalar(
             select(func.coalesce(func.sum(ReconciliationMatch.allocated_amount), ZERO)).where(
                 ReconciliationMatch.tenant_id == t,

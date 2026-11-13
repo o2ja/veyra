@@ -1,7 +1,9 @@
 """S8 guards on reconciliation_matches: the payment invariant ignores cross-batch adjustment items, and a categorised
 line cannot be matched.
 
-- ``fn_reconciliation_match_within_paid``: serialised per remittance line (``FOR UPDATE`` on the line); per line, the
+- ``fn_reconciliation_match_within_paid``: serialised per remittance line (``FOR NO KEY UPDATE`` on the line) and per
+  adjustment item (advisory lock); the confirmed allocations of one adjustment item sum to at most its amount in
+  absolute value; per line, the
   confirmed allocations to claim lines plus those to an adjustment carried by its original line's own batch (which must
   equal the adjustment's amount exactly: ``allocate()`` writes face value) plus ``GREATEST(amount, 0)`` of those to an
   adjustment carried by ANOTHER batch (owner decision 2026-11-13; interim, pending D-N11) sum to at most ``amount_paid``:
@@ -31,6 +33,7 @@ def upgrade() -> None:
         DECLARE
             paid numeric;
             allocated numeric;
+            adj_total numeric;
         BEGIN
             IF NEW.status <> 'confirmed' THEN
                 RETURN NULL;
@@ -43,8 +46,19 @@ def upgrade() -> None:
                 RAISE EXCEPTION 'reconciliation_matches: a same-batch adjustment allocation equals the adjustment amount'
                     USING ERRCODE = 'check_violation';
             END IF;
+            IF NEW.claim_adjustment_id IS NOT NULL THEN
+                PERFORM pg_advisory_xact_lock(hashtext(NEW.claim_adjustment_id::text));
+                SELECT COALESCE(sum(allocated_amount), 0) INTO adj_total FROM reconciliation_matches
+                WHERE tenant_id = NEW.tenant_id AND claim_adjustment_id = NEW.claim_adjustment_id
+                  AND status = 'confirmed';
+                IF abs(adj_total) > (SELECT abs(amount) FROM claim_adjustments
+                                     WHERE tenant_id = NEW.tenant_id AND id = NEW.claim_adjustment_id) THEN
+                    RAISE EXCEPTION 'reconciliation_matches: confirmed allocations % exceed the adjustment amount',
+                        adj_total USING ERRCODE = 'check_violation';
+                END IF;
+            END IF;
             SELECT amount_paid INTO paid FROM remittance_lines
-            WHERE tenant_id = NEW.tenant_id AND id = NEW.remittance_line_id FOR UPDATE;
+            WHERE tenant_id = NEW.tenant_id AND id = NEW.remittance_line_id FOR NO KEY UPDATE;
             SELECT COALESCE(sum(CASE WHEN m.claim_line_id IS NOT NULL OR same_batch.ok THEN m.allocated_amount
                                      ELSE GREATEST(m.allocated_amount, 0) END), 0) INTO allocated
             FROM reconciliation_matches m
