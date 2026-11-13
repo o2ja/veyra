@@ -25,7 +25,14 @@ def main() -> None:
     configure_logging(settings.log_level)
     engine = make_engine(settings.database_url.get_secret_value())
     assert_safe_role(engine)
-    storage.ensure_bucket(settings)
+    if settings.app_env in ("staging", "production"):
+        # hosted: the bucket is provisioned out of band (s3_tar.py init); fail loudly if it is not usable
+        try:
+            storage.client(settings).head_bucket(Bucket=settings.s3_bucket)
+        except Exception as exc:
+            raise SystemExit(f"S3 bucket '{settings.s3_bucket}' is missing or inaccessible: {exc}") from exc
+    else:
+        storage.ensure_bucket(settings)
     stop = False
 
     def request_stop(*_: object) -> None:

@@ -423,7 +423,7 @@ def propose(
             f"reversal due {row.claim_amount}, already proposed {done}, proposed {amount}"
         )
         if CANNOT_BE_NET_CLAIMED in row.flags:
-            reason += "; the manufacturer does not accept negative claims: cannot be net-claimed, discuss with the manufacturer"
+            reason += "; when proposed, the manufacturer did not accept negative claims: cannot be net-claimed, discuss with the manufacturer"
         a = _insert(
             db,
             who,

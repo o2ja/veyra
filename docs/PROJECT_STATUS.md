@@ -65,8 +65,8 @@ S5/S6 UI, then S7 onwards per `DEVELOPMENT_ROADMAP.md` / `IMPLEMENTATION_PLAN.md
 |---|---|---|---|
 | OD-1 | First vertical: electrical (recommended, ADR-019) vs HVAC | APPROVED (owner 2026-11-12) | S3 (affects UoM/terminology defaults; low switching cost) |
 | OD-2 | LLM provider and data-handling terms (ADR-012) | DEFERRED (owner 2026-11-12: not now; S6/S8 use recorded fixtures) | S6, and before any real document is processed |
-| OD-3 | Production PostgreSQL hosting (self-managed vs managed Postgres) (ADR-023) — PR #18 uses SeaweedFS in prod, ADR-017 limits it to dev/CI; owner to decide | PROPOSED | S11 (earlier if a pilot needs hosting) |
-| OD-4 | Hosting provider and region (ADR-023) — PR #18 uses SeaweedFS in prod, ADR-017 limits it to dev/CI; owner to decide | PROPOSED | S11 |
+| OD-3 | Production PostgreSQL hosting (self-managed vs managed Postgres) (ADR-023) — object storage decided 2026-11-13: managed S3-compatible (ADR-017, `PRODUCTION_PLAN.md`); Postgres hosting/provider still open | PROPOSED | S11 (earlier if a pilot needs hosting) |
+| OD-4 | Hosting provider and region (ADR-023) — object storage decided 2026-11-13: managed S3-compatible (ADR-017, `PRODUCTION_PLAN.md`); Postgres hosting/provider still open | PROPOSED | S11 |
 | OD-5 | Release 2 scope and ordering | PARTIAL (owner 2026-11-12: 3 validator refusals + split-period tiers = Release 2) | After S11 |
 
 ## 6. Known issues and gaps
