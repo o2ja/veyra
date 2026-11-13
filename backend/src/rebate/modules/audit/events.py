@@ -113,6 +113,7 @@ class Action(StrEnum):
     MATCH_CREATED = "reconciliation_match.created"
     MATCH_CONFIRMED = "reconciliation_match.confirmed"
     MATCH_REJECTED = "reconciliation_match.rejected"
+    REMITTANCE_LINE_CATEGORISED = "remittance_line.categorised"
 
 
 AUDITED_FIELDS: dict[str, frozenset[str]] = {
@@ -300,6 +301,7 @@ AUDITED_FIELDS: dict[str, frozenset[str]] = {
             "run",
         }
     ),
+    "remittance_line": frozenset({"remittance_id", "line_number", "category", "amount_paid"}),
     "reconciliation_match": frozenset(
         {"remittance_id", "remittance_line_id", "method", "status", "allocations", "allocated_amount"}
     ),

@@ -10,12 +10,12 @@ from sqlalchemy.orm import Session
 
 
 def submitted_claim_lines(db: Session, tenant_id: UUID, manufacturer_id: UUID) -> list[Any]:
-    """Columns: id, claim_reference, invoice_no, invoice_line, invoice_date, sku, quantity, claim_amount,
+    """Columns: id, batch_id, claim_reference, invoice_no, invoice_line, invoice_date, sku, quantity, claim_amount,
     submitted_at (the batch's submission date). ``invoice_*`` and ``sku`` are NULL for rebate accrual lines."""
     return list(
         db.execute(
             text(
-                "SELECT c.id, c.claim_reference, s.document_number AS invoice_no, s.line_number AS invoice_line, "
+                "SELECT c.id, c.batch_id, c.claim_reference, s.document_number AS invoice_no, s.line_number AS invoice_line, "
                 "s.invoice_date, COALESCE(p.sku, s.sku_raw) AS sku, c.quantity, c.claim_amount, "
                 "b.submitted_at "
                 "FROM claim_lines c JOIN claim_batches b ON b.tenant_id = c.tenant_id AND b.id = c.batch_id "
@@ -30,11 +30,12 @@ def submitted_claim_lines(db: Session, tenant_id: UUID, manufacturer_id: UUID) -
 
 
 def included_adjustments(db: Session, tenant_id: UUID, manufacturer_id: UUID) -> list[Any]:
-    """Columns: id, claim_line_id, amount, for adjustments included in a submitted batch of the manufacturer."""
+    """Columns: id, claim_line_id, batch_id (the batch that carries it), amount, for adjustments included in a
+    submitted batch of the manufacturer."""
     return list(
         db.execute(
             text(
-                "SELECT a.id, a.claim_line_id, a.amount "
+                "SELECT a.id, a.claim_line_id, a.included_in_batch_id AS batch_id, a.amount "
                 "FROM claim_adjustments a JOIN claim_batches b "
                 "ON b.tenant_id = a.tenant_id AND b.id = a.included_in_batch_id "
                 "WHERE a.tenant_id = :t AND a.manufacturer_id = :m AND a.status = 'included' "

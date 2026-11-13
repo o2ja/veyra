@@ -356,20 +356,22 @@ Allocations: one remittance line may be split across several claim lines (and vi
 
 ### 10.3 Variance classification (deterministic)
 
-After a remittance document is finalised (no `suggested` matches left unresolved, all unmatched lines explicitly categorised), for each claim line touched or overdue:
+After a remittance document is finalised (no `suggested` matches left unresolved, all unmatched lines explicitly categorised: every line has a confirmed match or a person's categorisation `unmatched_payment`, else finalisation is refused 409 `uncategorised_lines`), for each claim line touched or overdue:
 
-`paid = Σ confirmed allocations`, `claimed = the line's frozen claim_amount` (owner decision 2026-11-13: an approved adjustment belongs to the batch that carries it and is reconciled there as its own item; it is never added to its original claim line, and a batch's claimed total = its lines at their frozen amounts + the approved adjustments it carries), `diff = claimed − paid`, `tol = manufacturer variance_tolerance` (default 0.01).
+`paid = Σ confirmed allocations to the claim line itself` (an allocation to an adjustment item belongs to that item), `claimed = the line's frozen claim_amount` (owner decision 2026-11-13: an approved adjustment belongs to the batch that carries it and is reconciled there as its own item; it is never added to its original claim line, and a batch's claimed total = its lines at their frozen amounts + the approved adjustments it carries), `diff = claimed − paid`, `tol = manufacturer variance_tolerance` (default 0.01).
 
 | Condition | `case_type` |
 |---|---|
 | `|diff| ≤ tol` | no case |
-| `paid = 0` and the remittance line carries a rejection code | `rejected` |
+| `paid = 0` and the remittance line carries a rejection code that maps to a `rejected_*` reason (or is unmapped, `unknown`) | `rejected` (a code mapped to any other reason is a `short_paid` with that reason) |
 | `0 < paid < claimed − tol` | `short_paid` |
 | `paid = 0` and no rejection code on the remittance line (owner decision 2026-11-12) | `short_paid` (full `diff`, reason `short_paid_unexplained`) |
 | `paid > claimed + tol` | `overpaid` |
-| Remittance line with no accepted match | `unmatched_payment` |
+| Remittance line with no accepted match, and a person categorised it; or the part of a line's `amount_paid` that its confirmed allocations do not cover (V2-style remainder) | `unmatched_payment` (never 0.00) |
 | Submitted claim line, no remittance after `submitted_at + payment_lag_days_expected` (if configured) | `unpaid` |
 | Source row changed after claim | `source_changed` |
+
+A paid-0.00 line that no tier matched is tied to its claim line by a manual match with `allocated_amount = 0` (allowed only when the line's `amount_paid = 0`), so the claim line classifies as `rejected`/`short_paid`. An adjustment item (an approved adjustment carried by a batch other than its original line's) is a separate reconcilable item: it gets an allocation only when a person confirms a manual match naming it, it is never auto-allocated and it yields no finding. **Pending owner decision D-N11** (how a payment against the carrying batch is reconciled); no further rule is implemented. Top-up payments: a claim line that an earlier remittance paid in part and that is still short stays open to the exact tiers T1/T2 of later remittances; T3-T5 skip it.
 
 Reason code: the remittance line's external code mapped via `reason_code_mappings`; unmapped → `unknown` (never guessed). Without any external reason: `short_paid_unexplained`.
 

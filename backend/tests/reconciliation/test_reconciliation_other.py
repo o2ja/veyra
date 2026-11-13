@@ -30,6 +30,7 @@ from tests.reconciliation.support import (
     SPA_NAMES,
     WINDOW,
     XLSX,
+    categorise_unmatched,
     claim_refs,
     finalize,
     ingest,
@@ -101,6 +102,7 @@ def test_ra_5521_exact_reference_matches_and_the_unknown_invoice_is_an_unmatched
         channel="ach",
         document_number="RA-5521",
         mapping_template_id=t.json()["id"],
+        total_amount="568.00",  # hand: 448.00 + 120.00
     )
     assert doc["status"] == "accepted" and Decimal(doc["total_amount"]) == Decimal("568.00")  # 448 + 120
     reconcile(ws, doc["id"])
@@ -111,6 +113,8 @@ def test_ra_5521_exact_reference_matches_and_the_unknown_invoice_is_an_unmatched
         (claim["claim_reference"], Decimal("448.00"))
     ]
     assert rows[2]["state"] == "unmatched" and rows[2]["matches"] == []  # 'inv-10099' has no claim
+    assert finalize(ws.api, doc["id"]).status_code == 409  # line 2 is neither matched nor categorised
+    assert categorise_unmatched(ws, doc["id"]) == [2]
     r = finalize(ws.api, doc["id"])
     assert r.status_code == 200, r.text
     got = [(f["case_type"], f["reason_code"], Decimal(f["amount"])) for f in r.json()["findings"]]
@@ -131,6 +135,7 @@ def test_dn_310_deduction_matches_the_copr_claim_and_leaves_no_variance(
         doc_type="deduction_notice",
         channel="deduction",
         document_number="DN-310",
+        total_amount="60.00",
     )
     assert doc["status"] == "accepted" and doc["channel"] == "deduction"
     assert Decimal(doc["total_amount"]) == Decimal("60.00")

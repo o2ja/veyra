@@ -127,6 +127,19 @@ def listing_of(ws: Workspace, path: str) -> list[dict[str, Any]]:
         cursor = r.json()["page"]["next_cursor"]
 
 
+def categorise_unmatched(ws: Workspace, remittance_id: str) -> list[int]:
+    """A person categorises every line that has no match as an unmatched payment; returns their line numbers."""
+    done = []
+    for n, row in sorted(view(ws, remittance_id).items()):
+        if row["state"] == "unmatched":
+            r = ws.api.post(
+                f"/remittance-lines/{row['line']['id']}/categorise", json={"category": "unmatched_payment"}
+            )
+            assert r.status_code == 200, r.text
+            done.append(n)
+    return done
+
+
 def finalize(api: Api, remittance_id: str) -> Any:
     return api.post(f"/remittances/{remittance_id}/finalize", headers=key())
 
@@ -134,7 +147,10 @@ def finalize(api: Api, remittance_id: str) -> Any:
 def build_story(app: FastAPI, stack: ExitStack) -> Story:
     """The ground-truth story of ``CB-VOLT-2026-06``: seven lines claimed and submitted (2026-07-05), the credit note
     CN-5002 arrives, its -50.00 return reversal (ADJ-2026-0001) is approved and rides in a second submitted batch
-    together with INV-10020/1 (312.50); VOLT's expected payment lag is 3 days (so on 2026-07-10 the first batch, submitted 07-05, is overdue and the carrier
+    together with INV-10020/1 (312.50). The ground-truth JSON puts ADJ-2026-0001 in the SAME batch as its claim line,
+    an ordering the real flow cannot produce (an adjustment needs a frozen original and is included only when a
+    batch is created, claims/batches.py), so the story differs from it on purpose: by the owner rule (2026-11-13) an
+    adjustment belongs to the batch that carries it, so B1 = 10,410.00 and B2 = 312.50 - 50.00 = 262.50. VOLT's expected payment lag is 3 days (so on 2026-07-10 the first batch, submitted 07-05, is overdue and the carrier
     batch, submitted 07-09, is not); E07/E12 are mapped (ground truth)."""
     ws = open_workspace(app, stack)
     all_settings(ws)
@@ -206,10 +222,12 @@ def check_matching(story: Story, rows: dict[int, dict[str, Any]]) -> None:
             assert [a["claim_reference"] for a in m["allocations"]] == [
                 ref_of(story, exp["claim_reference"])
             ], n
-        if n == 4:  # 250.00 on the claim and the -50.00 return reversal on its adjustment: 200.00 paid
-            assert amounts(m) == [Decimal("250.00"), Decimal("-50.00")]
-            assert [a["claim_reference"] for a in m["allocations"]] == [ref_of(story, "CL-2026-000004"), None]
-            assert m["allocations"][1]["claim_adjustment_id"] == story.adjustment["id"]
+        if (
+            n == 4
+        ):  # the adjustment rides in another batch: it is not split off this payment, all 200.00 -> CL-4
+            assert amounts(m) == [Decimal("200.00")]
+            assert [a["claim_reference"] for a in m["allocations"]] == [ref_of(story, "CL-2026-000004")]
+            assert m["allocations"][0]["claim_adjustment_id"] is None
         if n == 5:  # GL-V2: unique subset 1000.00 + 1100.00, needs a person
             assert sorted(amounts(m)) == sorted(Decimal(a) for a in exp["allocations"])
             assert sorted(a["claim_reference"] for a in m["allocations"]) == sorted(
@@ -236,6 +254,10 @@ def check_findings(story: Story, body: dict[str, Any]) -> None:
         [
             ("short_paid", "rejected_price_mismatch", Decimal("150.00"), "INV-10001"),  # GL-V1
             ("rejected", "rejected_quantity_exceeds_authorization", Decimal("2080.00"), "INV-10011"),
+            # CL-4: frozen 250.00, paid 200.00 -> 50.00 short, no code (owner rule 2026-11-13; the GT JSON's "no variance"
+            # needs the -50.00 in CL-4's own batch). Cross-check: 10,410.00 + 262.50 (B2, not yet due) = 10,672.50;
+            # cash on matched lines 7,470.00; 10,672.50 - 7,470.00 = 3,202.50 = 150 + 2080 + 50 + 660 + 262.50.
+            ("short_paid", "short_paid_unexplained", Decimal("50.00"), "INV-10021"),
             ("unmatched_payment", "unmatched_payment", Decimal("75.00"), ""),
             ("unpaid", "unpaid_no_remittance", Decimal("660.00"), "INV-10060"),
         ]
@@ -243,7 +265,7 @@ def check_findings(story: Story, body: dict[str, Any]) -> None:
     assert got == expected
     for exp in EXPECTED["expected"]:  # every ground-truth variance is among the findings
         v = exp.get("variance")
-        if v:
+        if v:  # (the GT's null variance for line 4 is the same-batch ordering; see the story docstring)
             assert (v["case_type"], v["reason_code"], Decimal(v["amount"])) in {
                 (c, r, a) for c, r, a, _ in got
             }

@@ -1665,6 +1665,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/remittance-lines/{line_id}/categorise": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Categorise Line */
+        post: operations["remittance_line_categorise"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/remittances": {
         parameters: {
             query?: never;
@@ -2399,6 +2416,14 @@ export interface components {
             effective_date: string;
             /** Reason */
             reason: string;
+        };
+        /** CategoriseIn */
+        CategoriseIn: {
+            /**
+             * Category
+             * @constant
+             */
+            category: "unmatched_payment";
         };
         /** Change */
         Change: {
@@ -3793,11 +3818,10 @@ export interface components {
         ManualMatchIn: {
             /** Allocated Amount */
             allocated_amount: number | string;
-            /**
-             * Claim Line Id
-             * Format: uuid
-             */
-            claim_line_id: string;
+            /** Claim Adjustment Id */
+            claim_adjustment_id?: string | null;
+            /** Claim Line Id */
+            claim_line_id?: string | null;
             /**
              * Remittance Line Id
              * Format: uuid
@@ -4715,6 +4739,10 @@ export interface components {
             amount_claimed_stated: string | null;
             /** Amount Paid */
             amount_paid: string;
+            /** Categorised At */
+            categorised_at: string | null;
+            /** Category */
+            category: "unmatched_payment" | null;
             /** Claim Reference */
             claim_reference: string | null;
             /** Customer Ref */
@@ -9855,6 +9883,41 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["TrackerOut"];
+                };
+            };
+        };
+    };
+    remittance_line_categorise: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                line_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CategoriseIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RemittanceLineOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
                 };
             };
         };

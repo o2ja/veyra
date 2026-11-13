@@ -6,11 +6,12 @@ from decimal import Decimal
 import pytest
 
 from rebate_matching.dispute import DisputeFacts, assess_dispute
-from rebate_matching.engine import confirm_suggestion, reconcile
-from rebate_matching.models import ClaimLine, RemittanceLine, Status
+from rebate_matching.engine import confirm_suggestion, manual_adjustment_match, manual_match, reconcile
+from rebate_matching.models import Adjustment, ClaimLine, Method, RemittanceLine, Status
 from rebate_matching.variance import (
     classify_claim_line,
     classify_unmatched_payment,
+    paid_for,
 )
 from tests.matching import data
 
@@ -53,7 +54,9 @@ def test_cm_7781_variances_match_ground_truth() -> None:
                 D(v["amount"]),
                 v["reason_code"],
             ), ref
-    # L4 (hand derivation): claimed 250.00 - return adjustment 50.00 = 200.00 net, paid 200.00 -> no case
+    # L4 (hand derivation, ground-truth ordering: ADJ in CL-4's own batch): the payment 200.00 splits into
+    # 250.00 (CL-4) + (-50.00) (ADJ); CL-4 claimed 250.00, paid 250.00 -> no case. Batch total 10,410.00 - 50.00 =
+    # 10,360.00 (= GT batch_total).
     assert got["CL-2026-000004"] is None
     # GL-V2: L5 (2,100.00) is a T5 suggestion over CL-5 (1,000.00) + CL-6 (1,100.00); once a user confirms it,
     # neither line has a variance
@@ -64,7 +67,7 @@ def test_cm_7781_variances_match_ground_truth() -> None:
         claim = next(c for c in claims if c.claim_reference == ref)
         assert classify_claim_line(claim, after, rmap, mappings) is None, ref
     # unmatched payment (line 6): 75.00
-    case6 = classify_unmatched_payment(rmap["6"], res.matches)
+    case6 = classify_unmatched_payment(rmap["6"], res.matches, categorised=True)
     assert case6 is not None and (case6.case_type, case6.amount, case6.reason_code) == (
         "unmatched_payment",
         D("75.00"),
@@ -198,3 +201,100 @@ def test_dispute_assessment(reason: str, facts: DisputeFacts, expected: str) -> 
 def test_ground_truth_dispute_assessments_are_supported() -> None:
     texts = [e["dispute_assessment"] for e in EXP["expected"] if "dispute_assessment" in e]
     assert len(texts) == 2 and all(t.startswith("supported") for t in texts)
+
+
+# ---- owner rule 2026-11-13 and review fixes (hand derivations) ----------------------------------------------------
+
+
+def test_an_adjustment_in_another_batch_leaves_the_original_line_at_its_frozen_amount() -> None:
+    """CL-4 frozen 250.00; the -50.00 ADJ rides in another batch, so the line carries no adjustment. The payment of
+    200.00 matches by invoice line and all 200.00 goes to CL-4: claimed 250.00 - paid 200.00 = 50.00 short_paid, no
+    code -> short_paid_unexplained. The adjustment item yields no finding (it has no classifier at all)."""
+    cl4 = ClaimLine("c4", "M", "CL-4", "INV-10021", 1, D("250.00"))
+    r = RemittanceLine("r4", "M", D("200.00"), invoice_no="INV-10021", invoice_line=1)
+    res = reconcile([r], [cl4])
+    (m,) = res.matches
+    assert [(a.claim_line_id, a.adjustment_ref, a.amount) for a in m.allocations] == [
+        ("c4", None, D("200.00"))
+    ]
+    case = classify_claim_line(cl4, res.matches, {"r4": r}, {})
+    assert case is not None and (case.case_type, case.amount, case.reason_code) == (
+        "short_paid",
+        D("50.00"),
+        "short_paid_unexplained",
+    )
+
+
+def test_an_allocation_to_an_adjustment_item_does_not_pay_its_original_line() -> None:
+    cl4 = ClaimLine("c4", "M", "CL-4", "INV-10021", 1, D("250.00"))
+    r = RemittanceLine("r", "M", D("100.00"))
+    m = manual_adjustment_match(r, cl4, "adj1", D("-50.00"))
+    assert m.claim_line_ids == frozenset() and paid_for("c4", [m]) == D(0)
+    # the line is still untouched: no confirmed match touches it, so no case without a lag
+    assert classify_claim_line(cl4, [m], {"r": r}, {}) is None
+
+
+def test_the_same_batch_adjustment_is_still_split_off_the_payment_and_claimed_stays_frozen() -> None:
+    """Ground-truth ordering: CL-4 250.00 + ADJ -50.00 in its own batch; payment 200.00 = 250.00 + (-50.00)."""
+    cl4 = ClaimLine(
+        "c4", "M", "CL-4", "INV-10021", 1, D("250.00"), adjustments=(Adjustment("a1", D("-50.00")),)
+    )
+    r = RemittanceLine("r4", "M", D("200.00"), invoice_no="INV-10021", invoice_line=1)
+    res = reconcile([r], [cl4])
+    (m,) = res.matches
+    assert [(a.adjustment_ref, a.amount) for a in m.allocations] == [(None, D("250.00")), ("a1", D("-50.00"))]
+    assert classify_claim_line(cl4, res.matches, {"r4": r}, {}) is None  # 250.00 - 250.00
+
+
+def test_partial_allocation_reports_the_remainder_as_unmatched_payment() -> None:
+    """V2: line 4,430.00 with only 2,200.00 confirmed -> 2,230.00 unmatched_payment, without any categorisation."""
+    c = ClaimLine("c", "M", "CL-c", "I", 1, D("2200.00"))
+    r = RemittanceLine("r", "M", D("4430.00"))
+    m = manual_match(r, [(c, D("2200.00"))])
+    case = classify_unmatched_payment(r, [m])
+    assert case is not None and (case.case_type, case.amount) == ("unmatched_payment", D("2230.00"))
+    assert classify_unmatched_payment(r, [manual_match(r, [(c, D("2200.00")), (c, D("2230.00"))])]) is None
+
+
+def test_no_zero_finding_and_nothing_without_categorisation() -> None:
+    zero = RemittanceLine("z", "M", D("0.00"))
+    assert classify_unmatched_payment(zero, [], categorised=True) is None
+    paid = RemittanceLine("p", "M", D("75.00"))
+    assert classify_unmatched_payment(paid, []) is None
+    c = ClaimLine("c", "M", "CL-c", "I", 1, D("660.00"))
+    held = manual_match(
+        zero, [(c, D("0.00"))]
+    )  # a 0.00 manual match: the claim is rejected, nothing is unmatched
+    assert classify_unmatched_payment(zero, [held]) is None
+    rejected = classify_claim_line(
+        c, [held], {"z": RemittanceLine("z", "M", D("0.00"), reason_code="E07")}, {"E07": "rejected_other"}
+    )
+    assert rejected is not None and (rejected.case_type, rejected.amount) == ("rejected", D("660.00"))
+
+
+def test_paid_zero_with_a_code_mapped_to_a_non_rejection_reason_is_short_paid() -> None:
+    c = ClaimLine("c", "M", "CL-c", "I", 1, D("100.00"))
+    r = RemittanceLine("r", "M", D("0.00"), invoice_no="I", invoice_line=1, reason_code="X9")
+    res = reconcile([r], [c])
+    case = classify_claim_line(c, res.matches, {"r": r}, {"X9": "unmatched_payment"})
+    assert case is not None and (case.case_type, case.amount, case.reason_code) == (
+        "short_paid",
+        D("100.00"),
+        "unmatched_payment",
+    )
+
+
+def test_a_top_up_payment_finds_its_short_line_by_exact_identifier_only() -> None:
+    """CL 250.00 was paid 200.00 by an earlier remittance (short 50.00). A later line of 50.00 naming its invoice line
+    matches by T2; the same line with only SKU/qty/amount (T3) or an amount (T4/T5) is never offered the line."""
+    c = ClaimLine("c", "M", "CL-c", "INV-1", 1, D("250.00"), sku="S", quantity=D("1"))
+    t2 = RemittanceLine("t2", "M", D("50.00"), invoice_no="INV-1", invoice_line=1)
+    got = reconcile([t2], [], topup_lines=[c])
+    (m,) = got.matches
+    assert (m.method, m.status, m.allocations[0].amount) == (
+        Method.INVOICE_LINE,
+        Status.CONFIRMED,
+        D("50.00"),
+    )
+    t3 = RemittanceLine("t3", "M", D("250.00"), invoice_no="INV-1", sku="S", quantity=D("1"))
+    assert reconcile([t3], [], topup_lines=[c]).matches == ()

@@ -244,6 +244,7 @@ def _seed_s8(app: Any, admin: Engine, side: Side) -> dict[str, str]:
             "doc_type": "credit_memo",
             "channel": "credit_memo",
             "document_number": "ISO-1",
+            "total_amount": "5.00",  # hand: the file's one line; a file without a stated total is not auto-accepted
         },
         headers={"Idempotency-Key": str(uuid.uuid4())},
     )
@@ -342,6 +343,7 @@ def _call(api: Api, method: str, path: str, body: Any) -> Any:
 
 # A body that passes validation, so the response depends only on whether the id is visible.
 BODIES: dict[str, Any] = {
+    "/remittance-lines/{line_id}/categorise": {"category": "unmatched_payment"},
     "/users/{user_id}": {"role": "viewer"},
     "/manufacturers/{manufacturer_id}/reason-code-mappings": {"mappings": []},
     "/customers/{customer_id}/aliases": {"alias": "ISO ALIAS"},
@@ -633,6 +635,23 @@ def test_s8_foreign_remittances_lines_and_matches_are_unreachable(
         ).scalar_one()
     assert (st, n) == ("suggested", 1)
     assert b.api.get(f"/remittances/{b.s8['remittance_id']}").json()["status"] == "accepted"
+
+
+def test_s8_categorising_a_foreign_remittance_line_is_a_404_and_changes_nothing(
+    sides: tuple[Side, Side], admin_engine: Engine
+) -> None:
+    a, b = sides
+    body = {"category": "unmatched_payment"}
+    foreign = a.api.post(f"/remittance-lines/{b.s8['remittance_line_id']}/categorise", json=body)
+    unknown = a.api.post("/remittance-lines/00000000-0000-7000-8000-000000000000/categorise", json=body)
+    assert foreign.status_code == unknown.status_code == 404
+    assert foreign.json()["error"]["code"] == unknown.json()["error"]["code"]
+    with admin_engine.connect() as conn:
+        n = conn.execute(
+            text("SELECT count(*) FROM remittance_lines WHERE id = :i AND category IS NOT NULL"),
+            {"i": b.s8["remittance_line_id"]},
+        ).scalar_one()
+    assert n == 0
 
 
 def test_s5_tracker_and_run_filters_never_show_the_other_tenant(sides: tuple[Side, Side]) -> None:

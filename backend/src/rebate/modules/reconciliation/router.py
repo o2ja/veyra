@@ -334,6 +334,17 @@ def reject_match(
     return _decided(request, principal, match_id, if_match, "reject", response)
 
 
+@router.post("/remittance-lines/{line_id}/categorise", operation_id="remittance_line_categorise")
+def categorise_line(
+    request: Request,
+    line_id: UUID,
+    body: s.CategoriseIn,
+    principal: Annotated[Principal, Depends(require(WRITE))],
+) -> s.RemittanceLineOut:
+    line = matching.categorise(ctx(request).db, _who(request, principal), line_id, body.category)
+    return s.RemittanceLineOut.model_validate(line)
+
+
 @router.post("/matches", status_code=201, operation_id="match_create")
 def create_match(
     request: Request,
@@ -347,6 +358,7 @@ def create_match(
         body.remittance_line_id,
         body.claim_line_id,
         body.allocated_amount,
+        body.claim_adjustment_id,
     )
     (out,) = _match_outs(request, tenant_of(principal), [rows])
     response.headers["ETag"] = f'"{out.revision}"'

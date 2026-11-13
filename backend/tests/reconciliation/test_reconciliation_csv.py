@@ -3,6 +3,7 @@
 hand derivation, never the output of the code under test. Tests of the scenario share a module-scoped workspace and
 run in file order."""
 
+import uuid
 from collections.abc import Iterator
 from contextlib import ExitStack
 from datetime import UTC, datetime
@@ -23,6 +24,7 @@ from tests.reconciliation.support import (
     Story,
     amounts,
     build_story,
+    categorise_unmatched,
     check_findings,
     check_matching,
     create,
@@ -269,6 +271,49 @@ def test_match_listing_is_paged_and_filtered(story: Story) -> None:
     assert ws.api.get("/matches", params={"bogus": 1}).status_code == 400
 
 
+# ---- categorisation (BL §10.3: all unmatched lines explicitly categorised) ---------------------------------------
+
+
+def test_finalising_needs_every_unmatched_line_categorised(story: Story, admin_engine: Engine) -> None:
+    ws = story.ws
+    doc = SHARED["doc"]
+    rows = view(ws, doc["id"])
+    refused = finalize(ws.api, doc["id"])  # line 6 (75.00) is neither matched nor categorised
+    assert refused.status_code == 409 and refused.json()["error"]["code"] == "uncategorised_lines"
+    matched, open_ = rows[4]["line"]["id"], rows[6]["line"]["id"]
+    body = {"category": "unmatched_payment"}
+    held = ws.api.post(f"/remittance-lines/{matched}/categorise", json=body)
+    assert held.status_code == 409 and held.json()["error"]["code"] == "line_matched"
+    assert ws.api.post(f"/remittance-lines/{open_}/categorise", json={"category": "other"}).status_code == 422
+    assert ws.api.post(f"/remittance-lines/{uuid.uuid4()}/categorise", json=body).status_code == 404
+    done = ws.api.post(f"/remittance-lines/{open_}/categorise", json=body)
+    assert done.status_code == 200 and done.json()["category"] == "unmatched_payment"
+    again = ws.api.post(f"/remittance-lines/{open_}/categorise", json=body)
+    assert again.status_code == 409 and again.json()["error"]["code"] == "invalid_state"
+    log = ws.api.get("/audit-log", params={"action": "remittance_line.categorised"})
+    assert log.status_code == 200 and [e["entity_id"] for e in log.json()["data"]] == [open_]
+    with (
+        admin_engine.begin() as conn
+    ):  # the line stays evidence: nothing but a first categorisation is possible
+        for sql, target in (
+            ("UPDATE remittance_lines SET amount_paid = 1 WHERE id = :i", open_),
+            (
+                "UPDATE remittance_lines SET category = 'unmatched_payment', categorised_by = :u, "
+                "categorised_at = now() WHERE id = :i",
+                matched,
+            ),
+        ):
+            sp = conn.begin_nested()
+            try:
+                conn.execute(text(sql), {"i": target, **({"u": ws.user_id} if ":u" in sql else {})})
+            except Exception as exc:
+                sp.rollback()
+                assert "categoris" in str(exc), exc
+            else:
+                sp.rollback()
+                raise AssertionError(f"line changed: {sql}")
+
+
 # ---- finalisation ----------------------------------------------------------------------------------------------
 
 
@@ -321,3 +366,88 @@ def test_a_finalised_remittance_is_final(story: Story, admin_engine: Engine) -> 
                 sp.rollback()
                 raise AssertionError(f"owner could change a finalised remittance: {sql}")
     drain(ws.app)
+
+
+# ---- the owner's money rule and the review fixes (hand derivations in the comments) ----------------------------
+
+HEADER = "line,invoice_no,invoice_line,part_no,qty,amount_claimed,amount_paid,reason_code,reason_text\n"
+
+
+def test_no_stated_total_is_not_auto_accepted(story: Story) -> None:
+    """A file without any total makes the arithmetic check empty: a person enters it (422 total_required)."""
+    ws, volt = story.ws, story.mfr["VOLT"]
+    body = (HEADER + "1,,,,,,5.00,,x\n").encode()
+    doc = ingest(ws, upload(ws, "nt.csv", body, CSV), volt, document_number="NT-1")
+    assert doc["status"] == "pending_review"
+    ex = ws.api.get(f"/remittances/{doc['id']}/extraction").json()
+    assert [p["code"] for p in ex["problems"]] == ["total_required"]
+    refused = ws.api.post(f"/remittances/{doc['id']}/accept", json={})
+    assert refused.status_code == 422 and refused.json()["error"]["code"] == "total_required"
+    ok_ = ws.api.post(
+        f"/remittances/{doc['id']}/accept", json={"total_amount": "5.00"}
+    )  # hand: one line, 5.00
+    assert ok_.status_code == 200 and ok_.json()["status"] == "accepted"
+
+
+def test_a_zero_paid_line_makes_its_claim_line_rejected_via_a_zero_manual_match(story: Story) -> None:
+    """CL-7 (INV-10060, 660.00) was reported unpaid by CM-7781. A new remittance pays it 0.00 with E07 (mapped to
+    rejected_quantity_exceeds_authorization) on a line no tier can match: a 0.00 manual match makes it rejected 660.00;
+    the 0.00 line itself yields no finding. The 5.00 line allows no 0.00 match and, categorised, is an unmatched
+    payment of 5.00."""
+    ws, volt = story.ws, story.mfr["VOLT"]
+    body = (HEADER + "1,,,,,,0.00,E07,Exceeds authorized quantity\n2,,,,,,5.00,,Credit\n").encode()
+    doc = ingest(ws, upload(ws, "zero.csv", body, CSV), volt, document_number="ZERO-1", total_amount="5.00")
+    assert doc["status"] == "accepted"
+    reconcile(ws, doc["id"])
+    rows = view(ws, doc["id"])
+    assert rows[1]["state"] == "unmatched" and rows[2]["state"] == "unmatched"
+    cl7 = story.lines["INV-10060"]["id"]
+    bad = ws.api.post(
+        "/matches",
+        json={"remittance_line_id": rows[2]["line"]["id"], "claim_line_id": cl7, "allocated_amount": "0.00"},
+    )
+    assert bad.status_code == 422
+    ok_ = ws.api.post(
+        "/matches",
+        json={"remittance_line_id": rows[1]["line"]["id"], "claim_line_id": cl7, "allocated_amount": "0.00"},
+    )
+    assert ok_.status_code == 201, ok_.text
+    assert categorise_unmatched(ws, doc["id"]) == [2]
+    r = finalize(ws.api, doc["id"])
+    assert r.status_code == 200, r.text
+    got = [(f["case_type"], f["reason_code"], Decimal(f["amount"])) for f in r.json()["findings"]]
+    # the 0.00 line yields nothing; the categorised 5.00 line is an unmatched payment of 5.00
+    assert sorted(got) == [
+        ("rejected", "rejected_quantity_exceeds_authorization", Decimal("660.00")),
+        ("unmatched_payment", "unmatched_payment", Decimal("5.00")),
+    ]
+
+
+def test_an_adjustment_item_is_matched_only_by_a_person_and_yields_no_finding(story: Story) -> None:
+    """Interim rule pending owner decision D-N11. ADJ-2026-0001 (-50.00) rides in batch B2, not in CL-4's batch: it is a
+    separate item. Only a manual match with its id gives it an allocation; its original line's paid is untouched."""
+    ws, volt = story.ws, story.mfr["VOLT"]
+    adj = story.adjustment["id"]
+    body = (HEADER + "1,,,,,,100.00,,x\n").encode()
+    doc = ingest(ws, upload(ws, "adj.csv", body, CSV), volt, document_number="ADJ-1", total_amount="100.00")
+    reconcile(ws, doc["id"])
+    line = view(ws, doc["id"])[1]
+    assert line["state"] == "unmatched"  # no tier ever allocates to an adjustment on its own
+    lid = line["line"]["id"]
+    both = {
+        "remittance_line_id": lid,
+        "claim_line_id": story.lines["INV-10021"]["id"],
+        "claim_adjustment_id": adj,
+    }
+    assert ws.api.post("/matches", json={**both, "allocated_amount": "-50.00"}).status_code == 422
+    one = {"remittance_line_id": lid, "claim_adjustment_id": adj}
+    assert ws.api.post("/matches", json={**one, "allocated_amount": "0.00"}).status_code == 422
+    ok_ = ws.api.post("/matches", json={**one, "allocated_amount": "-50.00"})
+    assert ok_.status_code == 201, ok_.text
+    (a,) = ok_.json()["allocations"]
+    assert (a["claim_line_id"], a["claim_adjustment_id"], Decimal(a["allocated_amount"])) == (
+        None,
+        adj,
+        Decimal("-50.00"),
+    )
+    assert view(ws, doc["id"])[1]["state"] == "matched"
