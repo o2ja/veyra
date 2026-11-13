@@ -13,7 +13,7 @@ from sqlalchemy import Engine, text
 
 from rebate.core.db import transaction
 from rebate.core.ids import new_id
-from rebate.core.jobs import JobContext
+from rebate.core.jobs import REGISTRY, JobContext
 from rebate.modules.audit import cli, jobs, seal
 from tests.conftest import DbUrls
 from tests.support import make_settings
@@ -307,6 +307,7 @@ def test_dead_lettered_run_schedules_a_new_one(
     migrated_db: DbUrls, app_engine: Engine, admin_engine: Engine, tenant: UUID
 ) -> None:
     ctx = JobContext(make_settings(migrated_db.app), new_id(), tenant, {}, 5, None)
+    assert REGISTRY[jobs.KIND].on_dead is jobs._dead
     with transaction(app_engine, tenant) as db:
         jobs._dead(db, ctx)
     with admin_engine.connect() as conn:

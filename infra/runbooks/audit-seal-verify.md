@@ -9,8 +9,8 @@ Check a tenant from the api image (application role, tenant context set by the t
 
 `--anchor` is optional but is the only protection against deleted newest seals or a re-sealed history: it fails unless the chain contains a verified seal with that hash.
 
-Output is JSON (`ok`, `seals`, `head_hash`, `unsealed_entries`, `failure`, `failed_seal_id`). Exit 0 = chain intact; exit 1 = the
-first broken seal is named. `unsealed_entries` above a few hundred for long means the job is stuck: look at the
+Output is JSON (`ok`, `seals`, `head_hash`, `unsealed_entries`, `failure`, `failed_seal_id`, `anchored`). Exit 0 = chain intact; exit 1 = the
+first broken seal is named. `unsealed_entries` above a few hundred for long means the job is stuck, or deferring: a long-open transaction makes runs skip with the warning `audit_seal.deferred` (find it with `select * from pg_stat_activity where xact_start < now() - interval '5 minutes'`; the check only sees `rebate_app` sessions, so a new role writing `audit_log` needs `pg_read_all_stats`). Otherwise look at the
 Jobs page for a failed `audit_seal` job and retry it.
 
 On exit 1: do not edit anything. Treat as a security incident (`incident-tenant-data-exposure.md`), take a database snapshot,

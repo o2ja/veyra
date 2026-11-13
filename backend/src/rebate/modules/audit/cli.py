@@ -27,7 +27,7 @@ def main(argv: list[str] | None = None, engine: object | None = None) -> int:
         if args.command == "retention-report":
             print(json.dumps(seal.retention_report(db, args.tenant, clock.now()), indent=2))
             return 0
-        result = seal.verify_tenant(db, args.tenant, args.anchor)
+        result = seal.verify_tenant(db, args.tenant, args.anchor and args.anchor.lower())
     print(json.dumps(asdict(result), indent=2))
     return 0 if result.ok else 1
 

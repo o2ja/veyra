@@ -13,7 +13,7 @@ therefore links every entry of the tenant, across seals.
 
 Only entries older than ``SETTLE`` (5 min) are sealed, and a run is skipped while any other transaction of this
 database started before that cutoff (``pg_stat_activity``): a lower id that commits late can then not land inside
-a sealed range. Verification also checks coverage: every entry up to the last seal lies inside some seal's range.
+a sealed range. The settle check only sees sessions of the same role (``rebate_app``: without ``pg_read_all_stats`` other roles' ``xact_start`` is hidden), so any new role that writes ``audit_log`` needs the ``pg_read_all_stats`` grant. Verification also checks coverage: every entry up to the last seal lies inside some seal's range.
 """
 
 import hashlib
@@ -23,9 +23,11 @@ from datetime import UTC, datetime, timedelta
 from typing import Any
 from uuid import UUID
 
+import structlog
 from sqlalchemy import text
 from sqlalchemy.orm import Session
 
+log = structlog.get_logger("rebate.audit_seal")
 SETTLE = timedelta(minutes=5)
 CHUNK = 1000
 _COLUMNS = (
@@ -79,6 +81,7 @@ def seal_tenant(db: Session, tenant_id: UUID, now: datetime, max_chunks: int = 5
         ),
         {"c": cutoff},
     ).scalar_one():
+        log.warning("audit_seal.deferred", tenant_id=str(tenant_id), reason="old transaction open")
         return False  # an old transaction may still commit audit rows below the cutoff: try next run
     for _ in range(max_chunks):
         last = _last_seal(db, tenant_id)
