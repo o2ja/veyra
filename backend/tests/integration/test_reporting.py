@@ -29,6 +29,7 @@ from tests.reconciliation.support import (
     EXPECTED,
     Story,
     build_story,
+    categorise_unmatched,
     ingest,
     key,
     listing_of,
@@ -98,6 +99,9 @@ def story(env: Env) -> Story:
     (match,) = suggested
     confirm = ws.api.post(f"/matches/{match['id']}/confirm", headers={"If-Match": f'"{match["revision"]}"'})
     assert confirm.status_code == 200, confirm.text
+    categorise_unmatched(
+        ws, doc["id"]
+    )  # final S8: every unmatched line (line 6, 75.00) is categorised before finalising
     assert ws.api.post(f"/remittances/{doc['id']}/finalize", headers=key()).status_code == 200
     SHARED["doc"] = doc
     return s
@@ -285,7 +289,10 @@ def test_a_remittance_line_and_a_case_trace_back_to_the_invoice_row(env: Env, st
         api, "remittance_line", lines[5]["id"]
     )  # the 75.00 line has no claim line and still a file row
     assert unmatched["source_row"][0]["fields"]["row_number"] == "7" and "claim_line" not in unmatched
-    cases = {c["case_type"]: c for c in api.get("/cases", params={"limit": 50}).json()["data"]}
+    all_cases = api.get("/cases", params={"limit": 50}).json()["data"]
+    cases = {
+        c["case_type"]: c for c in all_cases if c["variance_amount"] != "50.0000"
+    }  # 50.00 = CL-4's short-pay (INV-10021)
     short = _nodes(api, "variance_case", cases["short_paid"]["id"])
     assert str(_source_row_of("INV-10001")) in {n["fields"]["row_number"] for n in short["source_row"]}
     unpaid = _nodes(api, "variance_case", cases["unpaid"]["id"])  # INV-10060: never on a remittance
