@@ -82,11 +82,9 @@ class Row:
 
 
 def test_canonical_form_is_fixed() -> None:
-    """Hand-derived: sorted keys, compact separators, UTC microsecond timestamp, nulls explicit."""
-    row = Row(
-        id=7, occurred_at=datetime(2026, 1, 2, 3, 4, 5, 6, tzinfo=UTC), after={"b": 1, "a": "é"}, ip=None
-    )
-    expected = '{"after":{"a":"é","b":1},"id":7,"ip":null,"occurred_at":"2026-01-02T03:04:05.000006Z"}'
+    """Hand-derived: sorted keys, compact separators, UTC microsecond timestamp, jsonb kept as its text."""
+    row = Row(id=7, occurred_at=datetime(2026, 1, 2, 3, 4, 5, 6, tzinfo=UTC), after='{"a": 1.50}', ip=None)
+    expected = '{"after":"{\\"a\\": 1.50}","id":7,"ip":null,"occurred_at":"2026-01-02T03:04:05.000006Z"}'
     assert seal.canonical(row) == expected.encode()
 
 
@@ -228,3 +226,91 @@ def test_retention_report_is_a_dry_run(app_engine: Engine, admin_engine: Engine,
     with admin_engine.connect() as conn:
         count = conn.execute(text("SELECT count(*) FROM audit_log WHERE tenant_id = :t"), {"t": tenant})
         assert count.scalar_one() == 5
+
+
+FORGED = (
+    "INSERT INTO audit_log (id, tenant_id, occurred_at, actor_type, action, entity_type) OVERRIDING SYSTEM VALUE "
+    "VALUES (:i, :t, now() - interval '1 hour', 'system', 'forged.entry', 'probe')"
+)
+
+
+def test_entry_inserted_inside_a_sealed_range_is_detected(
+    app_engine: Engine, admin_engine: Engine, tenant: UUID
+) -> None:
+    """Ids are global, so another tenant's entry sits inside this tenant's range; forge one in its id."""
+    other = new_id()
+    with admin_engine.begin() as conn:
+        conn.execute(text("INSERT INTO tenants (id, name, slug) VALUES (:i, 'Other (SYNTHETIC)', :s)"),
+                     {"i": other, "s": f"seal-{other.hex[-12:]}"})  # fmt: skip
+    add_entries(admin_engine, tenant, 1)
+    add_entries(admin_engine, other, 1)
+    add_entries(admin_engine, tenant, 1)
+    do_seal(app_engine, tenant)
+    assert verify(app_engine, tenant).ok is True
+    with admin_engine.begin() as conn:
+        mid = conn.execute(text("SELECT id FROM audit_log WHERE tenant_id = :t"), {"t": other}).scalar_one()
+        conn.execute(text("ALTER TABLE audit_log DISABLE TRIGGER trg_audit_log_no_mutation"))
+        conn.execute(text("DELETE FROM audit_log WHERE id = :i"), {"i": mid})
+        conn.execute(text(FORGED), {"i": mid, "t": tenant})
+        conn.execute(text("ALTER TABLE audit_log ENABLE TRIGGER trg_audit_log_no_mutation"))
+    v = verify(app_engine, tenant)
+    assert v.ok is False and "altered" in (v.failure or "")
+
+
+def test_entry_inserted_into_a_gap_between_seals_is_detected(
+    app_engine: Engine, admin_engine: Engine, tenant: UUID, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Seal A covers ids below a reserved hole, seal B ids above it; a forged row in the hole is in no seal."""
+    monkeypatch.setattr(seal, "CHUNK", 2)
+    add_entries(admin_engine, tenant, 2)
+    do_seal(app_engine, tenant)
+    with admin_engine.begin() as conn:
+        hole = conn.execute(text("SELECT nextval(pg_get_serial_sequence('audit_log', 'id'))")).scalar_one()
+    add_entries(admin_engine, tenant, 2)
+    do_seal(app_engine, tenant)
+    assert verify(app_engine, tenant).ok is True
+    with admin_engine.begin() as conn:
+        conn.execute(text(FORGED), {"i": hole, "t": tenant})
+    v = verify(app_engine, tenant)
+    assert v.ok is False and "outside every sealed range" in (v.failure or "")
+
+
+def test_open_old_transaction_defers_sealing(app_engine: Engine, admin_engine: Engine, tenant: UUID) -> None:
+    """A transaction older than the settle cutoff may still commit rows with lower ids: do not seal yet."""
+    add_entries(admin_engine, tenant, 2)
+    later = datetime.now(UTC) + timedelta(minutes=10)
+    with app_engine.connect() as other:
+        other.execute(text("SELECT 1"))  # opens a transaction on the app role (visible in pg_stat_activity)
+        with transaction(app_engine, tenant) as db:
+            assert seal.seal_tenant(db, tenant, later) is False
+        assert verify(app_engine, tenant).seals == 0
+        other.rollback()
+    with transaction(app_engine, tenant) as db:
+        seal.seal_tenant(db, tenant, later)
+    assert verify(app_engine, tenant).seals == 1
+
+
+def test_anchor(
+    app_engine: Engine, admin_engine: Engine, tenant: UUID, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(seal, "CHUNK", 2)
+    add_entries(admin_engine, tenant, 4)
+    do_seal(app_engine, tenant)
+    anchor = verify(app_engine, tenant).head_hash
+    assert cli.main(["verify", "--tenant", str(tenant), "--anchor", str(anchor)], engine=app_engine) == 0
+    assert cli.main(["verify", "--tenant", str(tenant), "--anchor", "0" * 64], engine=app_engine) == 1
+    tamper(admin_engine, "audit_seals", "DELETE FROM audit_seals WHERE id = (SELECT max(id) FROM audit_seals WHERE tenant_id = :t)", t=tenant)  # fmt: skip
+    assert cli.main(["verify", "--tenant", str(tenant), "--anchor", str(anchor)], engine=app_engine) == 1
+
+
+def test_dead_lettered_run_schedules_a_new_one(
+    migrated_db: DbUrls, app_engine: Engine, admin_engine: Engine, tenant: UUID
+) -> None:
+    ctx = JobContext(make_settings(migrated_db.app), new_id(), tenant, {}, 5, None)
+    with transaction(app_engine, tenant) as db:
+        jobs._dead(db, ctx)
+    with admin_engine.connect() as conn:
+        n = conn.execute(
+            text("SELECT count(*) FROM jobs WHERE tenant_id = :t AND kind = 'audit_seal'"), {"t": tenant}
+        )
+        assert n.scalar_one() == 1

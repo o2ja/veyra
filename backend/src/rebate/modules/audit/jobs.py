@@ -5,12 +5,14 @@ a chain is never started twice. The job writes no audit entry itself (it would f
 from datetime import timedelta
 from uuid import UUID
 
+import structlog
 from sqlalchemy.orm import Session
 
 from rebate.core import clock
 from rebate.core.jobs import JobContext, PermanentError, enqueue, job
 from rebate.modules.audit import seal
 
+log = structlog.get_logger("rebate.audit_seal")
 KIND = "audit_seal"
 INTERVAL = timedelta(hours=1)
 
@@ -21,7 +23,22 @@ def schedule(db: Session, tenant_id: UUID) -> None:
     enqueue(db, KIND, tenant_id=tenant_id, payload={}, dedupe_key=f"{KIND}:{tenant_id}:{now.isoformat()}")
 
 
-@job(KIND, tenant_scoped=True)
+def _dead(db: Session, ctx: JobContext) -> None:
+    """A dead-lettered run must not stop sealing for good: log loudly and start a fresh chain link."""
+    log.error("audit_seal.dead", tenant_id=str(ctx.tenant_id), job_id=str(ctx.id))
+    if ctx.tenant_id is not None:
+        nxt = clock.now() + INTERVAL
+        enqueue(
+            db,
+            KIND,
+            tenant_id=ctx.tenant_id,
+            payload={},
+            dedupe_key=f"{KIND}:{ctx.tenant_id}:{nxt.isoformat()}",
+            run_at=nxt,
+        )
+
+
+@job(KIND, tenant_scoped=True, on_dead=_dead)
 def run(db: Session, ctx: JobContext) -> None:
     tenant = ctx.tenant_id
     if tenant is None:  # unreachable: the queue refuses a tenant-scoped job without a tenant

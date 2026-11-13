@@ -44,6 +44,9 @@ def upgrade() -> None:
     enable_tenant_rls("audit_seals")
     make_append_only("audit_seals")
     # Existing workspaces: start their self-rescheduling seal chain (new ones start in create_workspace).
+    # The owner role is subject to the FORCEd tenants policy (no tenant context in a migration), so FORCE is
+    # lifted for this statement only; DDL is transactional, so it cannot stay off.
+    op.execute("ALTER TABLE tenants NO FORCE ROW LEVEL SECURITY")
     op.execute(
         """
         INSERT INTO jobs (id, tenant_id, kind, payload, max_attempts, dedupe_key)
@@ -51,3 +54,4 @@ def upgrade() -> None:
         FROM tenants
         """
     )
+    op.execute("ALTER TABLE tenants FORCE ROW LEVEL SECURITY")

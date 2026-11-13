@@ -24,3 +24,13 @@ down_revision if another branch lands a migration first).
 3. Deletion-certificate record: no table, fields, or retention for it (it must outlive the tenant, so it cannot be a tenant-RLS row).
 4. Purge needs a DB role with DELETE (app role has none; tables are append-only/immutable) and object-store purge rules incl. backups.
 5. Audit-log purge vs seals: how a purged range is represented so verification stays meaningful (proposal: certificate records the last purged seal hash as the new chain anchor).
+
+## Proposed ADR-026 amendment (owner to accept; the ADR's decision text is not edited)
+ADR-026 says "per-tenant monotonic `seq`" and `entry_hash = H(prev_hash || canonical_entry)`. As built:
+- No per-tenant `seq`: `audit_log.id` is a global identity column; a tenant's chain orders by `id` (gaps are normal). Ranges are `[from_audit_id, to_audit_id]`.
+- One running hash per tenant; `audit_seals` stores one hash per seal (the last `h`), not one `entry_hash` per entry. A break is located to a seal range.
+- No key (public algorithm): anyone who can bypass the trigger can rewrite and re-seal; integrity is proven only back to the last off-box anchor (`verify --anchor`).
+- Sealing waits 5 minutes and is skipped while another transaction older than that is open; verification checks range coverage.
+
+## Review round 1 fixes
+B1 migration lifts and restores FORCE RLS on tenants around the backfill (test: previous revision -> head gives exactly one queued job). S2 settle check + coverage check. S3 `--anchor`. S4 plain no-key warning in docs and runbook. M6 jsonb columns hashed as `::text`. M7 `on_dead` logs and schedules a new run. M8 tests added.

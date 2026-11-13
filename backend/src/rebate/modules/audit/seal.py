@@ -2,16 +2,18 @@
 
 Canonical entry (the exact bytes that are hashed): UTF-8 JSON, keys sorted, separators ``,`` and ``:``, no
 NaN, of the object ``{id, tenant_id, occurred_at, actor_type, actor_user_id, action, entity_type, entity_id,
-before, after, request_id, ip, user_agent, metadata}``. Ids and ``ip`` are their text form, ``occurred_at`` is
-UTC ``YYYY-MM-DDTHH:MM:SS.ffffffZ``, absent values are JSON ``null``.
+before, after, request_id, ip, user_agent, metadata}``. Ids, ``ip`` and the three jsonb columns are PostgreSQL's
+text output (``before::text`` etc., embedded as JSON strings: no float parsing, jsonb text is deterministic),
+``occurred_at`` is UTC ``YYYY-MM-DDTHH:MM:SS.ffffffZ``, absent values are JSON ``null``.
 
 Chain: ``h0 = prev seal's seal_hash`` (empty string for a tenant's first seal) and, for each entry in ``id``
 order, ``h = SHA-256(h || canonical_entry)`` as lowercase hex. The seal covers this tenant's entries
 ``from_audit_id`` .. ``to_audit_id`` (by id) and stores ``seal_hash`` = the last ``h``. One running chain
 therefore links every entry of the tenant, across seals.
 
-Only entries older than ``SETTLE`` are sealed, so a transaction that allocated a lower id but commits later
-cannot land inside a sealed range (API statements time out after 30 s; ``SETTLE`` is 5 min).
+Only entries older than ``SETTLE`` (5 min) are sealed, and a run is skipped while any other transaction of this
+database started before that cutoff (``pg_stat_activity``): a lower id that commits late can then not land inside
+a sealed range. Verification also checks coverage: every entry up to the last seal lies inside some seal's range.
 """
 
 import hashlib
@@ -28,8 +30,8 @@ SETTLE = timedelta(minutes=5)
 CHUNK = 1000
 _COLUMNS = (
     "id, tenant_id::text AS tenant_id, occurred_at, actor_type, actor_user_id::text AS actor_user_id, "
-    "action, entity_type, entity_id::text AS entity_id, before, after, request_id, ip::text AS ip, "
-    "user_agent, metadata"
+    "action, entity_type, entity_id::text AS entity_id, before::text AS before, after::text AS after, request_id, "
+    "ip::text AS ip, user_agent, metadata::text AS metadata"
 )
 
 
@@ -70,6 +72,14 @@ def seal_tenant(db: Session, tenant_id: UUID, now: datetime, max_chunks: int = 5
         text("SELECT pg_advisory_xact_lock(hashtextextended(:k, 0))"), {"k": f"audit_seal:{tenant_id}"}
     )
     cutoff = now - SETTLE
+    if db.execute(
+        text(
+            "SELECT EXISTS (SELECT 1 FROM pg_stat_activity WHERE datname = current_database() "
+            "AND pid <> pg_backend_pid() AND xact_start < :c)"
+        ),
+        {"c": cutoff},
+    ).scalar_one():
+        return False  # an old transaction may still commit audit rows below the cutoff: try next run
     for _ in range(max_chunks):
         last = _last_seal(db, tenant_id)
         rows = _entries(db, tenant_id, 0 if last is None else last[0] + 1, None, CHUNK)
@@ -105,12 +115,14 @@ class Verification:
     unsealed_entries: int
     failure: str | None = None
     failed_seal_id: int | None = None
+    anchored: bool | None = None  # None: no anchor given
 
 
-def verify_tenant(db: Session, tenant_id: UUID) -> Verification:
+def verify_tenant(db: Session, tenant_id: UUID, anchor: str | None = None) -> Verification:
     """Recompute the tenant's chain; stop at the first broken seal. ``db`` has ``app.tenant_id`` set.
-    A deleted *last* seal is not detectable from the database alone: compare ``head_hash`` with a copy kept
-    elsewhere (runbook)."""
+    There is no key: the algorithm is public, so whoever can bypass the append-only trigger can rewrite entries
+    and re-seal. Integrity is proven only back to the last ``anchor`` (a ``seal_hash`` kept off-box): with an
+    anchor, the chain must contain a verified seal with that hash (this also catches deleted newest seals)."""
     seals = db.execute(
         text(
             "SELECT id, from_audit_id, to_audit_id, prev_hash, seal_hash FROM audit_seals "
@@ -120,6 +132,8 @@ def verify_tenant(db: Session, tenant_id: UUID) -> Verification:
     ).all()
     prev_hash: str | None = None
     prev_to = -1
+    covered = 0
+    hashes: set[str] = set()
     for n, s in enumerate(seals):
         why = None
         rows: list[Any] = []
@@ -137,11 +151,23 @@ def verify_tenant(db: Session, tenant_id: UUID) -> Verification:
             where = f"seal {s.id} (entries {s.from_audit_id}..{s.to_audit_id}): {why}"
             return Verification(False, n, prev_hash, 0, where, s.id)
         prev_hash, prev_to = s.seal_hash, s.to_audit_id
+        covered += len(rows)
+        hashes.add(s.seal_hash)
+    in_scope = db.execute(
+        text("SELECT count(*) FROM audit_log WHERE tenant_id = :t AND id <= :p"),
+        {"t": tenant_id, "p": prev_to},
+    ).scalar_one()
+    if in_scope != covered:
+        msg = f"{in_scope - covered} audit entr(ies) lie outside every sealed range (inserted into a gap)"
+        return Verification(False, len(seals), prev_hash, 0, msg)
     unsealed = db.execute(
         text("SELECT count(*) FROM audit_log WHERE tenant_id = :t AND id > :p"),
         {"t": tenant_id, "p": prev_to},
     ).scalar_one()
-    return Verification(True, len(seals), prev_hash, unsealed)
+    if anchor is not None and anchor not in hashes:
+        msg = "anchor seal_hash not in the chain (newest seals deleted, or history rewritten)"
+        return Verification(False, len(seals), prev_hash, unsealed, msg, None, False)
+    return Verification(True, len(seals), prev_hash, unsealed, anchored=None if anchor is None else True)
 
 
 # Tables whose age is unambiguous (own creation timestamp). Which date makes a *financial* record "past
