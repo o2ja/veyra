@@ -406,6 +406,7 @@ The assessment lists the checks run with their inputs. An LLM **may** draft a pr
 |---|---|
 | Claim deadline | `claim_window_basis` date + `claim_window_days` (calendar days). SPA lines: `invoice_date` / `ship_date` = that date of the line; `month_end` = the last calendar day of the month containing the line's claim date (the date-validity date of §4.3: invoice date, or ship date with invoice-date fallback). The trace records the basis and the month end. `period_end` applies to **rebates only**: deadline = measurement period end + `claim_window_days` (stored on the accrual entry); a manufacturer whose basis is `period_end` cannot run SPA lines (the run is refused with `engine_rejected`). `agreement_end` is not a basis (rejected). One `claim_window_basis` / `claim_window_days` per manufacturer serves SPA lines; rebates always use period end + the same `claim_window_days` (owner decision D3, 2026-11-12; a separate rebate window setting is a Release 2 candidate) |
 | Dispute/re-claim deadline | `remittance document date` (or `submission_date` per setting) + `dispute_window_days` |
+| Unpaid case | claim submission date + `dispute_window_days`, whatever `dispute_window_basis` says (an unpaid line has no remittance; owner decision 2026-11-13, D-N2); `deadline_basis = submission_date` |
 
 - Pure calendar-day addition; **no weekend or holiday rolling** (conservative: the earlier date is shown).
 - "Today" for countdowns is the date in the tenant's business time zone.

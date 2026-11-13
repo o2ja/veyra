@@ -199,9 +199,12 @@ def _case_deadline(
     if s is None or s.dispute_window_days is None:
         return None, None
     base: date | None
-    if s.dispute_window_basis == "remittance_date":
-        # a finding without a remittance line (``unpaid``) has no remittance to count from: deadline unknown
-        base = rem.document_date if f.remittance_line_id is not None else None
+    basis = s.dispute_window_basis
+    if f.case_type == "unpaid":
+        # an unpaid line has no remittance: its deadline counts from the claim submission (owner decision D-N2)
+        basis = "submission_date"
+    if basis == "remittance_date":
+        base = rem.document_date
     else:
         base = db.scalar(
             text(
@@ -211,7 +214,7 @@ def _case_deadline(
             {"t": tenant_id, "c": f.claim_line_id},
         )
     due = deadlines.dispute_deadline(base, s.dispute_window_days)
-    return (due, s.dispute_window_basis) if due is not None else (None, None)
+    return (due, basis) if due is not None else (None, None)
 
 
 def open_cases(db: Session, who: Who, rem: FinalisedRemittance) -> list[VarianceCase]:
