@@ -646,3 +646,54 @@ def test_preview_calculation_runs_the_engine_on_a_draft_and_persists_nothing(
                 text(f"SELECT count(*) FROM {table} WHERE tenant_id = :t"), {"t": ws.tenant_id}
             ).scalar_one()
             assert n == 0, table
+
+
+def test_spa_exception_signal_reaches_the_rebate_through_the_loader(env: Env) -> None:
+    """BUSINESS_LOGIC §5.4 (owner decision D2): SPA lines without a reference whose SPA result is
+    outside_claim_window or cap_exhausted are SPA lines. VOLT: SPA-884 with the reference not required, 60-day claim
+    window on invoice_date, run date 2026-07-10; sales-basis rebate, exclude, tier 1 at 1.5%. Lines (no SPA reference):
+      A BRK-3P-100A 10 x 88.00 = 880.00, invoice 2026-03-10 -> deadline 2026-05-09 < run date: outside_claim_window
+      B BRK-3P-100A 10 x 88.00 = 880.00, invoice 2026-06-20 -> eligible (220.00)
+      C1 PNL-200A 100 x 389.00 = 38,900.00, invoice 2026-06-15 -> eligible (cap 100 used up)
+      C2 PNL-200A 5 x 389.00 = 1,945.00, invoice 2026-06-16 -> cap_exhausted
+      D BRK-3P-100A 10 x 95.00 = 950.00, invoice 2026-06-20 -> price_mismatch (|95 - 88| > 0.005): NOT an SPA line
+    Excluded: A, B, C1, C2. Left: D = 950.00 -> tier 1 -> 950.00 x 0.015 = 14.25.
+    Without the exception signal A and C2 would count: 950 + 880 + 1,945 = 3,775.00 x 0.015 = 56.625 -> 56.63."""
+    ws = open_workspace(env.app, env.stack)
+    all_settings(ws)
+
+    def spa_edit(body: dict[str, Any]) -> None:
+        body["rules"]["spa_reference"]["required"] = False
+
+    def reb_edit(body: dict[str, Any]) -> None:
+        body["rules"].update(volume_basis="sales", spa_lines="exclude")
+
+    activate_all(
+        ws, ("SPA-VOLT-2026-884", "REB-VOLT-2026"), {"SPA-VOLT-2026-884": spa_edit, "REB-VOLT-2026": reb_edit}
+    )
+    header = data(SCENARIOS).decode().splitlines()[0]
+
+    def row(inv: str, day: str, sku: str, qty: int, price: str, ext: str) -> str:
+        return f"{inv},1,{day},{day},ALDER,Alder Electric LLC (SYNTHETIC),BR01,{sku},x,{qty},EA,{price},100.00,{ext},,,INV,,"
+
+    rows = [
+        row("INV-E1-A", "2026-03-10", "BRK-3P-100A", 10, "88.00", "880.00"),
+        row("INV-E1-B", "2026-06-20", "BRK-3P-100A", 10, "88.00", "880.00"),
+        row("INV-E1-C1", "2026-06-15", "PNL-200A", 100, "389.00", "38900.00"),
+        row("INV-E1-C2", "2026-06-16", "PNL-200A", 5, "389.00", "1945.00"),
+        row("INV-E1-D", "2026-06-20", "BRK-3P-100A", 10, "95.00", "950.00"),
+    ]
+    run_import(ws, clean_file(ws, "e1.csv", "\n".join([header, *rows, ""]).encode()), "sales")
+    r = run(ws, manufacturer_ids=[ws.manufacturers["VOLT"]], **WINDOW)
+    assert r["status"] == "completed", r
+    got = {k.split("/")[0]: (v["status"], v["exception_code"]) for k, v in results(ws, r["id"]).items()}
+    assert got == {
+        "INV-E1-A": ("exception", "outside_claim_window"),
+        "INV-E1-B": ("eligible", None),
+        "INV-E1-C1": ("eligible", None),
+        "INV-E1-C2": ("exception", "cap_exhausted"),
+        "INV-E1-D": ("exception", "price_mismatch"),
+    }
+    (e,) = ws.api.get("/rebate-accruals", params={"run_id": r["id"]}).json()["data"]
+    assert Decimal(e["cumulative_qualifying"]) == Decimal("950.00")
+    assert e["tier_number"] == 1 and Decimal(e["cumulative_earned"]) == Decimal("14.25")

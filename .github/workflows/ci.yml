@@ -86,6 +86,12 @@ jobs:
         run: |
           uv export --frozen --no-hashes --no-emit-project -o "$RUNNER_TEMP/req.txt" -q
           uv run pip-audit --strict --no-deps --disable-pip -r "$RUNNER_TEMP/req.txt"
+      - name: licence matcher self-check
+        run: python3 ../infra/scripts/ops/test_licence_check.py
+      - name: licence check (runtime dependencies; fails on GPL/AGPL/SSPL/unknown, lists weak copyleft)
+        run: |
+          uv export --frozen --no-dev --no-hashes --no-emit-project -o "$RUNNER_TEMP/req-runtime.txt" -q
+          uv run python ../infra/scripts/ops/licence_check.py python "$RUNNER_TEMP/req-runtime.txt"
       - name: OCR tools for the extraction tests (the worker image has them; S6.1)
         run: sudo apt-get update -qq && sudo apt-get install -y -qq --no-install-recommends ocrmypdf tesseract-ocr-eng
       - run: uv run pytest --junitxml=junit-backend.xml
@@ -117,6 +123,9 @@ jobs:
         run: python3 ../infra/scripts/check-no-skips.py junit-frontend.xml
       - run: npm run build
       - run: npm audit --audit-level=moderate
+      - run: npm audit --omit=dev --audit-level=high
+      - name: licence check (runtime dependencies)
+        run: python3 ../infra/scripts/ops/licence_check.py npm package-lock.json
 
   api-contract:
     runs-on: ubuntu-24.04
@@ -160,9 +169,13 @@ jobs:
           test "$(docker run --rm --entrypoint id rebate-api:ci -u)" = "10001"
           docker run --rm --entrypoint python rebate-api:ci -c "import rebate.api.app, uvicorn.workers"
       - run: docker build --target static -t rebate-frontend:ci frontend
+      - name: production compose file is valid (placeholders only)
+        run: docker compose --env-file .env.prod.example -f infra/docker/compose.prod.yml --profile ops config -q
+      - name: trusted proxy IP matches caddy's address on the api network
+        run: python3 infra/scripts/check-proxy-config.py .env.prod.example infra/docker/compose.prod.yml
       - name: Caddyfile is valid
         run: >
-          docker run --rm -e APP_DOMAIN=localhost -v "$PWD/infra/caddy:/etc/caddy:ro"
+          docker run --rm -e APP_DOMAIN=localhost -e S3_DOMAIN=files.localhost -e S3_BUCKET=rebate-files -v "$PWD/infra/caddy:/etc/caddy:ro"
           caddy:2.11.9-alpine@sha256:0bbb055bda6793c999bde78b1b5ce3e89f829fb031af2cf50056ea1246559fee
           caddy validate --config /etc/caddy/Caddyfile
 
@@ -245,4 +258,7 @@ jobs:
         run: python3 infra/scripts/check-no-skips.py frontend/junit-e2e.xml
       - name: logs on failure
         if: failure()
-        run: tail -n 200 api.log worker.log vite.log
+        run: |
+          tail -n 200 api.log worker.log vite.log
+          # page snapshot of each failed test (no artifacts are uploaded)
+          find frontend/test-results -name error-context.md -exec sh -c 'echo "== $1"; head -c 20000 "$1"' _ {} \;

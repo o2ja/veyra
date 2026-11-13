@@ -239,7 +239,7 @@ Rounding is applied to the **cumulative** figure only. **Entry delta = `earned_c
 
 ### 5.4 Identifying SPA lines (for `spa_lines`)
 
-A sales line is an SPA line if it has a non-null `spa_reference` **or** its calculation result in the same run has `status = eligible` under an SPA agreement. SPA calculation therefore runs before rebate calculation within a run. Either signal suffices (owner decision 2026-11-10): a line with no `spa_reference` that is `eligible` under an SPA agreement is an SPA line, and so is a line with a reference whose SPA result is not eligible. The trace records both signals.
+A sales line is an SPA line if **any** of three signals applies: (1) it has a non-null `spa_reference`; (2) its calculation result in the same run has `status = eligible` under an SPA agreement; (3) its SPA result in the same run is an exception with code `outside_claim_window` or `cap_exhausted` (the line is an SPA sale whose claim is late or capped, so it must not be counted as ordinary volume). Any other exception (for example `price_mismatch`, `missing_cost`, `ineligible_product`) is **not** a signal. SPA calculation therefore runs before rebate calculation within a run. Signals (1) and (2) are owner decision 2026-11-10; signal (3) is owner decision D2, 2026-11-12. The trace records which signal(s) applied per SPA line (`spa_reference`, `spa_eligible`, `spa_exception_signal`).
 
 ### 5.5 Rebate claims
 
@@ -363,6 +363,7 @@ After a remittance document is finalised (no `suggested` matches left unresolved
 | `|diff| ≤ tol` | no case |
 | `paid = 0` and the remittance line carries a rejection code | `rejected` |
 | `0 < paid < claimed − tol` | `short_paid` |
+| `paid = 0` and no rejection code on the remittance line (owner decision 2026-11-12) | `short_paid` (full `diff`, reason `short_paid_unexplained`) |
 | `paid > claimed + tol` | `overpaid` |
 | Remittance line with no accepted match | `unmatched_payment` |
 | Submitted claim line, no remittance after `submitted_at + payment_lag_days_expected` (if configured) | `unpaid` |
@@ -474,6 +475,7 @@ Rules: all numbers are strings; step order is fixed; the trace is canonicalised 
 | GL-R2 | Claw-back | −10,400.00 |
 | GL-R3 | Qualify-only / exclude / boundary | 25,000.00; 25,000.00; 14,999.99 |
 | GL-R4 | Incremental | 27,500.00 |
+| GL-R5 | SPA-line signals incl. `outside_claim_window` / `cap_exhausted` (D2); `price_mismatch` is not an SPA line | include 29,250.00; exclude 25,500.00; qualify_only 25,500.00 |
 | GL-D1/D2 | Deadlines | 2026-04-30; 2026-07-14 |
 | GL-D3 | Claim deadline, `month_end` basis (SPA) | 2026-05-30 eligible; 2026-05-31 `outside_claim_window` |
 | GL-V1 | Short-pay classification | `short_paid`, 150.00 |

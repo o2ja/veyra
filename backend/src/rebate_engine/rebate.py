@@ -52,9 +52,10 @@ def is_spa_by_ref(line: VolumeLine) -> bool:
     return bool(line.spa_reference and line.spa_reference.strip())
 
 
-def _spa_signals(line: VolumeLine) -> tuple[bool, bool]:
-    """§5.4 signals (by spa_reference, eligible under an SPA); either one makes it an SPA line."""
-    return is_spa_by_ref(line), line.spa_eligible
+def _spa_signals(line: VolumeLine) -> tuple[bool, bool, bool]:
+    """§5.4 signals (spa_reference, eligible under an SPA, SPA exception outside_claim_window/cap_exhausted);
+    any one makes it an SPA line (owner decision D2, 2026-11-12)."""
+    return is_spa_by_ref(line), line.spa_eligible, line.spa_exception_signal
 
 
 def calculate_accrual(
@@ -100,10 +101,19 @@ def calculate_accrual(
         spa_signals: list[Value] = []
         for ln in in_scope:
             # spa_lines policy only applies to the sales basis (§3.2)
-            by_ref, eligible = (False, False) if rules.volume_basis == "purchases" else _spa_signals(ln)
-            is_spa = by_ref or eligible
+            by_ref, eligible, exc = (
+                (False, False, False) if rules.volume_basis == "purchases" else _spa_signals(ln)
+            )
+            is_spa = by_ref or eligible or exc
             if is_spa:
-                spa_signals.append({"line_id": ln.line_id, "spa_reference": by_ref, "spa_eligible": eligible})
+                spa_signals.append(
+                    {
+                        "line_id": ln.line_id,
+                        "spa_reference": by_ref,
+                        "spa_eligible": eligible,
+                        "spa_exception_signal": exc,
+                    }
+                )
             if not (is_spa and rules.spa_lines == "exclude"):
                 v_q += ln.amount
             if not (is_spa and rules.spa_lines in ("qualify_only", "exclude")):

@@ -1,7 +1,7 @@
 import AxeBuilder from "@axe-core/playwright";
-import { expect, test, type Page } from "@playwright/test";
+import { expect, type Page } from "@playwright/test";
 
-import { PASSWORD, enrolMfa, signIn, tokenFromMail, uniqueEmail } from "./support";
+import { PASSWORD, enrolMfa, signIn, test, tokenFromMail, uniqueEmail } from "./support";
 
 // WCAG 2.1 A/AA automated checks (NFR-09) on every page S1–S3 added. Automated checks find only part of
 // the issues; manual keyboard use was spot-checked during the S1 browser walkthrough.

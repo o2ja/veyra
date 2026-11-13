@@ -142,9 +142,19 @@ def test_spa_line_signals() -> None:
     r = calculate_accrual(sales, lines, date(2026, 7, 1), D(0))
     assert (r.qualifying_volume, r.payout_volume) == (D(170), D(100))
     assert step(r, "volume")["spa_line_signals"] == [
-        {"line_id": "both", "spa_reference": True, "spa_eligible": True},
-        {"line_id": "elig_no_ref", "spa_reference": False, "spa_eligible": True},
-        {"line_id": "ref_not_elig", "spa_reference": True, "spa_eligible": False},
+        {"line_id": "both", "spa_reference": True, "spa_eligible": True, "spa_exception_signal": False},
+        {
+            "line_id": "elig_no_ref",
+            "spa_reference": False,
+            "spa_eligible": True,
+            "spa_exception_signal": False,
+        },
+        {
+            "line_id": "ref_not_elig",
+            "spa_reference": True,
+            "spa_eligible": False,
+            "spa_exception_signal": False,
+        },
     ]
     excl = calculate_accrual(rebate(volume_basis="sales", spa_lines="exclude"), lines, date(2026, 7, 1), D(0))
     assert (excl.qualifying_volume, excl.payout_volume) == (D(100), D(100))
