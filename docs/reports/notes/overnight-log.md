@@ -9,6 +9,7 @@
    - `s10-reporting` c9f971f: **held by D-N7.** S10 core backend built (summary table + refresh job, dashboard, drill-down, trace routes, audit pack CSV/XLSX; tier tracker = existing S5 endpoint). Full 2280 pass, lint gates clean. Review running. Stacked on S9.
    - PR #20 `s11-docs-drill` (restore drill + guides): reviewed, ready; waits for CI.
    - PR #21 `s11-audit-seal` (S11.1) 24eacc3: reviewed twice, all minors fixed; waits for CI.
+   - PR #22 `s11-security` (S11.3 fixes): reviewed, minors fixed, full 1732 pass; waits for CI.
    - `ui/qa-1`: Playwright 8/18 fail → back to Antigravity. `ui/s7`: waits for #15.
 3. **Needs your decision:**
    - **D-N0 GitHub Actions billing (blocks ALL merges):** since ~02:19Z every CI job is refused: "The job was not started because recent account payments have failed or your spending limit needs to be increased" (Billing & plans). Spending = yours. Until it runs, no PR can show 6/6 green, so I merged nothing after #18. Main's own CI runs on my doc commits also show failure for this reason only (no job started).
@@ -56,6 +57,7 @@
 - S10 review: NOT MERGEABLE: **HARD STOP D-N7** (claimed/collected exclude adjustments vs §10.3 + ground truth). Figures re-derived: 10,722.50 / 7,520 / 2,890 / 660 match the code but not the net-of-adjustment rule. S10 stopped.
 - S11.3 ASVS L2 review of main (`docs/reports/S11_3_ASVS_L2_REVIEW.md` on s11-security): 3 serious (DB params in error logs; no parse memory/CPU limits; headers untested), 7 minor, 2 nit; 697 security/api/route tests pass. Builder N1 fixing on s11-security.
 - N1 S11.3 fixes done (s11-security 8e74238): hide_parameters + type-only 500 logs, worker mem/cpu/pids limits in compose.prod, XLSX uncompressed cap 300→100 MB, header + Caddyfile tests, doc-transcribed permission matrix (matches; SECURITY.md §3 lacks manufacturer_settings.write), XML DTD + PDF/ZIP polyglot refusal, per-IP login limit 20/min. Full 1731 pass / 1 fail (encrypted-PDF, reverted by design; affected tests re-run pass); negctl OK. Review running.
+- S11.3 review of fixes: MERGEABLE WITH MINORS → fixed (a7f7f6a). Full suite 1732 pass. PR #22 opened; waits for CI (D-N0).
 
 ---
 
