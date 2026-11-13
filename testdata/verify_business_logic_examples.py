@@ -49,6 +49,10 @@ results.append(check("S7 per_doc", per_doc, D("1.01")))
 # S8 / S9
 results.append(check("S8 adjustment", r2(-(u * 15)), D("-330.00")))
 results.append(check("S9 net claim", r2(D(85) * u), D("1870.00")))
+# S9a (owner decision 2026-11-13): returned before the claim, re-run after it, then a second return
+u9 = D("12.50")
+results.append(check("S9a claim net of return", r2((D(20) - 4) * u9), D("200.00")))
+results.append(check("S9a later return", r2(-(u9 * 3)), D("-37.50")))
 # S10
 valid_to = date(2026, 6, 30)
 results.append(check("S10 ship_date expired", date(2026, 7, 2) > valid_to, True))
