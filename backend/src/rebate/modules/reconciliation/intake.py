@@ -11,9 +11,16 @@ from decimal import Decimal
 from typing import Any
 
 from rebate.modules import ingestion
-from rebate.modules.ingestion import normalizers as n
-from rebate.modules.ingestion import readers
-from rebate.modules.ingestion.validators import FIELDS, Field, MappingInvalid, check_mapping, suggest_mapping
+from rebate.modules.ingestion import (
+    EXTRA_CELLS,
+    FIELDS,
+    Field,
+    MappingInvalid,
+    NumberFormat,
+    Source,
+    check_mapping,
+    suggest_mapping,
+)
 
 MAX_LINES = 50_000
 TOLERANCE = Decimal("0.01")  # AI_PROCESSING.md §8: sum of lines = stated total (+-0.01)
@@ -34,22 +41,22 @@ def mask_cards(value: str) -> str:
     return value
 
 
-def _parse(f: Field, text: str, fmt: n.NumberFormat, order: str) -> Any:
+def _parse(f: Field, text: str, fmt: NumberFormat, order: str) -> Any:
     match f.kind:
         case "int":
-            return n.parse_int(text, minimum=0)
+            return ingestion.parse_int(text, minimum=0)
         case "qty":
-            return n.parse_decimal(text, fmt, scale=6, int_digits=12)
+            return ingestion.parse_decimal(text, fmt, scale=6, int_digits=12)
         case "amount":
-            return n.parse_decimal(text, fmt, scale=4, int_digits=14)
+            return ingestion.parse_decimal(text, fmt, scale=4, int_digits=14)
         case "date":
-            return n.parse_date(text, order)
+            return ingestion.parse_date(text, order)
         case _:
-            return n.text_value(text, max_length=f.max_length)
+            return ingestion.text_value(text, max_length=f.max_length)
 
 
 def staged_row(
-    mapping: Mapping[str, str | None], raw: Mapping[str, str], fmt: n.NumberFormat, order: str
+    mapping: Mapping[str, str | None], raw: Mapping[str, str], fmt: NumberFormat, order: str
 ) -> dict[str, Any]:
     """One file row -> staging columns plus header facts (``document_number``/``document_date``) and issues."""
     out: dict[str, Any] = {"issues": []}
@@ -63,10 +70,10 @@ def staged_row(
             continue
         try:
             out[f.name] = _parse(f, text, fmt, order)
-        except n.NormError as exc:
+        except ingestion.NormError as exc:
             out[f.name] = None
             out["issues"].append(issue(f.name, exc.code, exc.message))
-    out["raw"] = {k: mask_cards(v) for k, v in raw.items() if k != readers.EXTRA_CELLS}
+    out["raw"] = {k: mask_cards(v) for k, v in raw.items() if k != EXTRA_CELLS}
     return out
 
 
@@ -74,17 +81,17 @@ def read_table(
     data: bytes, file_type: str, template: dict[str, Any] | None
 ) -> tuple[list[dict[str, Any]], dict[str, str | None], dict[str, Any]]:
     """Read a CSV/XLSX remittance. Returns ``(rows, mapping, header)``; ``header`` holds the document number/date
-    when every row that states one agrees. Raises ``readers.ReadError``, ``MappingInvalid`` or ``TooManyLines``."""
+    when every row that states one agrees. Raises ``ingestion.ReadError``, ``MappingInvalid`` or ``TooManyLines``."""
     options = dict((template or {}).get("options") or {})
-    source: AbstractContextManager[readers.Source] = (
-        readers.xlsx_source(data, options.get("sheet"))
+    source: AbstractContextManager[Source] = (
+        ingestion.xlsx_source(data, options.get("sheet"))
         if file_type == "xlsx"
-        else nullcontext(readers.csv_source(data, options.get("delimiter")))
+        else nullcontext(ingestion.csv_source(data, options.get("delimiter")))
     )
-    fmt = n.NumberFormat(options.get("decimal_separator", "."))
+    fmt = NumberFormat(options.get("decimal_separator", "."))
     order = options.get("date_order", "MDY")
     with source as src:
-        recs = readers.records(src, options.get("header_row"))
+        recs = ingestion.records(src, options.get("header_row"))
         mapping = (template or {}).get("mapping") or suggest_mapping("remittance", recs.headers)
         check_mapping("remittance", mapping, options, recs.headers)
         rows: list[dict[str, Any]] = []
@@ -157,7 +164,6 @@ __all__ = [
     "document_issues",
     "issue",
     "mask_cards",
-    "n",
     "number_lines",
     "read_table",
     "row_issues",

@@ -14,9 +14,8 @@ from rebate.core.access import require, tenant_of
 from rebate.core.errors import PreconditionFailed
 from rebate.core.query import only_query_params
 from rebate.core.request import Principal, ctx
-from rebate.modules import ingestion
-from rebate.modules.claims import recon_reads
-from rebate.modules.claims.schemas import RunJobRef
+from rebate.modules import claims, ingestion
+from rebate.modules.claims import RunJobRef
 from rebate.modules.masterdata import Page, Who, page
 from rebate.modules.reconciliation import ingest, matching
 from rebate.modules.reconciliation import schemas as s
@@ -51,7 +50,7 @@ def _match_outs(
     request: Request, tenant_id: UUID, groups: list[list[ReconciliationMatch]]
 ) -> list[s.MatchOut]:
     ids = [r.claim_line_id for g in groups for r in g if r.claim_line_id is not None]
-    refs = recon_reads.claim_references(ctx(request).db, tenant_id, ids) if ids else {}
+    refs = claims.claim_references(ctx(request).db, tenant_id, ids) if ids else {}
     return [
         s.MatchOut(
             id=g[0].match_id,

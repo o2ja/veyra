@@ -21,11 +21,9 @@ from rebate.core import clock
 from rebate.core.errors import Conflict, InvalidState, NotFound, PreconditionFailed, ValidationFailed
 from rebate.core.ids import new_id
 from rebate.core.jobs import JobContext, PermanentError, enqueue, job
-from rebate.modules import audit, tenancy
+from rebate.modules import audit, claims, masterdata, tenancy
 from rebate.modules.audit import Action, Actor
-from rebate.modules.claims import recon_reads
 from rebate.modules.masterdata import Who, decode_cursor, encode_cursor, product_alias_rows
-from rebate.modules.masterdata import service as masterdata_service
 from rebate.modules.reconciliation import ingest
 from rebate.modules.reconciliation.models import ReconciliationMatch, RemittanceDocument, RemittanceLine
 from rebate_matching.config import DEFAULT_CONFIG
@@ -129,14 +127,14 @@ def _aliases(db: Session, tenant_id: UUID) -> dict[str, str]:
 def _claims(
     db: Session, doc: RemittanceDocument
 ) -> tuple[dict[str, ClaimLine], dict[str, date | None], dict[str, str]]:
-    adj = recon_reads.included_adjustments(db, doc.tenant_id, doc.manufacturer_id)
+    adj = claims.included_adjustments(db, doc.tenant_id, doc.manufacturer_id)
     by_line: dict[str, list[Adjustment]] = defaultdict(list)
     for a in adj:
         by_line[str(a.claim_line_id)].append(Adjustment(str(a.id), a.amount))
-    claims, submitted = {}, {}
-    for r in recon_reads.submitted_claim_lines(db, doc.tenant_id, doc.manufacturer_id):
+    by_id, submitted = {}, {}
+    for r in claims.submitted_claim_lines(db, doc.tenant_id, doc.manufacturer_id):
         cid = str(r.id)
-        claims[cid] = ClaimLine(
+        by_id[cid] = ClaimLine(
             id=cid,
             manufacturer=str(doc.manufacturer_id),
             claim_reference=r.claim_reference,
@@ -149,7 +147,7 @@ def _claims(
             adjustments=tuple(by_line.get(cid, ())),
         )
         submitted[cid] = r.submitted_at
-    return claims, submitted, {str(a.id): str(a.claim_line_id) for a in adj}
+    return by_id, submitted, {str(a.id): str(a.claim_line_id) for a in adj}
 
 
 def _state(db: Session, doc: RemittanceDocument) -> State:
@@ -596,7 +594,7 @@ def finalise(db: Session, who: Who, remittance_id: UUID) -> FinalisedRemittance:
     own = [m for m in matches if m.remittance_line_id in st.remits]
     touched = {cid for m in own for cid in m.claim_line_ids}
     try:
-        mset = masterdata_service.get_manufacturer_settings(db, t, doc.manufacturer_id)
+        mset = masterdata.get_manufacturer_settings(db, t, doc.manufacturer_id)
         tolerance, lag = mset.variance_tolerance, mset.payment_lag_days_expected
     except NotFound:  # no settings row: the documented defaults
         tolerance, lag = Decimal("0.01"), None

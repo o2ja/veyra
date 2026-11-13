@@ -20,14 +20,10 @@ from rebate.core import clock
 from rebate.core.errors import Conflict, InvalidState, NotFound, ValidationFailed
 from rebate.core.ids import new_id
 from rebate.core.jobs import JobContext, PermanentError, enqueue, job
-from rebate.modules import audit, files, ingestion, masterdata, tenancy
+from rebate.modules import audit, extraction, files, ingestion, masterdata, tenancy
 from rebate.modules.audit import Action, Actor
-from rebate.modules.extraction import service as extraction
-from rebate.modules.extraction.models import DocumentExtraction
-from rebate.modules.ingestion import service as ingestion_service
-from rebate.modules.ingestion.validators import MappingInvalid
+from rebate.modules.extraction import DocumentExtraction
 from rebate.modules.masterdata import Who, keyset
-from rebate.modules.masterdata import service as masterdata_service
 from rebate.modules.reconciliation import intake, pdf
 from rebate.modules.reconciliation.models import RemittanceDocument, RemittanceLine, RemittanceStagingLine
 
@@ -223,7 +219,7 @@ def create(db: Session, who: Who, body: Any) -> tuple[RemittanceDocument, UUID]:
         raise _invalid("manufacturer_id", "not_found", "Unknown manufacturer.")
     if body.mapping_template_id is not None:
         try:
-            template = ingestion_service.get_template(db, t, body.mapping_template_id)
+            template = ingestion.get_template(db, t, body.mapping_template_id)
         except NotFound:
             raise _invalid("mapping_template_id", "not_found", "Unknown mapping template.") from None
         if template.import_type != "remittance":
@@ -363,15 +359,15 @@ def ingest(db: Session, ctx: JobContext) -> None:
         else:
             template = None
             if doc.mapping_template_id is not None:
-                t = ingestion_service.get_template(db, doc.tenant_id, doc.mapping_template_id)
+                t = ingestion.get_template(db, doc.tenant_id, doc.mapping_template_id)
                 template = {"mapping": t.mapping, "options": t.options}
             rows, _mapping, header = intake.read_table(data, kind, template)
     except pdf.Refused as exc:
         _void(db, doc, exc.code, exc.message, system, meta)
         return
-    except (ingestion.ReadError, files.UndecodableText, MappingInvalid, intake.TooManyLines) as exc:
+    except (ingestion.ReadError, files.UndecodableText, ingestion.MappingInvalid, intake.TooManyLines) as exc:
         code = getattr(
-            exc, "code", "mapping_invalid" if isinstance(exc, MappingInvalid) else "too_many_lines"
+            exc, "code", "mapping_invalid" if isinstance(exc, ingestion.MappingInvalid) else "too_many_lines"
         )
         _void(db, doc, code, str(getattr(exc, "message", exc))[:200], system, meta)
         return
@@ -432,7 +428,7 @@ def remittance_ingest(db: Session, ctx: JobContext) -> None:
 def _reason_map(db: Session, tenant_id: UUID, manufacturer_id: UUID) -> dict[str, str]:
     return {
         m.external_code: m.reason_code
-        for m in masterdata_service.list_reason_code_mappings(db, tenant_id, manufacturer_id)
+        for m in masterdata.list_reason_code_mappings(db, tenant_id, manufacturer_id)
     }
 
 

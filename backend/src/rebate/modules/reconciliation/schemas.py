@@ -10,7 +10,7 @@ from pydantic import BaseModel, ConfigDict, Field, StringConstraints, field_vali
 
 from rebate.core.money import Money
 from rebate.core.validation import NO_CONTROL, STRICT, JsonUUID
-from rebate.modules.claims.schemas import JsonDate, RunJobRef
+from rebate.modules.claims import JsonDate, RunJobRef
 from rebate.modules.masterdata import Page
 
 DocType = Literal["credit_memo", "remittance_advice", "deduction_notice"]
