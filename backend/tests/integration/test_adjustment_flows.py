@@ -755,3 +755,69 @@ def test_the_database_refuses_including_an_adjustment_of_an_unfrozen_line(
     assert [outcome(admin_engine, sql, **args) for sql in steps] == ["ok", "ok"]
     include_sql = "UPDATE claim_adjustments SET status = 'included', included_in_batch_id = :b WHERE id = :a"
     assert "frozen and not released" in outcome(admin_engine, include_sql, **args)
+
+
+# ---- owner decision 2026-11-13: return before claim; an adjustment belongs to the batch that carries it -------
+
+
+CN_5003 = (
+    "CN-5003,1,2026-07-03,2026-07-03,BLUFF,Bluff City Mechanical (SYNTHETIC),BR01,BRK-3P-60A,"
+    "Breaker 3-pole 60A,3,EA,58.00,64.50,174.00,SPA-VOLT-2026-884,,CN,INV-10021,1\n"
+)
+
+
+def test_return_before_claim_then_a_second_return_after_the_claim(env: Env) -> None:
+    """D-N1. CN-5002 (4 units) is imported BEFORE INV-10021/1 is claimed. Hand: 20 - 4 = 16 units x 12.50 = 200.00.
+    The claim freezes at 200.00; the re-run after the claim still says 200.00 (not 250.00), CN-5002 stays netted
+    (0.00) and nothing is proposed (no agreement_change +50.00, no return_reversal -50.00). A second return CN-5003
+    of 3 units after the claim is reversed at the frozen unit amount: -(3 x 12.50) = -37.50, and only that."""
+    ws = workspace(env)
+    import_sales_part(ws, late=False)
+    import_sales_part(ws, late=True)
+    first = results(ws, run(ws, **WINDOW)["id"])
+    assert Decimal(first["INV-10021/1"]["claim_amount"]) == Decimal("200.00")
+    assert first["CN-5002/1"]["status"] == "netted"
+    batch = claim_and_submit(ws, first, ["INV-10021/1"])
+    assert Decimal(batch["total_amount"]) == Decimal("200.00")
+
+    second = run(ws, **WINDOW)
+    again = results(ws, second["id"])
+    assert again["INV-10021/1"]["status"] == "eligible"
+    assert Decimal(again["INV-10021/1"]["claim_amount"]) == Decimal("200.00")
+    assert again["CN-5002/1"]["status"] == "netted" and Decimal(again["CN-5002/1"]["claim_amount"]) == 0
+    assert propose(ws, second["id"])["proposed"] == []
+
+    import_text(ws, SALES_HEADER + CN_5003, "cn5003.csv")
+    third = run(ws, **WINDOW)
+    res = results(ws, third["id"])
+    assert res["CN-5002/1"]["status"] == "netted"
+    assert res["CN-5003/1"]["status"] == "adjustment"
+    assert Decimal(res["CN-5003/1"]["claim_amount"]) == Decimal("-37.50")
+    (adj,) = propose(ws, third["id"])["proposed"]
+    assert adj["adjustment_type"] == "return_reversal" and Decimal(adj["amount"]) == Decimal("-37.50")
+    assert adj["claim_line_id"] == claim_lines_of(ws, batch["id"])["INV-10021"]["id"]
+
+
+def test_an_adjustment_is_counted_in_the_batch_that_carries_it(env: Env) -> None:
+    """B1 holds INV-10021/1 frozen at 200.00 (hand: 16 x 12.50); CN-5003 (3 units) later gives the approved
+    adjustment -37.50 (3 x 12.50). B2 carries it with INV-10020/1 (312.50 = (30 - 5) x 12.50):
+    B2 = 312.50 - 37.50 = 275.00. B1 stays 200.00 and its line keeps its frozen amount."""
+    ws = workspace(env)
+    approver = member(env.stack, env.app, ws.api, "approver")
+    import_sales_part(ws, late=False)
+    import_sales_part(ws, late=True)
+    b1 = claim_and_submit(ws, results(ws, run(ws, **WINDOW)["id"]), ["INV-10021/1"])
+    import_text(ws, SALES_HEADER + CN_5003, "cn5003.csv")
+    (adj,) = propose(ws, run(ws, **WINDOW)["id"])["proposed"]
+    assert approver.post(f"/claim-adjustments/{adj['id']}/approve").status_code == 200
+    line = pool(ws.api)["INV-10020/1"]
+    assert Decimal(line["claim_amount"]) == Decimal("312.50")
+    r = new_batch(
+        ws.api, line["manufacturer_id"], result_ids=[line["id"]], include_adjustment_ids=[adj["id"]]
+    )
+    assert r.status_code == 201, r.text
+    b2 = r.json()
+    assert Decimal(b2["total_amount"]) == Decimal("275.00")
+    held = ws.api.get(f"/claim-batches/{b1['id']}").json()
+    assert Decimal(held["total_amount"]) == Decimal("200.00") == Decimal(b1["total_amount"])
+    assert Decimal(claim_lines_of(ws, b1["id"])["INV-10021"]["claim_amount"]) == Decimal("200.00")

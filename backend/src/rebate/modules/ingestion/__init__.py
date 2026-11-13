@@ -8,6 +8,7 @@ from rebate.modules.ingestion import jobs as _jobs  # noqa: F401  (registers job
 from rebate.modules.ingestion.calc_reads import (
     line_quantities,
     purchase_volume_rows,
+    returned_before,
     returned_quantities,
     sales_line_ids,
     sales_line_windows,
@@ -44,6 +45,7 @@ __all__ = [
     "purchase_volume_rows",
     "records",
     "replay",
+    "returned_before",
     "returned_quantities",
     "router",
     "sales_line_ids",

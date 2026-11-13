@@ -67,6 +67,12 @@ _ANCESTRY = (
     "UNION ALL SELECT anc.line_id, s.id FROM anc "
     "JOIN sales_document_lines s ON s.tenant_id = :t AND s.superseded_by_id = anc.source_id) "
 )
+# what the frozen claim was netted by: the "returns" step of the calculation result the claim was made from
+# (owner decision 2026-11-13, BUSINESS_LOGIC §7)
+_NETTED = (
+    "(SELECT CAST(s->>'returned_quantity' AS numeric) FROM jsonb_array_elements(r.trace->'steps') s "
+    "WHERE s->>'step' = 'returns' LIMIT 1)"
+)
 _ACTIVE = "c.released_at IS NULL AND c.frozen_at IS NOT NULL AND c.source_kind = 'sales_line'"
 # the cap counts every live claim line (draft, approved or submitted batch), BUSINESS_LOGIC §4.2
 _LIVE = "c.released_at IS NULL AND c.source_kind = 'sales_line'"
@@ -81,7 +87,9 @@ class SqlFrozenClaims:
                 text(
                     _ANCESTRY
                     + "SELECT anc.line_id, c.id AS claim_line_id, c.claim_amount, c.quantity, c.unit_amount, "  # nosec B608 (module constants, bound values)
-                    "c.agreement_version_id, r.agreement_id, r.claim_uom, r.manufacturer_id "
+                    "c.agreement_version_id, r.agreement_id, r.claim_uom, r.manufacturer_id, "
+                    + _NETTED
+                    + " AS netted "
                     "FROM anc JOIN claim_lines c ON c.tenant_id = :t AND c.sales_document_line_id = anc.source_id "
                     "JOIN calculation_results r ON r.tenant_id = c.tenant_id AND r.id = c.calculation_result_id "
                     "WHERE " + _ACTIVE
@@ -97,6 +105,8 @@ class SqlFrozenClaims:
             return {}
         rows = self._rows(db, tenant_id, line_ids)
         rules = agreements.version_rules(db, tenant_id, sorted({r.agreement_version_id for r in rows}))
+        if any(r.netted is None for r in rows):  # every claimed result carries its netting basis: fail loudly
+            raise ValueError("claimed calculation result without a 'returns' trace step")
         return {
             r.line_id: PriorClaim(
                 agreement_id=str(r.agreement_id),
@@ -106,6 +116,7 @@ class SqlFrozenClaims:
                 unit_amount=r.unit_amount,
                 claim_amount=r.claim_amount,
                 rounding=parse_spa_rules(rules[r.agreement_version_id]).rounding,
+                netted_returned_quantity=r.netted,
             )
             for r in rows
         }
@@ -145,7 +156,7 @@ class SqlFrozenClaims:
                 "WHERE l.tenant_id = c.tenant_id AND l.is_current AND l.quantity < 0 "
                 "AND l.original_line_id = c.sales_document_line_id "
                 "AND (CAST(:cutoff AS timestamptz) IS NULL OR l.invoice_date <= CAST(:cutoff AS date))), 0) "
-                "AS returned "
+                "AS returned, " + _NETTED + " AS netted "
                 "FROM claim_lines c JOIN calculation_results r ON r.tenant_id = c.tenant_id "
                 "AND r.id = c.calculation_result_id "
                 "JOIN sales_document_lines o ON o.tenant_id = c.tenant_id AND o.id = c.sales_document_line_id "
@@ -158,6 +169,8 @@ class SqlFrozenClaims:
         ).all()
         if not rows:
             return {}
+        if any(r.netted is None for r in rows):
+            raise ValueError("claimed calculation result without a 'returns' trace step")
         conversions = tuple(
             UomConversion(
                 product_id=None if c.product_id is None else str(c.product_id),
@@ -170,7 +183,8 @@ class SqlFrozenClaims:
         out: dict[tuple[str, str], Decimal] = {}
         for r in rows:
             factor = find_factor(conversions, str(r.product_id), r.uom, r.claim_uom)
-            returned = r.returned * factor if factor is not None else ZERO
+            # only returns the claim was not netted by reduce what it consumes
+            returned = max(r.returned - r.netted, ZERO) * factor if factor is not None else ZERO
             key = (str(r.agreement_id), str(r.product_id))
             out[key] = out.get(key, ZERO) + max(r.quantity - returned, ZERO)
         return out

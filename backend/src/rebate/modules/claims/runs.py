@@ -437,7 +437,11 @@ def _carry(
         if pc is None or ln.product_id is None:
             continue
         factor = find_factor(conversions, ln.product_id, ln.uom, pc.claim_uom)
-        returned = ln.returned_quantity * factor if factor is not None else Decimal(0)
+        returned = (
+            (ln.returned_quantity - pc.netted_returned_quantity) * factor
+            if factor is not None
+            else Decimal(0)
+        )
         key = (pc.agreement_id, ln.product_id)
         consumed[key] = consumed.get(key, Decimal(0)) + max(pc.quantity - returned, Decimal(0))
 

@@ -316,10 +316,16 @@ def _evaluate_original(
         t.step("price_check", mode=rules.price_check_mode, sell_price=item.sell_price, skipped=True)
 
     # Returns netting (§7): unclaimed originals are computed net; claimed originals stay on the frozen basis
+    # a claimed original is evaluated on the basis its frozen claim was made with (owner decision 2026-11-13)
     claimed = line.prior_claim is not None
-    net = line.quantity if claimed else line.quantity - line.returned_quantity
+    netted = line.prior_claim.netted_returned_quantity if line.prior_claim else line.returned_quantity
+    net = line.quantity - netted
     t.step(
-        "returns", quantity=line.quantity, returned_quantity=line.returned_quantity, claimed=claimed, net=net
+        "returns",
+        quantity=line.quantity,
+        returned_quantity=netted,
+        claimed=claimed,
+        net=net,
     )
     q = net * factor
     if q <= 0:
@@ -418,12 +424,24 @@ def _evaluate_return(ev: _Eval, run: SpaRunInput, settings: ManufacturerSettings
     if pc is None:
         ev.status = Status.NETTED
         return
+    # the part of this return the frozen claim already netted stays netted (owner decision 2026-11-13)
+    own = abs(line.quantity)
+    open_qty = min(own, max(orig.returned_before + own - pc.netted_returned_quantity, ZERO))
+    t.step(
+        "netting",
+        frozen_netted=pc.netted_returned_quantity,
+        returned_before=orig.returned_before,
+        open=open_qty,
+    )
+    if open_qty == 0:
+        ev.status = Status.NETTED
+        return
     factor = find_factor(run.conversions, line.product_id, line.uom, pc.claim_uom)
     t.step("uom", line_uom=line.uom, claim_uom=pc.claim_uom, factor=factor)
     if factor is None:
         ev.fail(Code.MISSING_UOM_CONVERSION)
         return
-    qty = abs(line.quantity) * factor
+    qty = open_qty * factor
     raw = -(pc.unit_amount * qty)
     ev.claim_uom, ev.unit, ev.eligible_qty = pc.claim_uom, pc.unit_amount, -qty
     ev.status, ev.amount = Status.ADJUSTMENT, round_line(raw, pc.rounding)
@@ -478,7 +496,11 @@ def calculate_spa(run: SpaRunInput) -> tuple[LineResult, ...]:
                     # a claimed line consumes what it claimed, less returns (§4.2 "returns restore consumption")
                     key = (pc.agreement_id, line.product_id)
                     factor = find_factor(run.conversions, line.product_id, line.uom, pc.claim_uom)
-                    returned = line.returned_quantity * factor if factor is not None else ZERO
+                    returned = (
+                        (line.returned_quantity - pc.netted_returned_quantity) * factor
+                        if factor is not None
+                        else ZERO
+                    )
                     consumed[key] = consumed.get(key, ZERO) + max(pc.quantity - returned, ZERO)
             evals.append(ev)
 

@@ -16,6 +16,7 @@ from tests.integration.calc_support import (
     all_settings,
     claim_and_submit,
     import_sales,
+    import_sales_part,
     open_workspace,
     results,
     run,
@@ -93,13 +94,20 @@ def test_nwnd_sales_rebate_qualify_only(ws: Workspace) -> None:
     assert Decimal(e["cumulative_earned"]) == Decimal(case["earned_cumulative"])
 
 
-def test_every_spa_scenario_matches_ground_truth(ws: Workspace) -> None:
+def test_every_spa_scenario_matches_ground_truth(env: Env) -> None:
     """The seven lines of CB-VOLT-2026-06 are claimed and submitted through the real batch flow first (the ground
-    truth's prior claims); the run that follows is the one checked against ``expected_calculation.json``."""
+    truth's prior claims); the run that follows is the one checked against ``expected_calculation.json``. The
+    ground truth's order of events is kept: the credit note CN-5002 arrives AFTER INV-10021/1 was claimed at 250.00
+    (a return imported before the claim nets into it, 200.00: owner decision 2026-11-13, BUSINESS_LOGIC §7)."""
+    ws = open_workspace(env.app, env.stack)
+    all_settings(ws)
+    activate_all(ws, AGREEMENTS)
+    import_sales_part(ws, late=False)
     fixture = truth("claim_batches_fixture.json")["lines"]
     claim_and_submit(
         ws, results(ws, run(ws, **WINDOW)["id"]), [f"{x['invoice_no']}/{x['line_no']}" for x in fixture]
     )
+    import_sales_part(ws, late=True)
     r = run(ws, **WINDOW)
     assert r["status"] == "completed", r
     res = results(ws, r["id"])
