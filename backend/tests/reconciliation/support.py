@@ -222,9 +222,8 @@ def check_matching(story: Story, rows: dict[int, dict[str, Any]]) -> None:
             assert [a["claim_reference"] for a in m["allocations"]] == [
                 ref_of(story, exp["claim_reference"])
             ], n
-        if (
-            n == 4
-        ):  # the adjustment rides in another batch: it is not split off this payment, all 200.00 -> CL-4
+        if n == 4:
+            # the adjustment rides in another batch: it is not split off this payment, all 200.00 -> CL-4
             assert amounts(m) == [Decimal("200.00")]
             assert [a["claim_reference"] for a in m["allocations"]] == [ref_of(story, "CL-2026-000004")]
             assert m["allocations"][0]["claim_adjustment_id"] is None

@@ -298,3 +298,18 @@ def test_a_top_up_payment_finds_its_short_line_by_exact_identifier_only() -> Non
     )
     t3 = RemittanceLine("t3", "M", D("250.00"), invoice_no="INV-1", sku="S", quantity=D("1"))
     assert reconcile([t3], [], topup_lines=[c]).matches == ()
+
+
+def test_the_remainder_counts_claim_parts_only_and_stays_within_the_payment() -> None:
+    """100.00 line with only ADJ -50.00 confirmed: claim parts 0, remainder 100.00 (not 150.00). A 200.00 line paid to
+    CL 200.00 plus ADJ -50.00: remainder 0. The same-batch split 250.00 + (-50.00) on a 200.00 line: 200 - 250 < 0 -> none."""
+    cl = ClaimLine("c", "M", "CL-c", "I", 1, D("250.00"))
+    r100 = RemittanceLine("a", "M", D("100.00"))
+    case = classify_unmatched_payment(r100, [manual_adjustment_match(r100, cl, "adj", D("-50.00"))])
+    assert case is not None and case.amount == D("100.00")
+    r200 = RemittanceLine("b", "M", D("200.00"))
+    both = [manual_match(r200, [(cl, D("200.00"))]), manual_adjustment_match(r200, cl, "adj", D("-50.00"))]
+    assert classify_unmatched_payment(r200, both) is None
+    split = ClaimLine("s", "M", "CL-s", "I", 2, D("250.00"), adjustments=(Adjustment("a1", D("-50.00")),))
+    (m,) = reconcile([RemittanceLine("z", "M", D("200.00"), invoice_no="I", invoice_line=2)], [split]).matches
+    assert classify_unmatched_payment(RemittanceLine("z", "M", D("200.00")), [m]) is None

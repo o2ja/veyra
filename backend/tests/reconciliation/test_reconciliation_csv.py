@@ -314,6 +314,40 @@ def test_finalising_needs_every_unmatched_line_categorised(story: Story, admin_e
                 raise AssertionError(f"line changed: {sql}")
 
 
+def test_a_categorised_line_cannot_be_matched_any_more(story: Story) -> None:
+    ws = story.ws
+    doc = SHARED["doc"]
+    line6 = view(ws, doc["id"])[6]["line"]["id"]  # categorised by the previous test
+    r = ws.api.post(
+        "/matches",
+        json={
+            "remittance_line_id": line6,
+            "claim_line_id": story.lines["INV-10001"]["id"],
+            "allocated_amount": "1.00",
+        },
+    )
+    assert r.status_code == 409 and r.json()["error"]["code"] == "line_categorised"
+
+
+def test_an_adjustment_allocation_on_a_paid_line_is_not_cash_on_a_claim_and_adds_no_remainder(
+    story: Story,
+) -> None:
+    """Line 4 (200.00) is allocated 200.00 to CL-4; a person also confirms the -50.00 adjustment item on it. Claim parts
+    = 200.00, remainder = 200.00 - 200.00 = 0 (no extra unmatched_payment); CL-4 stays claimed 250.00 - paid 200.00 =
+    short_paid 50.00, asserted by the finalisation test below (it expects exactly one CL-4 finding and no more)."""
+    ws = story.ws
+    line4 = view(ws, SHARED["doc"]["id"])[4]["line"]["id"]
+    r = ws.api.post(
+        "/matches",
+        json={
+            "remittance_line_id": line4,
+            "claim_adjustment_id": story.adjustment["id"],
+            "allocated_amount": "-50.00",
+        },
+    )
+    assert r.status_code == 201, r.text
+
+
 # ---- finalisation ----------------------------------------------------------------------------------------------
 
 
@@ -441,7 +475,8 @@ def test_an_adjustment_item_is_matched_only_by_a_person_and_yields_no_finding(st
     }
     assert ws.api.post("/matches", json={**both, "allocated_amount": "-50.00"}).status_code == 422
     one = {"remittance_line_id": lid, "claim_adjustment_id": adj}
-    assert ws.api.post("/matches", json={**one, "allocated_amount": "0.00"}).status_code == 422
+    for wrong in ("0.00", "50.00", "-60.00"):  # zero, the wrong sign, larger than the adjustment (-50.00)
+        assert ws.api.post("/matches", json={**one, "allocated_amount": wrong}).status_code == 422, wrong
     ok_ = ws.api.post("/matches", json={**one, "allocated_amount": "-50.00"})
     assert ok_.status_code == 201, ok_.text
     (a,) = ok_.json()["allocations"]
@@ -451,3 +486,11 @@ def test_an_adjustment_item_is_matched_only_by_a_person_and_yields_no_finding(st
         Decimal("-50.00"),
     )
     assert view(ws, doc["id"])[1]["state"] == "matched"
+    # Hand: the line paid 100.00 and only an adjustment item is confirmed on it. Under the D-N11 interim that
+    # allocation is not cash on a claim line, so claim parts = 0 and the whole line is the remainder: one
+    # unmatched_payment of 100.00 (= amount_paid, never more, never 150.00 = 100.00 - (-50.00)). No categorisation is
+    # needed (the line has a confirmed match) and the adjustment item itself yields no finding.
+    final = finalize(ws.api, doc["id"])
+    assert final.status_code == 200, final.text
+    got = [(f["case_type"], Decimal(f["amount"])) for f in final.json()["findings"]]
+    assert got == [("unmatched_payment", Decimal("100.00"))]

@@ -102,12 +102,17 @@ def classify_unmatched_payment(
 
     * No confirmed match: the full ``amount_paid``, but only once a person categorised the line (a line nobody decided
       on is refused at finalisation, never reported by default).
-    * A confirmed match that allocates less than ``amount_paid`` (a partial manual match): the remainder.
+    * A confirmed match whose claim-line allocations cover less than ``amount_paid``: the remainder.
     * Never a 0.00 finding: a line paid 0.00 has nothing to report (its claim line is rejected via a 0.00 manual match).
     """
     confirmed = [m for m in matches if m.status is Status.CONFIRMED and m.remittance_line_id == line.id]
     if confirmed:
-        amount = line.amount_paid - sum((m.allocated for m in confirmed), Decimal(0))
+        # only the claim-line parts are cash applied to claims; an allocation to an adjustment item is signed and is not
+        # cash on a claim line (D-N11 interim). Never below 0 (a same-batch split can exceed the payment) nor above it.
+        claim_parts = sum(
+            (a.amount for m in confirmed for a in m.allocations if a.adjustment_ref is None), Decimal(0)
+        )
+        amount = min(line.amount_paid, line.amount_paid - claim_parts)
     elif categorised:
         amount = line.amount_paid
     else:

@@ -72,6 +72,11 @@ class LineHasMatch(Conflict):
     message = "A line with a confirmed match cannot be categorised."
 
 
+class LineCategorised(Conflict):
+    code = "line_categorised"
+    message = "A categorised line cannot be matched; the categorisation is final."
+
+
 class UnresolvedSuggestions(Conflict):
     code = "unresolved_suggestions"
     message = "Confirm or reject every suggested match before finalising."
@@ -470,6 +475,8 @@ def decide(db: Session, who: Who, match_id: UUID, revision: int, decision: str) 
     now = clock.now()
     if decision == "confirm":
         st = _state(db, doc)
+        if str(rows[0].remittance_line_id) in st.categorised:
+            raise LineCategorised()
         group = confirm_suggestion(_matches(rows, st.adjustment_line)[0])
         confirmed = [*_matches(st.rows, st.adjustment_line, "confirmed"), group]
         try:
@@ -515,6 +522,8 @@ def manual(
         raise _invalid("claim_line_id", "exactly_one", "Give either claim_line_id or claim_adjustment_id.")
     doc = _locked(db, t, _doc_of_line(db, t, remittance_line_id))
     st = _state(db, doc)
+    if str(remittance_line_id) in st.categorised:
+        raise LineCategorised()
     rem = st.remits[str(remittance_line_id)]
     if claim_adjustment_id is None:
         if amount < 0 or (amount == 0 and rem.amount_paid != 0):
@@ -523,15 +532,20 @@ def manual(
                 "invalid",
                 "A claim line gets a positive amount (0.00 only for a line paid 0.00).",
             )
-    elif amount == 0:
-        raise _invalid("allocated_amount", "invalid", "The allocated amount must not be zero.")
     adjustment = st.adjustments.get(str(claim_adjustment_id)) if claim_adjustment_id else None
-    if claim_adjustment_id is not None and adjustment is None:
-        raise _invalid(
-            "claim_adjustment_id",
-            "not_found",
-            "Not an adjustment carried by another submitted batch of this manufacturer.",
-        )
+    if claim_adjustment_id is not None:
+        if adjustment is None:
+            raise _invalid(
+                "claim_adjustment_id",
+                "not_found",
+                "Not an adjustment carried by another submitted batch of this manufacturer.",
+            )
+        if amount == 0 or (amount < 0) != (adjustment.amount < 0) or abs(amount) > abs(adjustment.amount):
+            raise _invalid(
+                "allocated_amount",
+                "invalid",
+                "The amount must have the adjustment's sign and not exceed its amount.",
+            )
     claim = st.claims.get(adjustment.claim_line_id if adjustment else str(claim_line_id))
     if claim is None:
         raise _invalid("claim_line_id", "not_found", "Not a submitted claim line of this manufacturer.")
