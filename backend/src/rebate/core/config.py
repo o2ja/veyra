@@ -96,6 +96,9 @@ class Settings(BaseSettings):
     s3_secret_access_key: SecretStr | None = None
     presigned_url_seconds: int = Field(default=300, ge=10, le=300)  # SECURITY.md §4: at most 5 minutes
 
+    # Password spraying: login attempts per client IP per minute across all accounts (SECURITY.md §1)
+    login_ip_limit_per_minute: int = Field(default=20, ge=1)
+
     # Uploads and malware scanning (SECURITY.md §4)
     upload_max_mb_spreadsheet: int = Field(default=50, ge=1, le=50)
     upload_max_mb_pdf: int = Field(default=25, ge=1, le=50)
