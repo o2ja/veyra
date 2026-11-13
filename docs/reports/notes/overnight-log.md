@@ -27,6 +27,7 @@
 - S8 financial review 1: **FAIL / HARD STOP D-N3**. CM-7781, RA-5521 (120.00 unmatched_payment confirmed), DN-310 re-derived OK. S8 stopped. J1 told: S9 finalise hook must upsert/skip.
 - L1 done (s11-docs-drill 4342bb1): restore drill local — backup 8 s, restore 16 s into rebate_drill, 47 tables row counts equal, alembic head equal, 100/100 object sha256 OK; PITR not drilled. Guides: operator, user, onboarding, customer security overview. Review running.
 - K1 done (s11-audit-seal 86508de): audit_seals migration + RLS + append-only, seal job (hourly, chunked), verify CLI (exit 1 on break), retention dry-run, runbook. 12 new tests; full 1733 pass / 1 fail (ORM drift, fixed, db+isolation 356 re-run pass); negctl OK. Security+DB review running.
+- S8 branch after re-chain (edaa230, includes s7-adjustments + main): full suite 2023 passed, 0 failed (12.5 min); ruff, format, mypy clean (my lint-imports call missed its config; I1's run: 14 kept, 0 broken). negctl not re-run on this merge.
 
 ---
 
