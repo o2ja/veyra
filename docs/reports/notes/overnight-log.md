@@ -3,7 +3,8 @@
 ## MORNING SUMMARY
 1. **Merged:** #18 S11 ops (c7d014b). ADR-017 + new `docs/PRODUCTION_PLAN.md`: managed S3-compatible storage in production (e5f0918).
 2. **In progress:** builders F2 `s7-adjustments`, I1 `s8-reconciliation`, J1 `s9-recovery` (sonnet). `ui/qa-1` returned to Antigravity (Playwright 8/18 fail).
-3. **Needs your decision:** none yet.
+3. **Needs your decision:**
+   - **D-N1 FINANCIAL DISCREPANCY (HARD STOP, S7):** a return netted BEFORE the original line is claimed. Run 1 nets INV-10021 to 200.00 (CN-5002 netted) and the claim freezes at 200.00; run 2 reports 250.00 / −50.00, so propose emits +50.00 `agreement_change` AND −50.00 `return_reversal` on the same line. BUSINESS_LOGIC §7 read literally = 150.00; hand-correct = 200.00; with allow_negative_claims=false the −50.00 is held and the +50.00 approvable → 250.00 claimed for 16 net units. Ground truth (`claim_batches_fixture.json`) freezes 250.00 (return after claim) and does not cover this ordering. Code: rebate_engine/spa.py:320, claims/adjustments.py:398-436. Review: PR #15 comment 6841512829. **Blocked:** merge of s7-adjustments → s7-claims → #15, and therefore the S8/S9 merges to main (stacked). Recommendation (not applied): §7 states that adjustments compare against the *frozen* amount using the same netting view the claim was made with (a claim frozen net of a return proposes no return_reversal for that return).
 4. **Failures / findings / discrepancies:** ui/qa-1 Playwright: qa-admin, qa-agreements, qa-auth, qa-calculations, qa-files (axe `dl`), qa-imports, a11y fail; lint/typecheck/vitest pass. Not merged.
 5. **Antigravity prompts ready:** `antigravity-prompt-qa-1-fixes.md` (ui/qa-1 round 2).
 6. **Resume:** `docs/reports/notes/resume-prompt.md`, step 2 (s7-adjustments).
@@ -15,6 +16,7 @@
 - Launched builders F2, I1, J1 (own test DBs; F2 owns negctl).
 - ui/qa-1: merged main in (ec83e66); lint/typecheck/vitest PASS; Playwright 18 specs in batches of 4: 10 pass, 8 fail (Antigravity had not run Playwright). Fix prompt eeea8e1.
 - F2 done (s7-adjustments 17a70c9): B1/S1/M1-M4 + mypy fixed; main merged in; full 1897 passed, isolation 360, negctl OK, ruff/mypy/lint-imports clean. bandit/pip-audit not run. Opus financial 2nd pass on fix diff launched.
+- Financial 2nd pass on F2 fix diff: **FAIL / HARD STOP** (D-N1). Minors: M4 file back to CRLF in 71279fc; S1 batch guard also refuses writes to submitted batches with total <= 0 (no current path). S7 work stopped. S8/S9 continue on branches; merges to main blocked.
 
 ---
 
