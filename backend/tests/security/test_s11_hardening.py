@@ -150,13 +150,6 @@ def test_polyglot_pdf_zip_is_rejected(admin: Api) -> None:
     assert r.status_code == 422, r.text
 
 
-def test_encrypted_pdf_is_rejected_at_upload(admin: Api) -> None:
-    pdf = samples.PDF.replace(b"trailer<<", b"trailer<</Encrypt 9 0 R")
-    r = upload(admin, "locked.pdf", pdf, "application/pdf", kind="agreement")
-    assert r.status_code == 422, r.text
-    assert r.json()["error"]["details"][0]["code"] == "encrypted"
-
-
 # ---- 5. password change revokes the user's other sessions -------------------------------------------
 
 

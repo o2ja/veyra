@@ -188,5 +188,6 @@ def test_documented_routes_declare_the_documented_roles() -> None:
         for method in route.methods or ():
             key = (method, route.path.removeprefix(API_PREFIX))
             if key in DOC_ROUTES:
+                assert permission is not None
                 seen[key] = "".join(_ROLE_LETTER[r] for r in ROLES if r in PERMISSIONS[permission])
     assert seen == DOC_ROUTES

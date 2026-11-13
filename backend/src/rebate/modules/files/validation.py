@@ -169,15 +169,13 @@ ACTIVE_PARTS = ("xl/macrosheets/", "xl/embeddings/", "xl/activex/", "xl/external
 
 
 def _check_pdf(body: IO[bytes]) -> None:
-    """Encrypted PDFs cannot be read (refuse early); a ZIP end-of-central-directory record in the tail makes a
-    PDF/ZIP polyglot that other tools would open as an archive."""
+    """A ZIP end-of-central-directory record in the tail makes a PDF/ZIP polyglot that other tools would open as
+    an archive. (Encrypted PDFs are caught by the ClamAV scan, SECURITY.md section 4, not here.)"""
     body.seek(0)
     try:
         data = body.read()  # bounded by the size limit checked before
     finally:
         body.seek(0)
-    if b"/Encrypt" in data:
-        raise _reject("encrypted")
     if b"PK\x05\x06" in data[-65557:]:
         raise _reject("content_type_mismatch")
 
