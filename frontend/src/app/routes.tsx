@@ -46,6 +46,7 @@ import { ClaimBatchDetailPage } from "../features/claims/claim-batch-detail-page
 import { ClaimBatchesPage } from "../features/claims/claim-batches-page";
 import { ClaimExportTemplatesPage } from "../features/claims/claim-export-templates-page";
 import { MissedClaimsPage } from "../features/claims/missed-claims-page";
+import { RecoveryQueuePage } from "../features/recovery/recovery-queue-page";
 import { AppLayout } from "./app-layout";
 import { RequirePermission, RequireSession } from "./guards";
 import { RouteError } from "./route-error";
@@ -208,6 +209,8 @@ export const routes: RouteObject[] = [
       guarded("claims/batches", "data.read", <ClaimBatchesPage />),
       guarded("claims/batches/:batchId", "data.read", <ClaimBatchDetailPage />),
       guarded("claims/templates", "claim_batch.create", <ClaimExportTemplatesPage />),
+      // S9: recovery queue, case work and reminders
+      guarded("recovery", "data.read", <RecoveryQueuePage />),
     ],
   },
 ];
