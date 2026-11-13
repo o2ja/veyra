@@ -15,11 +15,46 @@
 		max_size 60MB
 	}
 	handle /api/* {
-		reverse_proxy api:8000
+		# Client IP (core/clientip.py): Caddy has no trusted_proxies, so it records the TCP peer it saw
+		# (a Cloudflare edge address when the request came through Cloudflare) as the only X-Forwarded-For
+		# hop; any client-sent value is discarded. CF-Connecting-IP passes through unchanged and the API
+		# honours it only when that peer is in CLOUDFLARE_IP_RANGES.
+		# Origin lock (operator step, runbooks/cloudflare-ip-update.md): the host firewall allows 443
+		# only from Cloudflare ranges, and/or Authenticated Origin Pulls (mTLS) is enabled.
+		reverse_proxy api:8000 {
+			header_up X-Forwarded-For {remote_host}
+		}
 	}
 	handle {
 		root * /srv/frontend
 		try_files {path} /index.html
 		file_server
+	}
+}
+
+# Presigned object URLs (S3_PUBLIC_ENDPOINT_URL). The Host header is preserved: S3 signatures cover it.
+{$S3_DOMAIN} {
+	header {
+		Strict-Transport-Security "max-age=31536000; includeSubDomains"
+		X-Content-Type-Options nosniff
+		X-Frame-Options DENY
+		Content-Security-Policy "default-src 'none'; sandbox"
+		-Server
+	}
+	request_body {
+		max_size 1KB
+	}
+	# Allow-list in front of SeaweedFS (OD-3/OD-4 pending): only signed GET/HEAD on the one bucket. The app issues
+	# nothing else to browsers, so listing, uploads, deletes and the other buckets are unreachable from outside.
+	@allowed {
+		method GET HEAD
+		path /{$S3_BUCKET}/*
+		query X-Amz-Signature=*
+	}
+	handle @allowed {
+		reverse_proxy seaweedfs:8333
+	}
+	handle {
+		respond "forbidden" 403
 	}
 }
