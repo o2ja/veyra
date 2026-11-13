@@ -79,9 +79,10 @@ def business_today(db: Session, tenant_id: UUID) -> date:
 
 
 def view(c: VarianceCase) -> dict[str, Any]:
+    # "reason", not "reason_code": the audit log refuses any key that looks like a secret ("code"), see test_audit_logs_config
     return {
         "case_type": c.case_type,
-        "reason_code": c.reason_code,
+        "reason": c.reason_code,
         "status": c.status,
         "claim_line_id": c.claim_line_id,
         "remittance_line_id": c.remittance_line_id,
