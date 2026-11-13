@@ -32,6 +32,9 @@
 - PR #20 (S11.6 drill + S11.7 guides; review MERGEABLE WITH MINORS, minors fixed): CI jobs not started — GitHub billing (D-N0). Not merged.
 - S11.1 review: NOT MERGEABLE (blocker: migration enqueues 0 seal jobs because tenants is FORCE RLS; serious: settle rule relies on a nonexistent timeout, head-hash anchor not checkable, tamper limitation understated). Sent back to K1.
 - M1 launched: S10 core backend (summary job, dashboard + drill-down, tier tracker, trace resolver, audit pack) on s10-reporting, stacked on s9-recovery 7fe11bb.
+- ~05:00–06:00Z: Claude 5-hour usage limit hit; M1, J1 and a reviewer stopped, all resumed after reset. CI re-run at 06:01Z still refused (billing, D-N0).
+- K1 S11.1 fixes done (c434023): all 8 findings; full 1740 pass, negctl OK. 2nd-pass review running.
+- J1 S9 fixes done (fd2123e): S1–S4, M1–M6; full suite 2217 pass / 0 fail (no ignores), 1 alembic head. 2nd-pass review running; negctl on s9 running.
 
 ---
 
