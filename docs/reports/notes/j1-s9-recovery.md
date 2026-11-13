@@ -82,3 +82,9 @@ Merged origin/s8-reconciliation (edaa230 lineage); one alembic head (`20261118_0
   Decimal through the Money schema; M6 tests (submission_date basis, foreign file, blank text).
 - DATABASE_SCHEMA.md 3.10 and API_SPECIFICATION 2.8 updated for the deviations.
 - M7 (OWNER, not decided): with `remittance_date` basis an unpaid case has no deadline, so no reminders. Behaviour left as is.
+
+## Review 2 and negctl
+- Negative control: D5/D9 cases restructured (RLS-dependent parts under D3/D5 names, privilege and trigger-guarded checks in independent D9/D10 tests); `python -m tests.isolation.negative_control` reports OK (211 RLS-dependent tests detected the breach, all independent passed); isolation suite 417 passed.
+- N1: a write-off is refused (409 reclaim_included) only while the reclaim's batch is draft or approved; once submitted it is allowed for variance - recovered (test: 2,080.00 case, 1,000.00 recovered, written off 1,080.00).
+- N2: write_off_reason is stored when four-eyes is off; N3: reminder titles show 2 decimals.
+- FLAG FOR THE OWNER: `claims.retire_recovery_reclaims` rejects S7 `recovery_reclaim` adjustments through the existing `reject()`; S9 thus acts on S7 adjustment state (no money change).

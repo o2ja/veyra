@@ -3,6 +3,7 @@
 hand derivation, never the output of the code under test. Tests of the scenario share a module-scoped workspace and
 run in file order."""
 
+import uuid
 from collections.abc import Iterator
 from contextlib import ExitStack
 from datetime import UTC, datetime
@@ -23,6 +24,7 @@ from tests.reconciliation.support import (
     Story,
     amounts,
     build_story,
+    categorise_unmatched,
     check_findings,
     check_matching,
     create,
@@ -269,6 +271,86 @@ def test_match_listing_is_paged_and_filtered(story: Story) -> None:
     assert ws.api.get("/matches", params={"bogus": 1}).status_code == 400
 
 
+# ---- categorisation (BL §10.3: all unmatched lines explicitly categorised) ---------------------------------------
+
+
+def test_finalising_needs_every_unmatched_line_categorised(story: Story, admin_engine: Engine) -> None:
+    ws = story.ws
+    doc = SHARED["doc"]
+    rows = view(ws, doc["id"])
+    refused = finalize(ws.api, doc["id"])  # line 6 (75.00) is neither matched nor categorised
+    assert refused.status_code == 409 and refused.json()["error"]["code"] == "uncategorised_lines"
+    matched, open_ = rows[4]["line"]["id"], rows[6]["line"]["id"]
+    body = {"category": "unmatched_payment"}
+    held = ws.api.post(f"/remittance-lines/{matched}/categorise", json=body)
+    assert held.status_code == 409 and held.json()["error"]["code"] == "line_matched"
+    assert ws.api.post(f"/remittance-lines/{open_}/categorise", json={"category": "other"}).status_code == 422
+    assert ws.api.post(f"/remittance-lines/{uuid.uuid4()}/categorise", json=body).status_code == 404
+    done = ws.api.post(f"/remittance-lines/{open_}/categorise", json=body)
+    assert done.status_code == 200 and done.json()["category"] == "unmatched_payment"
+    again = ws.api.post(f"/remittance-lines/{open_}/categorise", json=body)
+    assert again.status_code == 409 and again.json()["error"]["code"] == "invalid_state"
+    log = ws.api.get("/audit-log", params={"action": "remittance_line.categorised"})
+    assert log.status_code == 200 and [e["entity_id"] for e in log.json()["data"]] == [open_]
+    with (
+        admin_engine.begin() as conn
+    ):  # the line stays evidence: nothing but a first categorisation is possible
+        for sql, target in (
+            ("UPDATE remittance_lines SET amount_paid = 1 WHERE id = :i", open_),
+            (
+                "UPDATE remittance_lines SET category = 'unmatched_payment', categorised_by = :u, "
+                "categorised_at = now() WHERE id = :i",
+                matched,
+            ),
+        ):
+            sp = conn.begin_nested()
+            try:
+                conn.execute(text(sql), {"i": target, **({"u": ws.user_id} if ":u" in sql else {})})
+            except Exception as exc:
+                sp.rollback()
+                assert "categoris" in str(exc), exc
+            else:
+                sp.rollback()
+                raise AssertionError(f"line changed: {sql}")
+
+
+def test_a_categorised_line_cannot_be_matched_any_more(story: Story) -> None:
+    ws = story.ws
+    doc = SHARED["doc"]
+    line6 = view(ws, doc["id"])[6]["line"]["id"]
+    # categorise here (the earlier finalisation test may have done it already: then 409 invalid_state)
+    done = ws.api.post(f"/remittance-lines/{line6}/categorise", json={"category": "unmatched_payment"})
+    assert done.status_code in (200, 409), done.text
+    r = ws.api.post(
+        "/matches",
+        json={
+            "remittance_line_id": line6,
+            "claim_line_id": story.lines["INV-10001"]["id"],
+            "allocated_amount": "1.00",
+        },
+    )
+    assert r.status_code == 409 and r.json()["error"]["code"] == "line_categorised"
+
+
+def test_an_adjustment_allocation_on_a_paid_line_is_not_cash_on_a_claim_and_adds_no_remainder(
+    story: Story,
+) -> None:
+    """Line 4 (200.00) is allocated 200.00 to CL-4; a person also confirms -10.00 of the -50.00 adjustment item on it. Claim parts
+    = 200.00, remainder = 200.00 - 200.00 = 0 (no extra unmatched_payment); CL-4 stays claimed 250.00 - paid 200.00 =
+    short_paid 50.00, asserted by the finalisation test below (it expects exactly one CL-4 finding and no more)."""
+    ws = story.ws
+    line4 = view(ws, SHARED["doc"]["id"])[4]["line"]["id"]
+    r = ws.api.post(
+        "/matches",
+        json={
+            "remittance_line_id": line4,
+            "claim_adjustment_id": story.adjustment["id"],
+            "allocated_amount": "-10.00",  # the ADJ is spent across tests: -10.00 here, -20.00 next, -20.00 after
+        },
+    )
+    assert r.status_code == 201, r.text
+
+
 # ---- finalisation ----------------------------------------------------------------------------------------------
 
 
@@ -299,14 +381,18 @@ def test_finalising_classifies_the_variances_of_the_ground_truth(story: Story) -
 
 def test_finalising_opened_the_recovery_cases_of_the_ground_truth(story: Story) -> None:
     """S9 hooks into the finalisation: expected_reconciliation.json gives 150.00 short-paid (E12), 2,080.00 rejected
-    (E07), 75.00 unmatched and 660.00 unpaid; the dispute deadline is 2026-07-31 + 60 days = 2026-09-29 (the unpaid
-    line has no remittance to count from)."""
+    (E07), 75.00 unmatched and 660.00 unpaid; the dispute deadline is 2026-07-31 + 60 days = 2026-09-29; the unpaid
+    line has no remittance, so it counts from the claim submission: 2026-07-05 + 60 = 2026-09-03 (D-N2).
+    Final S8 (interim rule D-N11, s8-financial-review-3): ADJ-2026-0001 (-50.00) rides in batch B2, so it cannot net CL-4;
+    remittance line 4 pays 200.00 = 250.00 claimed - 50.00 adjustment, hence CL-4 claimed 250.00 - paid 200.00 =
+    short_paid 50.00, due 2026-07-31 + 60 = 2026-09-29 (the fifth case; findings 150/2080/50/75/660)."""
     got = story.ws.api.get("/cases", params={"limit": 50}).json()["data"]
     assert sorted((c["case_type"], c["variance_amount"], c["deadline_date"]) for c in got) == [
         ("rejected", "2080.0000", "2026-09-29"),
         ("short_paid", "150.0000", "2026-09-29"),
+        ("short_paid", "50.0000", "2026-09-29"),
         ("unmatched_payment", "75.0000", "2026-09-29"),
-        ("unpaid", "660.0000", None),
+        ("unpaid", "660.0000", "2026-09-03"),
     ]
     assert {c["remittance_document_id"] for c in got} == {SHARED["doc"]["id"]}
 
@@ -335,3 +421,302 @@ def test_a_finalised_remittance_is_final(story: Story, admin_engine: Engine) -> 
                 sp.rollback()
                 raise AssertionError(f"owner could change a finalised remittance: {sql}")
     drain(ws.app)
+
+
+# ---- the owner's money rule and the review fixes (hand derivations in the comments) ----------------------------
+
+HEADER = "line,invoice_no,invoice_line,part_no,qty,amount_claimed,amount_paid,reason_code,reason_text\n"
+
+
+def test_no_stated_total_is_not_auto_accepted(story: Story) -> None:
+    """A file without any total makes the arithmetic check empty: a person enters it (422 total_required)."""
+    ws, volt = story.ws, story.mfr["VOLT"]
+    body = (HEADER + "1,,,,,,5.00,,x\n").encode()
+    doc = ingest(ws, upload(ws, "nt.csv", body, CSV), volt, document_number="NT-1")
+    assert doc["status"] == "pending_review"
+    ex = ws.api.get(f"/remittances/{doc['id']}/extraction").json()
+    assert [p["code"] for p in ex["problems"]] == ["total_required"]
+    refused = ws.api.post(f"/remittances/{doc['id']}/accept", json={})
+    assert refused.status_code == 422 and refused.json()["error"]["code"] == "total_required"
+    ok_ = ws.api.post(
+        f"/remittances/{doc['id']}/accept", json={"total_amount": "5.00"}
+    )  # hand: one line, 5.00
+    assert ok_.status_code == 200 and ok_.json()["status"] == "accepted"
+
+
+def test_a_zero_paid_line_makes_its_claim_line_rejected_via_a_zero_manual_match(story: Story) -> None:
+    """CL-7 (INV-10060, 660.00) was reported unpaid by CM-7781. A new remittance pays it 0.00 with E07 (mapped to
+    rejected_quantity_exceeds_authorization) on a line no tier can match: a 0.00 manual match makes it rejected 660.00;
+    the 0.00 line itself yields no finding. The 5.00 line allows no 0.00 match and, categorised, is an unmatched
+    payment of 5.00."""
+    ws, volt = story.ws, story.mfr["VOLT"]
+    body = (HEADER + "1,,,,,,0.00,E07,Exceeds authorized quantity\n2,,,,,,5.00,,Credit\n").encode()
+    doc = ingest(ws, upload(ws, "zero.csv", body, CSV), volt, document_number="ZERO-1", total_amount="5.00")
+    assert doc["status"] == "accepted"
+    reconcile(ws, doc["id"])
+    rows = view(ws, doc["id"])
+    assert rows[1]["state"] == "unmatched" and rows[2]["state"] == "unmatched"
+    cl7 = story.lines["INV-10060"]["id"]
+    bad = ws.api.post(
+        "/matches",
+        json={"remittance_line_id": rows[2]["line"]["id"], "claim_line_id": cl7, "allocated_amount": "0.00"},
+    )
+    assert bad.status_code == 422
+    ok_ = ws.api.post(
+        "/matches",
+        json={"remittance_line_id": rows[1]["line"]["id"], "claim_line_id": cl7, "allocated_amount": "0.00"},
+    )
+    assert ok_.status_code == 201, ok_.text
+    assert categorise_unmatched(ws, doc["id"]) == [2]
+    r = finalize(ws.api, doc["id"])
+    assert r.status_code == 200, r.text
+    got = [(f["case_type"], f["reason_code"], Decimal(f["amount"])) for f in r.json()["findings"]]
+    # the 0.00 line yields nothing; the categorised 5.00 line is an unmatched payment of 5.00
+    assert sorted(got) == [
+        ("rejected", "rejected_quantity_exceeds_authorization", Decimal("660.00")),
+        ("unmatched_payment", "unmatched_payment", Decimal("5.00")),
+    ]
+
+
+def test_an_adjustment_item_is_matched_only_by_a_person_and_yields_no_finding(story: Story) -> None:
+    """Interim rule pending owner decision D-N11. ADJ-2026-0001 (-50.00) rides in batch B2, not in CL-4's batch: it is a
+    separate item. Only a manual match with its id gives it an allocation; its original line's paid is untouched."""
+    ws, volt = story.ws, story.mfr["VOLT"]
+    adj = story.adjustment["id"]
+    body = (HEADER + "1,,,,,,100.00,,x\n").encode()
+    doc = ingest(ws, upload(ws, "adj.csv", body, CSV), volt, document_number="ADJ-1", total_amount="100.00")
+    reconcile(ws, doc["id"])
+    line = view(ws, doc["id"])[1]
+    assert line["state"] == "unmatched"  # no tier ever allocates to an adjustment on its own
+    lid = line["line"]["id"]
+    both = {
+        "remittance_line_id": lid,
+        "claim_line_id": story.lines["INV-10021"]["id"],
+        "claim_adjustment_id": adj,
+    }
+    assert ws.api.post("/matches", json={**both, "allocated_amount": "-50.00"}).status_code == 422
+    one = {"remittance_line_id": lid, "claim_adjustment_id": adj}
+    for wrong in ("0.00", "50.00", "-60.00"):  # zero, the wrong sign, larger than the adjustment (-50.00)
+        assert ws.api.post("/matches", json={**one, "allocated_amount": wrong}).status_code == 422, wrong
+    ok_ = ws.api.post("/matches", json={**one, "allocated_amount": "-20.00"})  # -10.00 is on line 4 already
+    assert ok_.status_code == 201, ok_.text
+    (a,) = ok_.json()["allocations"]
+    assert (a["claim_line_id"], a["claim_adjustment_id"], Decimal(a["allocated_amount"])) == (
+        None,
+        adj,
+        Decimal("-20.00"),
+    )
+    assert view(ws, doc["id"])[1]["state"] == "matched"
+    # Hand: the line paid 100.00 and only an adjustment item is confirmed on it. Under the D-N11 interim that
+    # allocation is not cash on a claim line, so claim parts = 0 and the whole line is the remainder: one
+    # unmatched_payment of 100.00 (= amount_paid, never more, never 120.00 = 100.00 - (-20.00)). No categorisation is
+    # needed (the line has a confirmed match) and the adjustment item itself yields no finding.
+    final = finalize(ws.api, doc["id"])
+    assert final.status_code == 200, final.text
+    # only this line's findings: the story's other claim lines may be reported unpaid (not reached by this document)
+    got = [
+        (f["case_type"], Decimal(f["amount"]))
+        for f in final.json()["findings"]
+        if f["remittance_line_id"] == lid
+    ]
+    assert got == [("unmatched_payment", Decimal("100.00"))]
+    # every other finding is a story claim line reported unpaid, never anything from the adjustment item
+    others = [f for f in final.json()["findings"] if f["remittance_line_id"] != lid]
+    assert all(f["case_type"] == "unpaid" and f["claim_line_id"] is not None for f in others), others
+
+
+def _raw_confirmed(
+    conn: Any, ws: Any, line_id: str, claim_line_id: str | None, amount: str, adjustment_id: str | None = None
+) -> None:
+    """Insert a confirmed allocation straight into the table (the database invariants, without the service)."""
+    tenant = conn.execute(
+        text("SELECT tenant_id FROM remittance_lines WHERE id = :l"), {"l": line_id}
+    ).scalar_one()
+    mid = uuid.uuid4()
+    conn.execute(
+        text(
+            "INSERT INTO reconciliation_matches (tenant_id, id, match_id, remittance_line_id, claim_line_id, "
+            "allocated_amount, method, evidence, status, confirmed_by, confirmed_at, claim_adjustment_id) VALUES "
+            "(:t, :m, :m, :l, :c, :a, 'manual', '{}', 'confirmed', :u, now(), :j)"
+        ),
+        {
+            "t": tenant,
+            "m": mid,
+            "l": line_id,
+            "c": claim_line_id,
+            "a": amount,
+            "u": ws.user_id,
+            "j": adjustment_id,
+        },
+    )
+
+
+def test_cross_batch_adjustment_allocation_never_frees_room_for_claim_lines_and_categorised_lines_stay_closed(
+    story: Story, admin_engine: Engine, app_engine: Engine
+) -> None:
+    """Line 1 pays 200.00. A person gives 200.00 to INV-10010 and confirms -20.00 of the cross-batch ADJ on it. A further
+    20.00 to INV-10011 would make 200.00 + 20.00 = 220.00 > 200.00 (the -20.00 counts 0): refused (409 match_invariant),
+    although the signed sum 200.00 - 20.00 + 20.00 = 200.00 would fit. The database trigger refuses the same insert.
+    The ADJ (-50.00) can be allocated up to its amount over all lines and no further (422; trigger as rebate_app).
+    Line 3 (300.00, within 5% of the 312.50 carrier claim by invoice + SKU + quantity) is only suggested (T3); once a
+    person categorises it, confirming the suggestion is refused (409 line_categorised), in the service and in the
+    database, and rejecting still works."""
+    ws, volt = story.ws, story.mfr["VOLT"]
+    carrier = story.lines["INV-10020"]
+    body = HEADER + (
+        "1,,,,,,200.00,,pays two claims\n2,,,,,,5.00,,x\n"
+        f"3,INV-10020,,BRK-3P-60A,{carrier['quantity']},,300.00,,near\n"
+    )
+    doc = ingest(
+        ws,
+        upload(ws, "guard.csv", body.encode(), CSV),
+        volt,
+        document_number="GUARD-1",
+        total_amount="505.00",
+    )
+    assert doc["status"] == "accepted"
+    reconcile(ws, doc["id"])
+    rows = view(ws, doc["id"])
+    assert rows[1]["state"] == "unmatched" and rows[3]["state"] == "suggested"
+    line1, line2, line3 = (rows[n]["line"]["id"] for n in (1, 2, 3))
+    a, b = story.lines["INV-10010"]["id"], story.lines["INV-10011"]["id"]
+
+    def post(**kw: str) -> Any:
+        return ws.api.post("/matches", json={"remittance_line_id": line1, **kw})
+
+    assert post(claim_line_id=a, allocated_amount="200.00").status_code == 201
+    assert post(claim_adjustment_id=story.adjustment["id"], allocated_amount="-20.00").status_code == 201
+    refused = post(claim_line_id=b, allocated_amount="20.00")
+    assert refused.status_code == 409 and refused.json()["error"]["code"] == "match_invariant"
+    # the ADJ's cap: allocate exactly the room left (whatever earlier tests spent), then one cent more is refused
+    adj = story.adjustment["id"]
+    with admin_engine.connect() as conn:
+        spent = conn.execute(
+            text(
+                "SELECT COALESCE(sum(allocated_amount), 0) FROM reconciliation_matches "
+                "WHERE claim_adjustment_id = :i AND status = 'confirmed'"
+            ),
+            {"i": adj},
+        ).scalar_one()
+    room = Decimal("-50.00") - spent  # <= 0
+    on_line1 = {"remittance_line_id": line1, "claim_adjustment_id": adj}
+    if room != 0:
+        assert ws.api.post("/matches", json={**on_line1, "allocated_amount": str(room)}).status_code == 201
+    over = ws.api.post("/matches", json={**on_line1, "allocated_amount": "-0.01"})
+    assert over.status_code == 422, over.text
+    with app_engine.connect() as conn:  # the database refuses the same over-allocation (as rebate_app)
+        tx = conn.begin()
+        try:
+            conn.execute(text("SELECT set_config('app.tenant_id', :t, true)"), {"t": ws.tenant_id})
+            _raw_confirmed(conn, ws, line1, None, "-0.01", adj)
+            with pytest.raises(Exception, match="exceed the adjustment amount"):
+                conn.execute(text("SET CONSTRAINTS ALL IMMEDIATE"))
+        finally:
+            tx.rollback()
+    with admin_engine.begin() as conn:
+        _raw_confirmed(conn, ws, line1, a, "0.00")  # no effect on the sum
+        sp = conn.begin_nested()
+        _raw_confirmed(conn, ws, line1, b, "20.00")
+        with pytest.raises(Exception, match="exceed the amount paid"):
+            conn.execute(text("SET CONSTRAINTS ALL IMMEDIATE"))
+        sp.rollback()
+    # categorisation is final: the suggestion on line 3 cannot be confirmed any more
+    (m,) = rows[3]["matches"]
+    assert m["status"] == "suggested"
+    assert (
+        ws.api.post(
+            f"/remittance-lines/{line3}/categorise", json={"category": "unmatched_payment"}
+        ).status_code
+        == 200
+    )
+    assert (
+        ws.api.post(
+            f"/remittance-lines/{line2}/categorise", json={"category": "unmatched_payment"}
+        ).status_code
+        == 200
+    )
+    held = ws.api.post(f"/matches/{m['id']}/confirm", headers={"If-Match": f'"{m["revision"]}"'})
+    assert held.status_code == 409 and held.json()["error"]["code"] == "line_categorised"
+    assert ws.api.get(f"/matches/{m['id']}").json()["status"] == "suggested"
+    with admin_engine.begin() as conn:
+        for sql in (
+            "UPDATE reconciliation_matches SET status = 'confirmed', revision = revision + 1, confirmed_by = :u, "
+            "confirmed_at = now() WHERE match_id = :m",
+            None,
+        ):
+            sp = conn.begin_nested()
+            with pytest.raises(Exception, match="categorised line"):
+                if sql:
+                    conn.execute(text(sql), {"u": ws.user_id, "m": m["id"]})
+                else:
+                    _raw_confirmed(conn, ws, line2, a, "1.00")
+            sp.rollback()
+    rejected = ws.api.post(f"/matches/{m['id']}/reject", headers={"If-Match": f'"{m["revision"]}"'})
+    assert rejected.status_code == 200 and rejected.json()["status"] == "rejected"
+
+
+def test_a_positive_cross_batch_adjustment_allocation_consumes_room_and_a_same_batch_one_is_face_value(
+    story: Story, admin_engine: Engine
+) -> None:
+    """Hand derivation, all in ONE admin transaction that is always rolled back (nothing is committed; the S7 flow of this
+    module has no positive adjustment, so +25.00 is set on the fixture row inside the transaction, with triggers off for
+    that statement only). A line pays 225.00. (a) 200.00 -> CL-4 and +25.00 -> the cross-batch ADJ: 225.00 <= 225.00,
+    accepted. (b) 225.00 -> CL-4 and +25.00 -> ADJ: 250.00 > 225.00, refused, as rebate_app. Then a same-batch
+    adjustment allocation must equal the adjustment's amount (-50.00 passes, -1000.00 is refused)."""
+    ws, volt = story.ws, story.mfr["VOLT"]
+    adj, cl4 = story.adjustment["id"], story.lines["INV-10021"]["id"]
+    body = HEADER + "1,,,,,,225.00,,pays CL-4\n"
+    doc = ingest(
+        ws, upload(ws, "plus.csv", body.encode(), CSV), volt, document_number="PLUS-1", total_amount="225.00"
+    )
+    line = view(ws, doc["id"])[1]["line"]["id"]
+
+    def check(conn: Any) -> None:
+        conn.execute(text("SET CONSTRAINTS ALL IMMEDIATE"))
+        conn.execute(text("SET CONSTRAINTS ALL DEFERRED"))
+
+    with admin_engine.connect() as conn:
+        tx = conn.begin()
+        try:
+            conn.execute(text("SET LOCAL session_replication_role = replica"))
+            conn.execute(text("UPDATE claim_adjustments SET amount = 25.00 WHERE id = :i"), {"i": adj})
+            # other tests' allocations on the ADJ are irrelevant to this case
+            conn.execute(
+                text("DELETE FROM reconciliation_matches WHERE claim_adjustment_id = :i"), {"i": adj}
+            )
+            conn.execute(text("SET LOCAL session_replication_role = origin"))
+            conn.execute(text("SELECT set_config('app.tenant_id', :t, true)"), {"t": ws.tenant_id})
+            conn.execute(text("SET LOCAL ROLE rebate_app"))
+            sp = conn.begin_nested()
+            _raw_confirmed(conn, ws, line, cl4, "200.00")
+            _raw_confirmed(conn, ws, line, None, "25.00", adj)
+            check(conn)  # (a) 225.00 <= 225.00
+            sp.rollback()
+            sp = conn.begin_nested()
+            _raw_confirmed(conn, ws, line, cl4, "225.00")
+            _raw_confirmed(conn, ws, line, None, "25.00", adj)
+            with pytest.raises(Exception, match="exceed the amount paid"):
+                check(conn)  # (b) 250.00 > 225.00
+            sp.rollback()
+            conn.execute(text("RESET ROLE"))
+            conn.execute(text("SET LOCAL session_replication_role = replica"))
+            conn.execute(text("UPDATE claim_adjustments SET amount = -50.00 WHERE id = :i"), {"i": adj})
+            conn.execute(
+                text(
+                    "UPDATE claim_adjustments SET included_in_batch_id = "
+                    "(SELECT batch_id FROM claim_lines WHERE id = :c) WHERE id = :i"
+                ),
+                {"c": cl4, "i": adj},
+            )
+            conn.execute(text("SET LOCAL session_replication_role = origin"))
+            sp = conn.begin_nested()
+            _raw_confirmed(conn, ws, line, None, "-50.00", adj)
+            check(conn)  # face value: accepted
+            sp.rollback()
+            sp = conn.begin_nested()
+            _raw_confirmed(conn, ws, line, None, "-1000.00", adj)
+            with pytest.raises(Exception, match="same-batch adjustment allocation"):
+                check(conn)
+            sp.rollback()
+        finally:
+            tx.rollback()

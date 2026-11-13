@@ -2,6 +2,7 @@
 does not outlive a status change, reminders go to active members only, titles state the days really left, the
 submission_date basis, blank text. Fresh workspace (the CM-7781 cases); tests run in file order."""
 
+import uuid
 from datetime import date, timedelta
 from decimal import Decimal
 from typing import Any
@@ -14,7 +15,15 @@ from rebate.core.jobs import JobContext
 from rebate.modules.recovery import jobs, service
 from tests.integration import test_recovery_cases as base
 from tests.integration.calc_support import settings
-from tests.integration.recovery_support import act, case_by, finding, open_cases, remittance, seed_remittance
+from tests.integration.recovery_support import (
+    act,
+    case_by,
+    confirm_payment,
+    finding,
+    open_cases,
+    remittance,
+    seed_remittance,
+)
 from tests.integration.test_adjustment_flows import new_batch
 from tests.integration.test_recovery_cases import REF, Cases, Env, audit_actions, events, four_eyes
 from tests.integration.test_recovery_jobs import at, digests, email
@@ -42,6 +51,12 @@ def test_write_off_rejects_the_live_reclaim_in_the_same_transaction(cases: Cases
     assert D(r.json()["written_off_amount"]) == D("2080.00")
     assert adjustment(api, adj)["status"] == "rejected"
     assert "claim_adjustment.rejected" in audit_actions(api, adj)
+    assert (
+        r.json()["write_off_reason"] == "Not worth chasing"
+    )  # four-eyes off: no proposal, the reason is still kept
+    entries = api.get("/audit-log", params={"entity_id": str(cid), "limit": 200}).json()["data"]
+    final = next(e for e in entries if e["action"] == "variance_case.written_off")
+    assert final["after"]["write_off_reason"] == "Not worth chasing"
 
 
 def test_write_off_is_refused_while_the_reclaim_sits_in_a_batch(cases: Cases) -> None:
@@ -108,6 +123,57 @@ def test_a_four_eyes_proposal_does_not_survive_a_status_change_and_the_audit_kee
     assert events(api, cid)[-1]["to_status"] == "written_off"
 
 
+def test_a_partly_recovered_case_is_written_off_for_the_rest_once_its_reclaim_was_submitted(
+    env: Env, cases: Cases, admin_engine: Engine
+) -> None:
+    """2,080.00 rejected case on the SC-22 line: reclaim -> approved -> batch -> approved -> submitted (the claim went
+    out; nothing can undo it), then 1,000.00 comes back. The write-off is for 2,080.00 - 1,000.00 = 1,080.00, and
+    the claimed reclaim stays as it is. While the batch was still draft, the write-off was refused."""
+    api, s = cases.api, cases.story
+    line = s.claim_lines[REF["SC-22"]]
+    doc, rl = seed_remittance(admin_engine, s, "CM-7796", date(2026, 8, 4), [D("1000.00")], [None])
+    one = finding(
+        "rejected",
+        "2080.00",
+        "rejected_quantity_exceeds_authorization",
+        claim_line_id=line,
+        remittance_line_id=None,
+        claimed=D("2080.00"),
+        paid=D("0.00"),
+    )
+    (cid,) = open_cases(env.engine, s, remittance(doc, s.manufacturer, date(2026, 8, 4), (one,)))
+    four_eyes(api, False)
+    adj = act(api, "post", f"/cases/{cid}/reclaim", cid).json()["adjustment_id"]
+    assert cases.approver.post(f"/claim-adjustments/{adj}/approve").status_code == 200
+    spare = api.get("/missed-claims", params={"manufacturer_id": str(s.manufacturer)}).json()["data"]
+    batch = new_batch(api, str(s.manufacturer), result_ids=[spare[0]["id"]], include_adjustment_ids=[adj])
+    assert batch.status_code == 201, batch.text
+    bid = batch.json()["id"]
+    refused = act(api, "post", f"/cases/{cid}/write-off", cid, {"reason": "Too early"})
+    assert refused.status_code == 409 and refused.json()["error"]["code"] == "reclaim_included"
+    assert api.post(f"/claim-batches/{bid}/approve").status_code == 200
+    sent = api.post(
+        f"/claim-batches/{bid}/submit",
+        json={"submitted_at": "2026-07-06", "external_reference": "ISO-N1"},
+        headers={"Idempotency-Key": str(uuid.uuid4())},
+    )
+    assert sent.status_code == 200, sent.text
+    confirm_payment(admin_engine, s, rl[0], adj, D("1000.00"))
+    open_cases(env.engine, s, remittance(doc, s.manufacturer, date(2026, 8, 4), ()))
+    part = case_by(api, cid)
+    assert (part["status"], D(part["recovered_amount"])) == ("submitted", D("1000.00"))
+    done = act(api, "post", f"/cases/{cid}/write-off", cid, {"reason": "Rest not collectable"})
+    assert done.status_code == 200, done.text
+    out = done.json()
+    assert (out["status"], D(out["written_off_amount"]), D(out["recovered_amount"])) == (
+        "written_off",
+        D("1080.00"),
+        D("1000.00"),
+    )
+    assert adjustment(api, adj)["status"] == "included"  # the claimed reclaim is history, not rejected
+    assert out["write_off_reason"] == "Rest not collectable"
+
+
 def test_reminders_skip_a_member_who_left_and_state_the_days_really_left(
     env: Env, cases: Cases, admin_engine: Engine
 ) -> None:
@@ -130,7 +196,7 @@ def test_reminders_skip_a_member_who_left_and_state_the_days_really_left(
     with transaction(env.engine, cases.story.tenant) as db:
         rows = db.execute(text("SELECT user_id, title FROM notifications ORDER BY title")).all()
     assert [str(r.user_id) for r in rows] == [str(cases.story.user)]  # nothing for the ex-member
-    assert rows[0].title.startswith("Unmatched payment 75.0000") and rows[0].title.endswith(
+    assert rows[0].title.startswith("Unmatched payment 75.00 (") and rows[0].title.endswith(
         "deadline in 2 days"
     )
     assert digests(approver_mail) == []
@@ -171,11 +237,11 @@ def test_dispute_deadline_counts_from_the_submission_date_when_that_is_the_basis
 def test_summary_sums_what_was_written_off_and_the_database_checks_it(
     cases: Cases, admin_engine: Engine
 ) -> None:
-    """Written off so far: 2,080.00 + 150.00 + 660.00 = 2,890.00 (the variance of those cases equals it, nothing
-    was recovered). The database refuses a write-off whose amount is not variance - recovered."""
+    """Written off so far: 2,080.00 + 150.00 + 660.00 + 1,080.00 = 3,970.00 (the last case had 1,000.00
+    recovered of 2,080.00). The database refuses a write-off whose amount is not variance - recovered."""
     rows = {r["key"]: r for r in cases.api.get("/cases/summary").json()["by_status"]}
-    assert rows["written_off"]["count"] == 3
-    assert D(rows["written_off"]["written_off_amount"]) == D("2890.00")
+    assert rows["written_off"]["count"] == 4
+    assert D(rows["written_off"]["written_off_amount"]) == D("3970.00")
     assert D(rows["open"]["written_off_amount"]) == 0
     try:
         with admin_engine.begin() as conn:

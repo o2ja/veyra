@@ -24,6 +24,7 @@ from tests.reconciliation.support import (
     PDF,
     Story,
     build_story,
+    categorise_unmatched,
     check_findings,
     check_matching,
     create,
@@ -150,6 +151,7 @@ def test_a_person_accepts_and_the_result_is_the_ground_truth(story: Story) -> No
     check_matching(story, rows)
     m5 = rows[5]["matches"][0]
     ws.api.post(f"/matches/{m5['id']}/confirm", headers={"If-Match": f'"{m5["revision"]}"'})
+    categorise_unmatched(ws, doc["id"])
     r = ws.api.post(
         f"/remittances/{doc['id']}/finalize",
         headers={"Idempotency-Key": "00000000-0000-4000-8000-000000000001"},

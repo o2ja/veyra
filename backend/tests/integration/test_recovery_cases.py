@@ -170,7 +170,8 @@ def test_cases_open_from_the_ground_truth_remittance(cases: Cases) -> None:
     """GL-V1 and the rest of ``expected_reconciliation.json``: 2,200.00 claimed, 2,050.00 paid -> short_paid 150.00,
     reason rejected_price_mismatch (E12); 2,080.00 rejected (E07); 75.00 unmatched; the SC-22 line unpaid 660.00.
     The dispute deadline is 2026-07-31 + 60 = 2026-09-29 (Jul 31 + 31 = Aug 31; + 29 = Sep 29); the unpaid line has no
-    remittance to count from, so its deadline is unknown."""
+    remittance to count from, so its deadline counts from the claim submission (D-N2): 2026-07-05 + 60 = 2026-09-03
+    (Jul 5 + 26 = Jul 31; + 31 = Aug 31, +57; + 3 = Sep 3, +60)."""
     short = case_by(cases.api, cases.price)
     assert (short["case_type"], short["reason_code"], short["status"]) == (
         "short_paid",
@@ -203,9 +204,9 @@ def test_cases_open_from_the_ground_truth_remittance(cases: Cases) -> None:
     assert (unpaid["case_type"], unpaid["reason_code"], D(unpaid["variance_amount"])) == (
         "unpaid", "unpaid_no_remittance", D("660.00"))  # fmt: skip
     assert (
-        unpaid["deadline_date"] is None
-        and unpaid["deadline_unknown"] is True
-        and unpaid["deadline_basis"] is None
+        unpaid["deadline_date"] == "2026-09-03"
+        and unpaid["deadline_unknown"] is False
+        and unpaid["deadline_basis"] == "submission_date"
     )
 
 
@@ -260,11 +261,14 @@ def test_a_second_finalisation_does_not_duplicate_a_live_case(
 
 
 def test_queue_puts_unknown_deadlines_first_pages_and_filters(cases: Cases) -> None:
-    """Order: ``deadline_unknown`` first, then deadline, then id. Paging with limit 2 walks the same order."""
+    """Order: ``deadline_unknown`` first, then deadline, then id; no deadline is unknown now, so the unpaid case
+    (2026-09-03) precedes the three due 2026-09-29. Paging with limit 2 walks the same order."""
     expected = [str(cases.unpaid), *sorted(str(c) for c in (cases.price, cases.quantity, cases.unmatched))]
     assert [c["id"] for c in listing(cases.api)] == expected
-    assert [c["id"] for c in listing(cases.api, deadline_before="2026-09-30")] == expected[1:]
-    assert [c["id"] for c in listing(cases.api, deadline_before="2026-09-29")] == []  # strictly before
+    assert [c["id"] for c in listing(cases.api, deadline_before="2026-09-30")] == expected
+    assert [c["id"] for c in listing(cases.api, deadline_before="2026-09-29")] == [
+        str(cases.unpaid)
+    ]  # strictly before
     assert [c["id"] for c in listing(cases.api, status=["open", "to_reclaim"])] == expected
     assert listing(cases.api, status="submitted") == []
     assert [c["id"] for c in listing(cases.api, reason_code="rejected_price_mismatch")] == [str(cases.price)]
@@ -277,7 +281,7 @@ def test_queue_puts_unknown_deadlines_first_pages_and_filters(cases: Cases) -> N
 
 def test_summary_totals_by_status_reason_and_at_risk(cases: Cases) -> None:
     """Hand: 150.00 + 2,080.00 + 75.00 + 660.00 = 2,965.00 open. At risk (live, deadline unknown or within 14 days
-    of 2026-07-10): only the unpaid case, 660.00; the others fall due on 2026-09-29."""
+    of 2026-07-10, i.e. by 2026-07-24): none; the unpaid case falls due 2026-09-03 (07-05 + 60), the rest 2026-09-29."""
     body = cases.api.get("/cases/summary").json()
     assert [(r["key"], r["count"], D(r["variance_amount"])) for r in body["by_status"]] == [
         ("open", 4, D("2965.00"))
@@ -289,7 +293,7 @@ def test_summary_totals_by_status_reason_and_at_risk(cases: Cases) -> None:
         "unpaid_no_remittance": D("660.00"),
     }
     assert (body["at_risk"]["count"], D(body["at_risk"]["amount"]), body["at_risk"]["deadline_within_days"]) == (
-        1, D("660.00"), 14)  # fmt: skip
+        0, D("0.00"), 14)  # fmt: skip
 
 
 # ---- owner, notes, attachments ------------------------------------------------------------------------------------

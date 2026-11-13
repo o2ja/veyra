@@ -6,6 +6,7 @@ derivations in the docstrings. Tests of one scenario share a module-scoped works
 
 import csv
 import io
+import json
 import threading
 import uuid
 from collections.abc import Iterator
@@ -20,6 +21,7 @@ from fastapi import FastAPI
 from sqlalchemy import Engine, text
 from sqlalchemy.exc import DBAPIError
 
+from rebate.modules.claims import frozen
 from rebate.modules.files import storage
 from tests.conftest import DbUrls
 from tests.integration.agreements_support import approve as approve_draft
@@ -755,3 +757,277 @@ def test_the_database_refuses_including_an_adjustment_of_an_unfrozen_line(
     assert [outcome(admin_engine, sql, **args) for sql in steps] == ["ok", "ok"]
     include_sql = "UPDATE claim_adjustments SET status = 'included', included_in_batch_id = :b WHERE id = :a"
     assert "frozen and not released" in outcome(admin_engine, include_sql, **args)
+
+
+# ---- owner decision 2026-11-13: return before claim; an adjustment belongs to the batch that carries it -------
+
+
+CN_5003 = (
+    "CN-5003,1,2026-07-03,2026-07-03,BLUFF,Bluff City Mechanical (SYNTHETIC),BR01,BRK-3P-60A,"
+    "Breaker 3-pole 60A,3,EA,58.00,64.50,174.00,SPA-VOLT-2026-884,,CN,INV-10021,1\n"
+)
+
+
+def test_return_before_claim_then_a_second_return_after_the_claim(env: Env) -> None:
+    """D-N1. CN-5002 (4 units) is imported BEFORE INV-10021/1 is claimed. Hand: 20 - 4 = 16 units x 12.50 = 200.00.
+    The claim freezes at 200.00; the re-run after the claim still says 200.00 (not 250.00), CN-5002 stays netted
+    (0.00) and nothing is proposed (no agreement_change +50.00, no return_reversal -50.00). A second return CN-5003
+    of 3 units after the claim is reversed at the frozen unit amount: -(3 x 12.50) = -37.50, and only that."""
+    ws = workspace(env)
+    import_sales_part(ws, late=False)
+    import_sales_part(ws, late=True)
+    first = results(ws, run(ws, **WINDOW)["id"])
+    assert Decimal(first["INV-10021/1"]["claim_amount"]) == Decimal("200.00")
+    assert first["CN-5002/1"]["status"] == "netted"
+    batch = claim_and_submit(ws, first, ["INV-10021/1"])
+    assert Decimal(batch["total_amount"]) == Decimal("200.00")
+
+    second = run(ws, **WINDOW)
+    again = results(ws, second["id"])
+    assert again["INV-10021/1"]["status"] == "eligible"
+    assert Decimal(again["INV-10021/1"]["claim_amount"]) == Decimal("200.00")
+    assert again["CN-5002/1"]["status"] == "netted" and Decimal(again["CN-5002/1"]["claim_amount"]) == 0
+    assert propose(ws, second["id"])["proposed"] == []
+
+    import_text(ws, SALES_HEADER + CN_5003, "cn5003.csv")
+    third = run(ws, **WINDOW)
+    res = results(ws, third["id"])
+    assert res["CN-5002/1"]["status"] == "netted"
+    assert res["CN-5003/1"]["status"] == "adjustment"
+    assert Decimal(res["CN-5003/1"]["claim_amount"]) == Decimal("-37.50")
+    (adj,) = propose(ws, third["id"])["proposed"]
+    assert adj["adjustment_type"] == "return_reversal" and Decimal(adj["amount"]) == Decimal("-37.50")
+    assert adj["claim_line_id"] == claim_lines_of(ws, batch["id"])["INV-10021"]["id"]
+
+
+def test_an_adjustment_is_counted_in_the_batch_that_carries_it(env: Env) -> None:
+    """B1 holds INV-10021/1 frozen at 200.00 (hand: 16 x 12.50); CN-5003 (3 units) later gives the approved
+    adjustment -37.50 (3 x 12.50). B2 carries it with INV-10020/1 (312.50 = (30 - 5) x 12.50):
+    B2 = 312.50 - 37.50 = 275.00. B1 stays 200.00 and its line keeps its frozen amount."""
+    ws = workspace(env)
+    approver = member(env.stack, env.app, ws.api, "approver")
+    import_sales_part(ws, late=False)
+    import_sales_part(ws, late=True)
+    b1 = claim_and_submit(ws, results(ws, run(ws, **WINDOW)["id"]), ["INV-10021/1"])
+    import_text(ws, SALES_HEADER + CN_5003, "cn5003.csv")
+    (adj,) = propose(ws, run(ws, **WINDOW)["id"])["proposed"]
+    assert approver.post(f"/claim-adjustments/{adj['id']}/approve").status_code == 200
+    line = pool(ws.api)["INV-10020/1"]
+    assert Decimal(line["claim_amount"]) == Decimal("312.50")
+    r = new_batch(
+        ws.api, line["manufacturer_id"], result_ids=[line["id"]], include_adjustment_ids=[adj["id"]]
+    )
+    assert r.status_code == 201, r.text
+    b2 = r.json()
+    assert Decimal(b2["total_amount"]) == Decimal("275.00")
+    held = ws.api.get(f"/claim-batches/{b1['id']}").json()
+    assert Decimal(held["total_amount"]) == Decimal("200.00") == Decimal(b1["total_amount"])
+    assert Decimal(claim_lines_of(ws, b1["id"])["INV-10021"]["claim_amount"]) == Decimal("200.00")
+
+
+def test_a_netted_return_later_reduced_proposes_the_shortfall_as_an_agreement_change(env: Env) -> None:
+    """D-N10. INV-10021/1 (20 x 12.50) is claimed at 200.00 = (20 - 4) x 12.50, net of CN-5002's 4 units. CN-5002 is
+    then re-imported with 2 units. Hand: the original is now worth (20 - 2) x 12.50 = 225.00, so exactly
+    225.00 - 200.00 = +25.00 is proposed as an agreement_change on the claim line; the frozen claim stays 200.00 and
+    CN-5002 (2 units, all within the 4 netted) stays netted, no return_reversal."""
+    ws = workspace(env)
+    import_sales_part(ws, late=False)
+    import_sales_part(ws, late=True)
+    batch = claim_and_submit(ws, results(ws, run(ws, **WINDOW)["id"]), ["INV-10021/1"])
+    import_text(
+        ws,
+        SALES_HEADER
+        + "CN-5002,1,2026-07-02,2026-07-02,BLUFF,Bluff City Mechanical (SYNTHETIC),BR01,BRK-3P-60A,"
+        "Breaker 3-pole 60A,2,EA,58.00,64.50,116.00,SPA-VOLT-2026-884,,CN,INV-10021,1\n",
+        "cn5002_reduced.csv",
+    )
+    second = run(ws, **WINDOW)
+    res = results(ws, second["id"])
+    assert Decimal(res["INV-10021/1"]["claim_amount"]) == Decimal("225.00")
+    assert res["CN-5002/1"]["status"] == "netted"
+    (adj,) = propose(ws, second["id"])["proposed"]
+    assert adj["adjustment_type"] == "agreement_change" and Decimal(adj["amount"]) == Decimal("25.00")
+    line = claim_lines_of(ws, batch["id"])["INV-10021"]
+    assert adj["claim_line_id"] == line["id"] and Decimal(line["claim_amount"]) == Decimal("200.00")
+    assert propose(ws, second["id"])["proposed"] == []
+
+
+# ---- a reversal is undone when its return is no longer open (second-pass review) -----------------------------
+
+CN_5002_UNLINKED = (
+    "CN-5002,1,2026-07-02,2026-07-02,BLUFF,Bluff City Mechanical (SYNTHETIC),BR01,BRK-3P-60A,"
+    "Breaker 3-pole 60A,4,EA,58.00,64.50,232.00,SPA-VOLT-2026-884,,CN,,\n"
+)
+
+
+def _total(ws: Workspace) -> Decimal:
+    return sum((Decimal(a["amount"]) for a in listing(ws.api, "/claim-adjustments")), Decimal(0))
+
+
+def test_a_reversal_is_undone_when_a_netted_return_is_reduced(env: Env) -> None:
+    """Claim 200.00 = (20 - 4) x 12.50 net of CN-5002 (N = 4). CN-5003 (3 units) after the claim: -(3 x 12.50) =
+    -37.50. CN-5002 is then reduced to 1 unit: returns R = 1 + 3 = 4 = N, so the original stays (20 - 4) x 12.50 =
+    200.00 and CN-5003 is open for max(1 + 3 - 4, 0) = 0 units: reversal due 0, so +37.50 undoes it (total 0)."""
+    ws = workspace(env)
+    import_sales_part(ws, late=False)
+    import_sales_part(ws, late=True)
+    claim_and_submit(ws, results(ws, run(ws, **WINDOW)["id"]), ["INV-10021/1"])
+    import_text(ws, SALES_HEADER + CN_5003, "cn5003.csv")
+    (first,) = propose(ws, run(ws, **WINDOW)["id"])["proposed"]
+    assert Decimal(first["amount"]) == Decimal("-37.50")
+    import_text(
+        ws,
+        SALES_HEADER
+        + "CN-5002,1,2026-07-02,2026-07-02,BLUFF,Bluff City Mechanical (SYNTHETIC),BR01,BRK-3P-60A,"
+        "Breaker 3-pole 60A,1,EA,58.00,64.50,58.00,SPA-VOLT-2026-884,,CN,INV-10021,1\n",
+        "cn5002_one.csv",
+    )
+    second = run(ws, **WINDOW)
+    assert Decimal(results(ws, second["id"])["INV-10021/1"]["claim_amount"]) == Decimal("200.00")
+    (undo,) = propose(ws, second["id"])["proposed"]
+    assert undo["adjustment_type"] == "return_reversal" and Decimal(undo["amount"]) == Decimal("37.50")
+    assert _total(ws) == 0
+    assert propose(ws, second["id"])["proposed"] == []
+    assert propose(ws, run(ws, **WINDOW)["id"])["proposed"] == []
+
+
+def test_a_voided_netted_return_shifts_the_basis_and_undoes_the_later_reversal(env: Env) -> None:
+    """Same claim (200.00, N = 4) and CN-5003 reversal -37.50. CN-5002 is then unlinked (voided): R = 3, so the
+    original is (20 - min(4, 3)) x 12.50 = 17 x 12.50 = 212.50 (+12.50 agreement_change) and CN-5003 is open for
+    max(0 + 3 - 4, 0) = 0 units: +37.50 undoes the reversal. Cumulative: -37.50 + 37.50 + 12.50 = +12.50, i.e. the
+    claim 200.00 + 12.50 = 212.50 = 17 x 12.50."""
+    ws = workspace(env)
+    import_sales_part(ws, late=False)
+    import_sales_part(ws, late=True)
+    claim_and_submit(ws, results(ws, run(ws, **WINDOW)["id"]), ["INV-10021/1"])
+    import_text(ws, SALES_HEADER + CN_5003, "cn5003.csv")
+    propose(ws, run(ws, **WINDOW)["id"])
+    import_text(ws, SALES_HEADER + CN_5002_UNLINKED, "cn5002_void.csv")
+    second = run(ws, **WINDOW)
+    assert Decimal(results(ws, second["id"])["INV-10021/1"]["claim_amount"]) == Decimal("212.50")
+    made = propose(ws, second["id"])["proposed"]
+    by_type = {a["adjustment_type"]: Decimal(a["amount"]) for a in made}
+    assert by_type == {"agreement_change": Decimal("12.50"), "return_reversal": Decimal("37.50")}
+    assert _total(ws) == Decimal("12.50")
+    assert propose(ws, second["id"])["proposed"] == []
+
+
+def test_a_reversal_is_undone_when_its_return_is_voided(env: Env) -> None:
+    """SC-09r: claimed 250.00 before CN-5002 exists, reversal -4 x 12.50 = -50.00. CN-5002 is then unlinked (voided):
+    the original stays 250.00 (no agreement_change) and the reversal is undone by +50.00 (total 0)."""
+    ws = workspace(env)
+    import_sales_part(ws, late=False)
+    claim_and_submit(ws, results(ws, run(ws, **WINDOW)["id"]), ["INV-10021/1"])
+    import_sales_part(ws, late=True)
+    (first,) = propose(ws, run(ws, **WINDOW)["id"])["proposed"]
+    assert Decimal(first["amount"]) == Decimal("-50.00")
+    import_text(ws, SALES_HEADER + CN_5002_UNLINKED, "cn5002_void.csv")
+    second = run(ws, **WINDOW)
+    (undo,) = propose(ws, second["id"])["proposed"]
+    assert undo["adjustment_type"] == "return_reversal" and Decimal(undo["amount"]) == Decimal("50.00")
+    assert undo["claim_line_id"] == first["claim_line_id"] and _total(ws) == 0
+    assert propose(ws, second["id"])["proposed"] == []
+
+
+def test_the_netting_basis_of_a_claim_reads_engine_1_0_0_traces_and_fails_loudly_otherwise(
+    admin_engine: Engine,
+) -> None:
+    """The SQL fragment that reads N from a claim's trace, run against literal traces (no writes): a 1.0.0 trace
+    without ``netted_returned_quantity`` falls back to ``returned_quantity`` (4); the same trace labelled 1.1.0 gives
+    NULL (the reader then raises); a 1.1.0 trace with the key gives 4."""
+
+    def basis(version: str, **keys: str) -> Decimal | None:
+        step = {"step": "returns", "returned_quantity": "4", **keys}
+        trace = json.dumps({"engine_version": version, "steps": [{"step": "price_check"}, step]})
+        with admin_engine.connect() as conn:
+            row = conn.execute(
+                text(f"SELECT {frozen._NETTED} AS n FROM (SELECT CAST(:t AS jsonb) AS trace) r"),
+                {"t": trace},
+            ).one()
+        return None if row.n is None else Decimal(row.n)
+
+    assert basis("1.0.0") == Decimal("4")
+    assert basis("1.1.0") is None
+    assert basis("1.1.0", netted_returned_quantity="4") == Decimal("4")
+
+
+def test_a_return_relinked_to_another_original_moves_its_reversal(env: Env) -> None:
+    """INV-10021/1 and INV-10020/1 are claimed (250.00 = 20 x 12.50; 312.50 = (30 - 5) x 12.50, N = 5 for CN-5001).
+    CN-5002 (4 units) arrives: -(4 x 12.50) = -50.00 on INV-10021. It is then re-imported against INV-10020/1: that
+    original's returns before it are CN-5001 (5), so it is open for min(4, 5 + 4 - 5) = 4 units = -50.00 on INV-10020,
+    and INV-10021 (no return left, 250.00 as frozen) gets +50.00. Total 0, no double reversal."""
+    ws = workspace(env)
+    import_sales_part(ws, late=False)
+    claim_and_submit(ws, results(ws, run(ws, **WINDOW)["id"]), ["INV-10021/1", "INV-10020/1"])
+    import_sales_part(ws, late=True)
+    (first,) = propose(ws, run(ws, **WINDOW)["id"])["proposed"]
+    assert Decimal(first["amount"]) == Decimal("-50.00")
+    import_text(
+        ws,
+        SALES_HEADER + CN_5002_UNLINKED.replace("CN,,\n", "CN,INV-10020,1\n"),
+        "cn5002_relinked.csv",
+    )
+    second = run(ws, **WINDOW)
+    made = propose(ws, second["id"])["proposed"]
+    by_line = {a["claim_line_id"]: Decimal(a["amount"]) for a in made}
+    assert len(made) == 2 and sorted(by_line.values()) == [Decimal("-50.00"), Decimal("50.00")]
+    assert by_line[first["claim_line_id"]] == Decimal("50.00")
+    assert _total(ws) == Decimal("-50.00")  # -50.00 (first) + 50.00 (undo) - 50.00 (INV-10020)
+    assert propose(ws, second["id"])["proposed"] == []
+
+
+def test_an_older_run_cannot_unwind_a_later_reversal(env: Env) -> None:
+    """N = 4 (claim 200.00). R1 (July window, CN-5002 reduced to 1 unit) has CN-5003 netted: max(1 + 3 - 4, 0) = 0.
+    CN-5002 back to 4 units: R2 has CN-5003 open for min(3, 4 + 3 - 4) = 3 units = -37.50, proposed from R2.
+    Proposing from the older R1 would add +37.50 and wipe it out: refused with 409 invalid_state."""
+    ws = workspace(env)
+    import_sales_part(ws, late=False)
+    import_sales_part(ws, late=True)
+    claim_and_submit(ws, results(ws, run(ws, **WINDOW)["id"]), ["INV-10021/1"])
+    import_text(ws, SALES_HEADER + CN_5003, "cn5003.csv")
+    cn5002 = (
+        "CN-5002,1,2026-07-02,2026-07-02,BLUFF,Bluff City Mechanical (SYNTHETIC),BR01,BRK-3P-60A,"
+        "Breaker 3-pole 60A,{q},EA,58.00,64.50,58.00,SPA-VOLT-2026-884,,CN,INV-10021,1\n"
+    )
+    july = {"date_from": "2026-07-01", "date_to": "2026-12-31"}
+    import_text(ws, SALES_HEADER + cn5002.format(q=1), "cn5002_one.csv")
+    older = run(ws, **july)
+    assert results(ws, older["id"])["CN-5003/1"]["status"] == "netted"
+    import_text(ws, SALES_HEADER + cn5002.format(q=4), "cn5002_four.csv")
+    newer = run(ws, **july)
+    (adj,) = propose(ws, newer["id"])["proposed"]
+    assert Decimal(adj["amount"]) == Decimal("-37.50")
+    stale = ws.api.post(f"/calculation-runs/{older['id']}/propose-adjustments")
+    assert stale.status_code == 409 and stale.json()["error"]["code"] == "invalid_state", stale.text
+    assert _total(ws) == Decimal("-37.50")
+
+
+def test_a_reversed_return_that_becomes_an_exception_keeps_its_reversal(env: Env) -> None:
+    """SC-09r: claimed 250.00 (N = 0), CN-5002 (4 units) reversed -50.00 and approved. A 17-unit return CN-5009 of the
+    same original arrives: R = 4 + 17 = 21 > 20 units, so both returns are return_exceeds_original exceptions. A
+    return that is an exception is not gone: nothing is unwound (no +50.00) and nothing new is reversed. Removing the
+    17-unit return (unlinking it) makes CN-5002 open again for 4 units: due -50.00 = done, nothing new; total -50.00."""
+    ws = workspace(env)
+    approver = member(env.stack, env.app, ws.api, "approver")
+    import_sales_part(ws, late=False)
+    claim_and_submit(ws, results(ws, run(ws, **WINDOW)["id"]), ["INV-10021/1"])
+    import_sales_part(ws, late=True)
+    (first,) = propose(ws, run(ws, **WINDOW)["id"])["proposed"]
+    assert Decimal(first["amount"]) == Decimal("-50.00")
+    assert approver.post(f"/claim-adjustments/{first['id']}/approve").status_code == 200
+    cn = (
+        "CN-5009,1,2026-07-04,2026-07-04,BLUFF,Bluff City Mechanical (SYNTHETIC),BR01,BRK-3P-60A,"
+        "Breaker 3-pole 60A,17,EA,58.00,64.50,986.00,SPA-VOLT-2026-884,,CN,{orig}\n"
+    )
+    import_text(ws, SALES_HEADER + cn.format(orig="INV-10021,1"), "cn5009.csv")
+    over = run(ws, **WINDOW)
+    res = results(ws, over["id"])
+    assert (
+        res["CN-5002/1"]["exception_code"] == res["CN-5009/1"]["exception_code"] == "return_exceeds_original"
+    )
+    assert propose(ws, over["id"])["proposed"] == []
+    import_text(ws, SALES_HEADER + cn.format(orig=","), "cn5009_unlinked.csv")
+    fixed = run(ws, **WINDOW)
+    assert results(ws, fixed["id"])["CN-5002/1"]["status"] == "adjustment"
+    assert propose(ws, fixed["id"])["proposed"] == []
+    assert _total(ws) == Decimal("-50.00")
