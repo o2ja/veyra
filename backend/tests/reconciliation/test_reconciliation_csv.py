@@ -502,6 +502,9 @@ def test_an_adjustment_item_is_matched_only_by_a_person_and_yields_no_finding(st
         if f["remittance_line_id"] == lid
     ]
     assert got == [("unmatched_payment", Decimal("100.00"))]
+    # every other finding is a story claim line reported unpaid, never anything from the adjustment item
+    others = [f for f in final.json()["findings"] if f["remittance_line_id"] != lid]
+    assert all(f["case_type"] == "unpaid" and f["claim_line_id"] is not None for f in others), others
 
 
 def _raw_confirmed(
