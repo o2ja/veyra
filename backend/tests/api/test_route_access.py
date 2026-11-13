@@ -164,7 +164,7 @@ DOC_PERMISSIONS: dict[str, str] = {
     "case.work": "APN",
     "case.write_off": "AP",
     "ai.use": "APN",
-    "manufacturer_settings.write": "AP",  # API_SPECIFICATION.md: PUT /manufacturers/{id}/settings write A P
+    "manufacturer_settings.write": "AP",  # SECURITY.md section 3 and API_SPECIFICATION.md: settings write A P
 }
 DOC_ROUTES: dict[tuple[str, str], str] = {  # API_SPECIFICATION.md role column
     ("POST", "/manufacturers"): "APN",

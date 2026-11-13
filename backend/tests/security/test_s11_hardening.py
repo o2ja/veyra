@@ -117,7 +117,7 @@ def test_archive_too_large_is_rejected_below_the_ratio_limit() -> None:
         zf.writestr("xl/sharedStrings.xml", b"\x00" * (101 * 1024 * 1024))
     with pytest.raises(UploadRejected) as e:
         _check_xlsx(buf)
-    assert e.value.details[0]["code"] == "archive_too_large"
+    assert e.value.details[0]["code"] == "archive_too_large" and "CSV" in e.value.details[0]["message"]
 
 
 @pytest.fixture
@@ -172,5 +172,14 @@ def test_password_change_revokes_other_sessions(api: Api, api2: Api, clk: FakeCl
 def test_worker_has_resource_limits_in_prod_compose() -> None:
     compose = (CADDYFILE.parents[1] / "docker" / "compose.prod.yml").read_text()
     worker = compose.split("\n  worker:\n")[1].split("\n  caddy:\n")[0]
+    assert 'tmpfs: ["/tmp:size=512m"]' in worker  # counts toward mem_limit (3g), so it stays small
     for key in ("mem_limit:", "cpus:", "pids_limit:"):
         assert key in worker, key
+
+
+def test_db_errors_hide_bound_parameters(app: FastAPI) -> None:
+    from sqlalchemy.exc import DBAPIError
+
+    with pytest.raises(DBAPIError) as e, app.state.engine.connect() as conn:
+        conn.execute(text("SELECT CAST(:e AS integer)"), {"e": "param-value-x"})
+    assert "[SQL parameters hidden" in str(e.value)

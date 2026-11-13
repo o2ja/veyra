@@ -34,6 +34,7 @@ Roles: `admin`, `approver`, `analyst`, `viewer`. Permissions are enforced in the
 | Permission | admin | approver | analyst | viewer |
 |---|:-:|:-:|:-:|:-:|
 | `user.manage`, `invitation.manage`, `settings.write` | ✔ | | | |
+| `manufacturer_settings.write` (`PUT /manufacturers/{id}/settings`, API_SPECIFICATION §2.3) | ✔ | ✔ | | |
 | `settings.read`, all `*.read` (data, reports) | ✔ | ✔ | ✔ | ✔ |
 | `audit.read` | ✔ | ✔ | | ✔ |
 | `file.upload`, `import.run`, `masterdata.write`, `mapping.write` | ✔ | ✔ | ✔ | |
@@ -60,7 +61,7 @@ Roles: `admin`, `approver`, `analyst`, `viewer`. Permissions are enforced in the
 | Allow-list | `.csv`, `.xlsx`, `.pdf` only. Reject `.xlsm`, `.xls`, `.xlsb`, archives, executables, scripts, HTML, SVG |
 | Triple check | Extension, declared MIME, and magic bytes (`python-magic`) must agree |
 | CSV text encoding | UTF-8, UTF-8 with BOM, Windows-1252 and UTF-16 LE/BE **with BOM** are accepted (S3); the detected encoding is recorded on the import batch. Without a BOM, strict UTF-8 is tried first, then Windows-1252. Bytes valid in neither, and text containing NUL (binary content, UTF-16 without BOM) are rejected with 422 `encoding_unsupported` and a "save as CSV UTF-8" message; decoding never substitutes replacement characters. Other single-byte code pages are read as Windows-1252 (a known limit: the preview shows the result before confirmation) |
-| Size | CSV/XLSX ≤ 50 MB, PDF ≤ 25 MB (config); streaming upload with running size check; reject early |
+| Size | CSV/XLSX ≤ 50 MB, PDF ≤ 25 MB (config); XLSX up to 100 MB inflated (about 250k rows of 6 columns), use CSV for larger (`archive_too_large`); streaming upload with running size check; reject early |
 | Storage | Stream to quarantine key; never to local disk beyond a temp file in a per-request dir; random object keys; original name stored as metadata only (sanitised, never used in paths) |
 | Malware | ClamAV `clamd` scan job before any parsing; `infected`/`error` → file unusable, admin notified; signatures updated daily. Content clamd cannot fully scan (over `MaxFileSize`/`MaxScanSize`/`MaxRecursion`, encrypted, OLE2 macros) is reported as a finding (`AlertExceedsMax`, `AlertEncrypted`, `AlertOLE2Macros`), never as clean |
 | Parsing sandbox | Parsers run in workers with CPU/memory/time limits; XLSX read-only mode, no macros, no external-link resolution, no formula evaluation, zip-bomb guard (max uncompressed size/entries ratio), XML entity expansion disabled (defusedxml); PDFs parsed with `pdfplumber`/`pypdfium2` with page and time caps; no JavaScript execution; OCR in a restricted container |

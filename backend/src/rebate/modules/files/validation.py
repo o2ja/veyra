@@ -38,7 +38,8 @@ CONTENT_TYPE: dict[str, str] = {"csv": "text/csv", "xlsx": XLSX, "pdf": "applica
 
 # Zip-bomb guard for XLSX containers.
 MAX_ZIP_ENTRIES = 10_000
-# 100 MB: openpyxl holds shared strings as Python objects (~10x), so 300 MB inflated past the worker memory limit
+# 100 MB. Assumption, not measured: openpyxl holds shared strings as Python objects (several times the XML size),
+# so the former 300 MB cap could inflate past any sane worker memory limit. 100 MB is about 250k rows x 6 columns.
 MAX_UNCOMPRESSED = 100 * 1024 * 1024
 MAX_RATIO = 100
 
@@ -55,8 +56,8 @@ class FileTooLarge(DomainError):
     message = "The file is too large."
 
 
-def _reject(reason: str) -> UploadRejected:
-    return UploadRejected(details=[{"field": "file", "code": reason, "message": UploadRejected.message}])
+def _reject(reason: str, message: str = UploadRejected.message) -> UploadRejected:
+    return UploadRejected(details=[{"field": "file", "code": reason, "message": message}])
 
 
 _UNSAFE = re.compile(r'[\x00-\x1f\x7f"\\/:*?<>|]')
@@ -196,7 +197,10 @@ def _check_xlsx(body: IO[bytes]) -> None:
                     raise _reject("encrypted")
                 total += info.file_size
                 if total > MAX_UNCOMPRESSED:
-                    raise _reject("archive_too_large")
+                    raise _reject(
+                        "archive_too_large",
+                        "The workbook is too large (over 100 MB uncompressed). Save it as CSV instead.",
+                    )
                 if info.compress_size and info.file_size / info.compress_size > MAX_RATIO:
                     raise _reject("archive_ratio")
                 names.add(info.filename)
