@@ -47,7 +47,7 @@ def upgrade() -> None:
                     USING ERRCODE = 'check_violation';
             END IF;
             IF NEW.claim_adjustment_id IS NOT NULL THEN
-                PERFORM pg_advisory_xact_lock(hashtext(NEW.claim_adjustment_id::text));
+                PERFORM pg_advisory_xact_lock(hashtextextended('recon-adj:' || NEW.claim_adjustment_id::text, 0));
                 SELECT COALESCE(sum(allocated_amount), 0) INTO adj_total FROM reconciliation_matches
                 WHERE tenant_id = NEW.tenant_id AND claim_adjustment_id = NEW.claim_adjustment_id
                   AND status = 'confirmed';

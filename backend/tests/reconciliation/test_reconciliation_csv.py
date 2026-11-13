@@ -495,7 +495,12 @@ def test_an_adjustment_item_is_matched_only_by_a_person_and_yields_no_finding(st
     # needed (the line has a confirmed match) and the adjustment item itself yields no finding.
     final = finalize(ws.api, doc["id"])
     assert final.status_code == 200, final.text
-    got = [(f["case_type"], Decimal(f["amount"])) for f in final.json()["findings"]]
+    # only this line's findings: the story's other claim lines may be reported unpaid (not reached by this document)
+    got = [
+        (f["case_type"], Decimal(f["amount"]))
+        for f in final.json()["findings"]
+        if f["remittance_line_id"] == lid
+    ]
     assert got == [("unmatched_payment", Decimal("100.00"))]
 
 
