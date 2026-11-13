@@ -1,12 +1,15 @@
 # Day log (2026-11-13, owner present)
 
-## SUMMARY (current)
-- Owner decisions 2026-11-13 recorded (PROJECT_STATUS change log): D-N1/D-N3/D-N7 money rule, D-N2, D-N4 deferred, D-N5, D-N6, D-N8, D-N9; plus **D-N10**: a return netted into a frozen claim and later reduced/voided → the claimed original is evaluated on q − min(netted, current returns); the shortfall is proposed as an agreement_change (INV-10021 200.00 → 225.00 = +25.00), carried by a later batch.
-- CI: GitHub Actions unpaid → merge gate `make ci-local` (CLAUDE.md §19). #23 merged (ci-local 6/6 at 1c08c09).
-- In progress: #20 gate run (main merged in, 719d32d); F3 S7 money rule on s7-adjustments (review 1: NOT MERGEABLE, 2 serious → fixing, incl. D-N10).
-- Next: #20 → #21 → #22 (one at a time, ci-local each), then s7 → #15 → S8 → S9 → S10, then UI briefs.
+## SUMMARY (current, 2026-11-13 evening)
+- **Waiting on the owner:** merge #21 (ci-local 6/6 PASS at 4f95e43, comment on the PR). `gh pr merge` is blocked by the auto-mode classifier ("Merge Without Review"); every later merge needs the owner or a permission rule.
+- **Ready after #21, in order:** #15 S7 (5th financial review MERGEABLE) → S8 40dc42f (reviews 3–5 done, no financial discrepancy) → S9 (+D-N2 review) → S10 (+reviewer). Each: merge main in, ci-local 6/6, merge.
+- **Antigravity:** prompts for ui/s7-adjustments, ui/s8, ui/s9, ui/s10 given (branches pre-built). ui/s7 and ui/qa-1 round 2 unverified (Antigravity cannot run Playwright).
+- Open owner questions: D-N4, D-N8, D-N9, D-N11.
 
 ## Log
+- Evening session: Docker Desktop was down → restarted, stack up. #21's earlier gate: 5/6, e2e failed (calculations.spec). Re-run: files.spec failed. Root cause: Vite reloaded the page when Playwright wrote junit-e2e.xml into frontend/; fix 4f95e43 (watch.ignored). Full gate 6/6 PASS at 4f95e43; comment posted; merge blocked by the auto-mode classifier → owner.
+- S8 third pass (fresh, the killed one void): NOT MERGEABLE, no financial discrepancy (all GT values re-derived). Serious: a positive cross-batch adjustment allocation (e.g. D-N10 +25.00) was uncounted cash, breaking §10.2; the §10.3 sentence saying so came from the builder, not the owner → treated as a code defect. Ruling: cross-batch allocation counts max(amount, 0). Rounds 3–5 (b6d17b1, 0051a13, b48546f) + my test tightening 40dc42f. Passes 4 and 5: no financial discrepancy; final MERGEABLE WITH MINORS, minors fixed and verified (reconciliation tests 20 pass, standalone pass).
+- UI: branches ui/s7-adjustments, ui/s8, ui/s9, ui/s10 created on their backend branches + ui/s7, briefs + Antigravity prompts committed. ui/qa-1 e2e not run: dev DB at #21's audit_seals head, branch lacks it → after #21 merges.
 - #23 merged (9a63f6d). #15 converted to draft (WIP).
 - F3 6dc4325: D-N1 fixed (claimed original evaluated on its frozen netting basis; no migration). Financial review 1 NOT MERGEABLE: S1 netted-return reduction ignored (→ owner D-N10), S2 cap clamp; minors engine version + trace, nits. Fix round running.
 
