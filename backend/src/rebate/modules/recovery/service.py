@@ -204,7 +204,7 @@ def _case_deadline(
         # an unpaid line has no remittance: its deadline counts from the claim submission (owner decision D-N2)
         basis = "submission_date"
     if basis == "remittance_date":
-        base = rem.document_date
+        base = rem.document_date if f.remittance_line_id is not None else None
     else:
         base = db.scalar(
             text(
