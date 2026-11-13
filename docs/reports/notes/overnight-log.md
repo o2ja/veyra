@@ -6,7 +6,7 @@
    - `s7-adjustments` 17a70c9: F2 fixes done, full 1897 pass, negctl OK. **Held by D-N1.** PR #15 not merged.
    - `s8-reconciliation` edaa230: S8.3–S8.6 done, re-chained (1 head), full 2023 pass. **Held by D-N3.**
    - `s9-recovery` 0d8021b: S9 complete; reviews: round 1 NOT MERGEABLE → fixed; 2nd pass N1 → fixed; check of that diff MERGEABLE WITH MINORS → minors fixed. Full suite 2222 pass at bef6ba3, negctl OK (211 RLS-dependent). Stacked on S8, so held by D-N3. No PR yet (it would carry S7+S8).
-   - `s10-reporting`: S10 core backend in progress (M1), stacked on S9.
+   - `s10-reporting` c9f971f: S10 core backend built (summary table + refresh job, dashboard, drill-down, trace routes, audit pack CSV/XLSX; tier tracker = existing S5 endpoint). Full 2280 pass, lint gates clean. Review running. Stacked on S9.
    - PR #20 `s11-docs-drill` (restore drill + guides): reviewed, ready; waits for CI.
    - PR #21 `s11-audit-seal` (S11.1) 24eacc3: reviewed twice, all minors fixed; waits for CI.
    - `ui/qa-1`: Playwright 8/18 fail → back to Antigravity. `ui/s7`: waits for #15.
@@ -16,6 +16,7 @@
    - **D-N3 FINANCIAL DISCREPANCY (HARD STOP, S8):** BUSINESS_LOGIC §10.3 says claimed = claim amount "plus approved adjustments included in the **same batch**"; code (`claims/recon_reads.py:32-45`, `reconciliation/matching.py:130-148`) applies an adjustment to its original claim line whatever submitted batch carries it. Ground truth only has the same-batch case (all agree). Different-batch case: rule → CL-4 claimed 250.00 / paid 200.00 / short_paid 50.00; code → 200.00, no case; and if the later batch is paid 262.50 against INV-10020 the code reports a 50.00 short pay there too, so the −50.00 counts twice. Decide which batch an adjustment's amount belongs to. Recommendation: to the batch that carries it (the rule as written), with the original line reconciled at its frozen amount. Linked to D-N1. Review: `docs/reports/notes/s8-financial-review-1.md`. **S8 stopped**; other findings there (serious: finalise auto-categorises unmatched lines without the §10.3 explicit categorisation step; 5 minors) wait for the same decision.
    - **D-N4 (S11.1 retention, not built):** the docs don't specify the deletion path. Five questions are in `k1-s11-audit-seal.md` on branch s11-audit-seal: (1) which tables and dates count as financial records, (2) the workspace deletion flow (request, approval, 30-day grace, who can cancel), (3) the deletion-certificate fields and where it lives outside tenant RLS, (4) which role may delete, plus object-store and backup purge, (5) how a purged audit range anchors the seal chain. Only the dry-run report is built.
    - **D-N5 (S9, owner flag):** a reclaim from a submitted batch that is paid AFTER the case is written off is skipped (closed cases never change, per docs), so `written_off_amount` keeps the full amount and reports overstate the loss. Recommendation: keep closed cases immutable, but report post-write-off receipts as a separate "recovered after write-off" figure in S10.
+   - **D-N6 (S10 figure definitions):** the docs name the dashboard figures but do not define them. M1's definitions are in `docs/reports/notes/m1-s10-reporting.md` (s10-reporting): e.g. claimed excludes adjustments; at_risk = live reclaimable cases only. Audit pack has no PDF (FR-RP-03 says PDF/XLSX). Confirm or correct.
    - **D-N2 (S9, M7):** with the `remittance_date` deadline basis (all seeded manufacturers) an *unpaid* case has deadline NULL, so it never gets a reminder. Ground truth is silent (gap, not contradiction). Decide what the unpaid-case deadline counts from. Recommendation: claim submission date + the manufacturer's dispute window.
 4. **Failures / findings / discrepancies:** two financial HARD STOPs (D-N1 S7, D-N3 S8; details above). ui/qa-1 Playwright failures. All reviewer findings fixed except the open minors listed per PR. Claude usage limit hit once (~05:00Z), agents resumed.
 5. **Antigravity prompts ready:** `antigravity-prompt-qa-1-fixes.md`. S7/S8/S9 UI briefs NOT written: their backends have not merged (rule: brief after merge).
@@ -49,6 +50,7 @@
 - J1 N1–N3 + negctl fixed (bef6ba3): negctl OK (211 RLS-dependent), isolation 417. Review of that diff: MERGEABLE WITH MINORS (spec wording, a loose test assertion, half-even display rounding) → orchestrator fixes; D-N5 owner flag.
 - S9 full suite at bef6ba3: 2222 passed, 0 failed. I fixed the 3 review minors (0d8021b; 15 targeted tests pass, mypy/ruff clean).
 - Choice: no S8/S9 completion reports tonight; both stages are blocked by hard stops, so their state lives in this log. Completion reports are written once D-N1/D-N3 are decided.
+- M1 S10 core done (c9f971f): ground-truth figures claimed 10,722.50 / collected 7,520.00 / short-paid 2,890.00 / at-risk 660.00; Hypothesis Σ drill-down = figure; isolation extended. Full 2280 pass. Opus review (money+security+DB) running.
 
 ---
 
