@@ -5,7 +5,7 @@
 2. **In progress / ready (branch → state):**
    - `s7-adjustments` 17a70c9: F2 fixes done, full 1897 pass, negctl OK. **Held by D-N1.** PR #15 not merged.
    - `s8-reconciliation` edaa230: S8.3–S8.6 done, re-chained (1 head), full 2023 pass. **Held by D-N3.**
-   - `s9-recovery`: S9 done + review-1 fixes (full 2217 pass); 2nd-pass serious N1 + negctl misclassifications being fixed by J1. Stacked on S8.
+   - `s9-recovery` 0d8021b: S9 complete; reviews: round 1 NOT MERGEABLE → fixed; 2nd pass N1 → fixed; check of that diff MERGEABLE WITH MINORS → minors fixed. Full suite 2222 pass at bef6ba3, negctl OK (211 RLS-dependent). Stacked on S8, so held by D-N3. No PR yet (it would carry S7+S8).
    - `s10-reporting`: S10 core backend in progress (M1), stacked on S9.
    - PR #20 `s11-docs-drill` (restore drill + guides): reviewed, ready; waits for CI.
    - PR #21 `s11-audit-seal` (S11.1): reviewed twice, MERGEABLE WITH MINORS; waits for CI.
@@ -47,6 +47,8 @@
 - negctl on s9 (fd2123e): 4 misclassified isolation cases (2 S8 tables, 1 S9 table pass with RLS off; 2 S8 D9 cases fail without RLS). Test-only fix sent to J1.
 - S9 2nd pass: NOT MERGEABLE: N1 serious (partly recovered case can never be written off once its reclaim batch is submitted), N2 minor, N3 nit; S1/S3-M6 fixed, CM-7781 cases re-derived OK. Note for owner: S9 `retire_recovery_reclaims` rejects S7 adjustments via reject() (behaviour touching S7, no money change). Sent to J1.
 - J1 N1–N3 + negctl fixed (bef6ba3): negctl OK (211 RLS-dependent), isolation 417. Review of that diff: MERGEABLE WITH MINORS (spec wording, a loose test assertion, half-even display rounding) → orchestrator fixes; D-N5 owner flag.
+- S9 full suite at bef6ba3: 2222 passed, 0 failed. I fixed the 3 review minors (0d8021b; 15 targeted tests pass, mypy/ruff clean).
+- Choice: no S8/S9 completion reports tonight; both stages are blocked by hard stops, so their state lives in this log. Completion reports are written once D-N1/D-N3 are decided.
 
 ---
 
