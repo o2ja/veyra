@@ -1,3 +1,17 @@
+# Day log (2026-11-13, owner present)
+
+## SUMMARY (current)
+- Owner decisions 2026-11-13 recorded (PROJECT_STATUS change log): D-N1/D-N3/D-N7 money rule, D-N2, D-N4 deferred, D-N5, D-N6, D-N8, D-N9; plus **D-N10**: a return netted into a frozen claim and later reduced/voided → the claimed original is evaluated on q − min(netted, current returns); the shortfall is proposed as an agreement_change (INV-10021 200.00 → 225.00 = +25.00), carried by a later batch.
+- CI: GitHub Actions unpaid → merge gate `make ci-local` (CLAUDE.md §19). #23 merged (ci-local 6/6 at 1c08c09).
+- In progress: #20 gate run (main merged in, 719d32d); F3 S7 money rule on s7-adjustments (review 1: NOT MERGEABLE, 2 serious → fixing, incl. D-N10).
+- Next: #20 → #21 → #22 (one at a time, ci-local each), then s7 → #15 → S8 → S9 → S10, then UI briefs.
+
+## Log
+- #23 merged (9a63f6d). #15 converted to draft (WIP).
+- F3 6dc4325: D-N1 fixed (claimed original evaluated on its frozen netting basis; no migration). Financial review 1 NOT MERGEABLE: S1 netted-return reduction ignored (→ owner D-N10), S2 cap clamp; minors engine version + trace, nits. Fix round running.
+
+---
+
 # Overnight log (2026-11-13, unattended)
 
 ## MORNING SUMMARY
