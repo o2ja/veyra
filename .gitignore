@@ -13,6 +13,8 @@ coverage.xml
 junit*.xml
 testdata/generated_volume/
 .claude/review/
+.claude/settings.local.json
+.claude/worktrees/
 test-results/
 playwright-report/
 junit-e2e.xml
