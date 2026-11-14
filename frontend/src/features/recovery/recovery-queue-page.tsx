@@ -313,7 +313,7 @@ function SummaryTable({
 }) {
   if (rows.length === 0) return <Empty>No {caption.toLowerCase()} yet.</Empty>;
   return (
-    <div className="overflow-x-auto" tabIndex={0} role="region" aria-label={caption}>
+    <div className="overflow-x-auto" tabIndex={0} role="region" aria-label="Scrollable summary table">
       <table className="w-full text-left text-sm">
         <caption className="mb-1 text-left font-medium">{caption}</caption>
         <thead className="text-muted">
