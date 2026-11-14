@@ -287,7 +287,11 @@ export function ClaimBatchDetailPage() {
                   </Button>
                 )}
                 {canExport && (
-                  <Button variant="secondary" onClick={() => setExportOpen(true)}>
+                  <Button
+                    variant="secondary"
+                    disabled={exportBatch.isPending}
+                    onClick={() => setExportOpen(true)}
+                  >
                     Export batch
                   </Button>
                 )}

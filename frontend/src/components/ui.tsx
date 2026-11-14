@@ -91,11 +91,43 @@ export function Alert({
   );
 }
 
+export function rateLimitMessage(
+  error: { code?: string; status?: number; retryAfter?: number | string | null } | null | undefined,
+): string | null {
+  if (!error) return null;
+  const isRateLimited =
+    error.status === 429 || error.code === "rate_limited" || error.code === "too_many_extractions";
+  if (!isRateLimited) return null;
+
+  const seconds =
+    typeof error.retryAfter === "number"
+      ? error.retryAfter
+      : typeof error.retryAfter === "string"
+        ? parseInt(error.retryAfter, 10)
+        : null;
+
+  if (typeof seconds === "number" && Number.isFinite(seconds) && seconds > 0) {
+    return `Too many requests. Try again in ${seconds} seconds.`;
+  }
+  return "Too many requests. Try again in a minute.";
+}
+
+export function RateLimitAlert({
+  error,
+}: {
+  error: { code?: string; status?: number; retryAfter?: number | string | null } | null | undefined;
+}) {
+  const message = rateLimitMessage(error);
+  if (!message) return null;
+  return <Alert tone="danger">{message}</Alert>;
+}
+
 export function ErrorAlert({ error }: { error: ApiError | null | undefined }) {
   if (!error) return null;
+  const rateLimitMsg = rateLimitMessage(error);
   return (
     <Alert>
-      {error.message}
+      {rateLimitMsg ?? error.message}
       {error.requestId && <span className="block text-xs">Reference: {error.requestId}</span>}
     </Alert>
   );

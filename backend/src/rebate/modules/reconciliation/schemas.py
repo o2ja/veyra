@@ -203,9 +203,7 @@ class ManualMatchIn(BaseModel):
 
     remittance_line_id: JsonUUID
     claim_line_id: JsonUUID | None = None
-    claim_adjustment_id: JsonUUID | None = (
-        None  # interim (D-N11): an adjustment item carried by another batch
-    )
+    claim_adjustment_id: JsonUUID | None = None  # an adjustment item carried by another batch
     allocated_amount: Money
     # sign and zero rules depend on the target and the line's amount_paid; the service validates them
 
