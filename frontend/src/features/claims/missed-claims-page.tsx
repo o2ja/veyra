@@ -1,5 +1,5 @@
-import { useMutation, useQuery } from "@tanstack/react-query";
-import { useState } from "react";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useEffect, useState } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
 
 import { Alert, Button, Card, ErrorAlert, Field, Loading, PermissionDenied } from "../../components/ui";
@@ -11,10 +11,12 @@ import { ClaimsNav, ConfirmDialog, FileDownloadButton, ValidationDetailsAlert } 
 import {
   ADJUSTMENT_TYPE_LABELS,
   formatDecimal,
+  getJobRefetchInterval,
   type AccrualOut,
   type AdjustmentOut,
   type BatchIn,
   type ExportAccepted,
+  type JobOut,
   type MissedList,
   type MissedOut,
 } from "./logic";
@@ -22,6 +24,7 @@ import {
 export function MissedClaimsPage() {
   const { can } = useSession();
   const navigate = useNavigate();
+  const client = useQueryClient();
   const pager = usePager();
   const accrualPager = usePager();
   const [searchParams, setSearchParams] = useSearchParams();
@@ -43,6 +46,8 @@ export function MissedClaimsPage() {
   const [createBatchMode, setCreateBatchMode] = useState<"selected" | "filter" | "accruals" | null>(null);
   const [batchIdemKey] = useState<string>(() => crypto.randomUUID());
   const [exportAccepted, setExportAccepted] = useState<ExportAccepted | null>(null);
+  const [pollingJobId, setPollingJobId] = useState<string | null>(null);
+  const [jobResult, setJobResult] = useState<JobOut | null>(null);
 
   const summary = useQuery({
     queryKey: ["missed-claims", "summary", manufacturerId, agreementId, invoiceFrom, invoiceTo],
@@ -115,22 +120,36 @@ export function MissedClaimsPage() {
   });
 
   const jobQuery = useQuery({
-    queryKey: ["jobs", exportAccepted?.job.id],
-    enabled: Boolean(exportAccepted?.job.id),
+    queryKey: ["jobs", pollingJobId],
+    enabled: Boolean(pollingJobId),
     queryFn: () => {
-      const jid = exportAccepted?.job.id;
-      if (!jid) throw new Error("Missing job id");
+      if (!pollingJobId) throw new Error("Missing job id");
       return unwrap(
         api.GET("/api/v1/jobs/{job_id}", {
-          params: { path: { job_id: jid } },
+          params: { path: { job_id: pollingJobId } },
         }),
       );
     },
     refetchInterval: (query) => {
       const st = query.state.data?.status;
-      return st === "running" || st === "queued" || st === "pending" ? 2000 : false;
+      return getJobRefetchInterval(st);
     },
   });
+
+  useEffect(() => {
+    const job = jobQuery.data;
+    if (!job || !pollingJobId) return;
+
+    if (job.status === "succeeded") {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
+      setJobResult(job);
+      setPollingJobId(null);
+      void client.invalidateQueries({ queryKey: ["missed-claims"] });
+    } else if (job.status === "failed") {
+      setJobResult(job);
+      setPollingJobId(null);
+    }
+  }, [jobQuery.data, pollingJobId, client]);
 
   const exportList = useMutation({
     mutationFn: async (format: "csv" | "xlsx") => {
@@ -151,6 +170,8 @@ export function MissedClaimsPage() {
     },
     onSuccess: (data) => {
       setExportAccepted(data);
+      setPollingJobId(data.job.id);
+      setJobResult(null);
     },
   });
 
@@ -257,8 +278,11 @@ export function MissedClaimsPage() {
   const listData = list.data as MissedList | undefined;
   const rows: MissedOut[] = listData?.data ?? [];
   const allOnPageSelected = rows.length > 0 && rows.every((r) => selectedIds.has(r.id));
-  const jobStatus = jobQuery.data?.status;
-  const isJobDone = jobStatus === "completed" || jobStatus === "finished";
+  const currentJob = jobResult ?? jobQuery.data;
+  const jobStatus = currentJob?.status ?? (pollingJobId ? "queued" : undefined);
+  const isJobSucceeded = jobStatus === "succeeded";
+  const isJobFailed = jobStatus === "failed";
+  const jobError = currentJob?.last_error ?? (currentJob as { error?: string } | undefined)?.error;
 
   return (
     <>
@@ -311,8 +335,16 @@ export function MissedClaimsPage() {
           {exportErr && <ErrorAlert error={exportErr} />}
           {exportAccepted && (
             <div className="mt-4 rounded-md border border-line bg-surface/50 p-3 text-sm">
-              <span className="font-medium">Export job:</span> {jobStatus ? `Status: ${jobStatus}` : "Queued"}
-              {isJobDone && (
+              <span className="font-medium">Export job:</span> Status:{" "}
+              <span className="font-medium capitalize">{jobStatus ? jobStatus : "queued"}</span>
+              {isJobFailed && (
+                <div role="alert" className="mt-2">
+                  <Alert tone="danger">
+                    Export failed: {jobError || "The export job encountered an error."}
+                  </Alert>
+                </div>
+              )}
+              {isJobSucceeded && (
                 <div className="mt-2">
                   <FileDownloadButton
                     fileId={exportAccepted.file_id}

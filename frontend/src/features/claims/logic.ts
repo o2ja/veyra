@@ -27,6 +27,23 @@ export type OptionsIn = components["schemas"]["OptionsIn"];
 
 export const BATCH_STATUSES = ["draft", "approved", "submitted", "void"] as const;
 
+export const JOB_STATUSES = ["queued", "running", "succeeded", "failed"] as const;
+export type JobStatus = (typeof JOB_STATUSES)[number];
+
+export function isJobActive(status: string | null | undefined): boolean {
+  return status === "queued" || status === "running" || status === "pending";
+}
+
+export function isJobTerminal(status: string | null | undefined): boolean {
+  return status === "succeeded" || status === "failed";
+}
+
+export function getJobRefetchInterval(status: string | null | undefined, intervalMs = 2000): number | false {
+  if (isJobTerminal(status)) return false;
+  if (isJobActive(status)) return intervalMs;
+  return false;
+}
+
 export const BATCH_STATUS_LABELS: Record<string, string> = {
   draft: "Draft",
   approved: "Approved",

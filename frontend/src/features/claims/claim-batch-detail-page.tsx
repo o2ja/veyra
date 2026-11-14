@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 
 import { Alert, Button, Card, ErrorAlert, Field, Loading, PermissionDenied } from "../../components/ui";
@@ -19,9 +19,11 @@ import {
   BATCH_STATUS_LABELS,
   canApproveBatch,
   formatDecimal,
+  getJobRefetchInterval,
   type AdjustmentOut,
   type ExportAccepted,
   type ExportTemplateOut,
+  type JobOut,
   type LineOut,
 } from "./logic";
 
@@ -42,6 +44,8 @@ export function ClaimBatchDetailPage() {
   const [exportOpen, setExportOpen] = useState(false);
   const [selectedTemplateId, setSelectedTemplateId] = useState("");
   const [exportAccepted, setExportAccepted] = useState<ExportAccepted | null>(null);
+  const [pollingJobId, setPollingJobId] = useState<string | null>(null);
+  const [jobResult, setJobResult] = useState<JobOut | null>(null);
 
   const [submitIdemKey, setSubmitIdemKey] = useState<string>(() => crypto.randomUUID());
 
@@ -105,22 +109,37 @@ export function ClaimBatchDetailPage() {
   });
 
   const jobQuery = useQuery({
-    queryKey: ["jobs", exportAccepted?.job.id],
-    enabled: Boolean(exportAccepted?.job.id),
+    queryKey: ["jobs", pollingJobId],
+    enabled: Boolean(pollingJobId),
     queryFn: () => {
-      const jid = exportAccepted?.job.id;
-      if (!jid) throw new Error("Missing job id");
+      if (!pollingJobId) throw new Error("Missing job id");
       return unwrap(
         api.GET("/api/v1/jobs/{job_id}", {
-          params: { path: { job_id: jid } },
+          params: { path: { job_id: pollingJobId } },
         }),
       );
     },
     refetchInterval: (query) => {
       const st = query.state.data?.status;
-      return st === "running" || st === "queued" || st === "pending" ? 2000 : false;
+      return getJobRefetchInterval(st);
     },
   });
+
+  useEffect(() => {
+    const job = jobQuery.data;
+    if (!job || !pollingJobId) return;
+
+    if (job.status === "succeeded") {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
+      setJobResult(job);
+      setPollingJobId(null);
+      void client.invalidateQueries({ queryKey: ["claim-batches", batchId] });
+      void client.invalidateQueries({ queryKey: ["claim-batches"] });
+    } else if (job.status === "failed") {
+      setJobResult(job);
+      setPollingJobId(null);
+    }
+  }, [jobQuery.data, pollingJobId, client, batchId]);
 
   const approve = useMutation({
     mutationFn: () =>
@@ -189,6 +208,8 @@ export function ClaimBatchDetailPage() {
     },
     onSuccess: (data) => {
       setExportAccepted(data);
+      setPollingJobId(data.job.id);
+      setJobResult(null);
       setExportOpen(false);
     },
   });
@@ -233,8 +254,11 @@ export function ClaimBatchDetailPage() {
   const canExport = b && b.status === "approved" && can("claim_batch.create");
   const canSubmit = b && b.status === "approved" && can("claim_batch.submit");
 
-  const jobStatus = jobQuery.data?.status;
-  const isJobDone = jobStatus === "completed" || jobStatus === "finished";
+  const currentJob = jobResult ?? jobQuery.data;
+  const jobStatus = currentJob?.status ?? (pollingJobId ? "queued" : undefined);
+  const isJobSucceeded = jobStatus === "succeeded";
+  const isJobFailed = jobStatus === "failed";
+  const jobError = currentJob?.last_error ?? (currentJob as { error?: string } | undefined)?.error;
 
   return (
     <>
@@ -346,8 +370,17 @@ export function ClaimBatchDetailPage() {
               {exportAccepted && (
                 <div className="rounded-md border border-line bg-surface/50 p-4 text-sm">
                   <h2 className="font-semibold">Batch export</h2>
-                  <p className="mt-1">Job status: {jobStatus ? jobStatus : "Queued"}</p>
-                  {isJobDone && (
+                  <p className="mt-1">
+                    Job status: <span className="font-medium capitalize">{jobStatus ?? "Queued"}</span>
+                  </p>
+                  {isJobFailed && (
+                    <div role="alert" className="mt-2">
+                      <Alert tone="danger">
+                        Export failed: {jobError || "The export job encountered an error."}
+                      </Alert>
+                    </div>
+                  )}
+                  {isJobSucceeded && (
                     <div className="mt-2">
                       <FileDownloadButton fileId={exportAccepted.file_id} label="Download generated export" />
                     </div>

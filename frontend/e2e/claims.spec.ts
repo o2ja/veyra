@@ -166,7 +166,7 @@ test("S7 claims: missed scan, batch creation, four-eyes approval, templates, exp
   // 7. Missed claims scan (/claims/missed)
   await page.getByRole("link", { name: "Claims" }).click();
   await expect(page).toHaveURL("/claims/missed");
-  await expect(page.getByRole("heading", { name: "Missed claims" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Missed claims filters" })).toBeVisible();
   await noViolations(page, "/claims/missed");
 
   // Filter by Voltara Ltd
@@ -182,6 +182,7 @@ test("S7 claims: missed scan, batch creation, four-eyes approval, templates, exp
 
   // Select first line and read its document number
   const firstDocText = (await linesTable.locator("tbody tr td").nth(1).innerText()).trim();
+  expect(firstDocText).toBeTruthy();
   await firstCheckbox.check();
 
   const createBatchBtn = page.getByRole("button", { name: /Create batch from selected/ });
@@ -240,8 +241,9 @@ test("S7 claims: missed scan, batch creation, four-eyes approval, templates, exp
   await expect(exportDialog).toBeVisible();
   await exportDialog.getByLabel("Export template").selectOption({ index: 1 });
   await exportDialog.getByRole("button", { name: "Start export" }).click();
-  await expect(exportDialog.getByText(/Download/)).toBeVisible({ timeout: 60_000 });
-  await exportDialog.getByRole("button", { name: "Cancel" }).click();
+  await expect(page.getByRole("button", { name: /Download generated export/ })).toBeVisible({
+    timeout: 60_000,
+  });
 
   // Submit batch
   await page.getByRole("button", { name: "Submit batch" }).click();
@@ -264,11 +266,8 @@ test("S7 claims: missed scan, batch creation, four-eyes approval, templates, exp
   await page.getByLabel("Manufacturer").selectOption({ index: 1 });
   await page.getByRole("button", { name: "Apply filters" }).click();
   await expect(linesTable).toBeVisible();
-  if (firstDocText) {
-    // Should not contain the claimed line if only 1 line matched that doc
-    const currentRows = await linesTable.locator("tbody tr").allInnerTexts();
-    expect(currentRows.some((row) => row.includes(firstDocText) && row.includes("Frozen"))).toBeFalsy();
-  }
+  const currentRows = await linesTable.locator("tbody tr").allInnerTexts();
+  expect(currentRows.some((row) => row.includes(firstDocText) && row.includes("Frozen"))).toBeFalsy();
 
   await approverCtx.close();
 });
