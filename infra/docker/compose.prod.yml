@@ -32,6 +32,13 @@ x-app-env: &app-env
   S3_SECRET_ACCESS_KEY: ${S3_SECRET_ACCESS_KEY:?set in env file}
   CLAMD_HOST: clamav
   CLAMD_PORT: "3310"
+  DATABASE_URL_AI: postgresql+psycopg://rebate_ai_writer:${REBATE_AI_WRITER_PASSWORD:-}@postgres:5432/${REBATE_DB_NAME:-rebate}
+  AI_PROVIDER: ${AI_PROVIDER:-}
+  GEMINI_API_KEY: ${GEMINI_API_KEY:-}
+  ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+  AI_MODEL: ${AI_MODEL:-}
+  AI_PRICE_INPUT_PER_MTOK: ${AI_PRICE_INPUT_PER_MTOK:-}
+  AI_PRICE_OUTPUT_PER_MTOK: ${AI_PRICE_OUTPUT_PER_MTOK:-}
 
 x-app-image: &app-image
   image: rebate-api:${REBATE_IMAGE_TAG:?set in env file}
@@ -121,7 +128,6 @@ services:
     command: ["python", "-m", "rebate.workers"]
     environment:
       <<: *app-env
-      DATABASE_URL_AI: postgresql+psycopg://rebate_ai_writer:${REBATE_AI_WRITER_PASSWORD:?set in env file}@postgres:5432/${REBATE_DB_NAME:-rebate}
       SMTP_HOST: ${SMTP_HOST:?set in env file}
       SMTP_PORT: ${SMTP_PORT:-587}
       SMTP_STARTTLS: ${SMTP_STARTTLS:-true}

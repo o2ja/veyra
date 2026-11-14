@@ -1,7 +1,7 @@
 """S6.2 the AI gateway: the single place that talks to an LLM (AI_PROCESSING.md §2, §4, §9, §10).
 
-* ``Provider`` is the interface; ``AnthropicProvider`` the first adapter (structured output through one
-  forced tool call; no other tools are ever offered to the model).
+* ``Provider`` is the interface; ``AnthropicProvider`` (forced tool call) and ``GeminiProvider``
+  (structured output via REST generateContent and responseSchema) are the adapters.
 * ``Gateway.call`` enforces, in order: the per-workspace opt-in (``ai_enabled`` from tenant settings), the
   per-tenant daily cost/token caps, retries with exponential backoff and jitter (``tenacity``, ``Retry-After``
   honoured), one repair attempt when the output does not validate, and a cost row per call in
@@ -13,6 +13,7 @@
 """
 
 import hashlib
+import json
 import time
 from collections.abc import Callable
 from dataclasses import dataclass
@@ -23,6 +24,7 @@ from typing import Any, Protocol
 from uuid import UUID
 
 import anthropic
+import httpx
 import structlog
 from sqlalchemy import Engine, func, select, text
 from sqlalchemy.exc import DBAPIError
@@ -165,11 +167,232 @@ class AnthropicProvider:
         )
 
 
+def convert_schema(schema: dict[str, Any]) -> dict[str, Any]:
+    """Convert a JSON Schema into a Gemini responseSchema (OpenAPI 3.0 subset).
+
+    Inlines $ref from $defs/definitions, simplifies anyOf/nullable unions,
+    translates const to enum, and removes keywords unsupported by Gemini.
+    """
+    defs: dict[str, Any] = {}
+    if "$defs" in schema and isinstance(schema["$defs"], dict):
+        defs.update(schema["$defs"])
+    if "definitions" in schema and isinstance(schema["definitions"], dict):
+        defs.update(schema["definitions"])
+
+    def _resolve_ref(ref_str: str) -> dict[str, Any]:
+        parts = ref_str.lstrip("#/").split("/")
+        target: Any = defs
+        for p in parts:
+            if p in ("$defs", "definitions"):
+                continue
+            if isinstance(target, dict) and p in target:
+                target = target[p]
+            else:
+                return {}
+        return dict(target) if isinstance(target, dict) else {}
+
+    def _convert(node: Any) -> Any:
+        if not isinstance(node, dict):
+            return node
+
+        if "$ref" in node and isinstance(node["$ref"], str):
+            resolved = _resolve_ref(node["$ref"])
+            merged = {**resolved, **{k: v for k, v in node.items() if k != "$ref"}}
+            return _convert(merged)
+
+        out: dict[str, Any] = {}
+
+        if "anyOf" in node and isinstance(node["anyOf"], list):
+            any_of = node["anyOf"]
+            is_nullable = any(
+                isinstance(s, dict) and (s.get("type") == "null" or s.get("type") == ["null"]) for s in any_of
+            )
+            non_null = [
+                s
+                for s in any_of
+                if isinstance(s, dict) and s.get("type") != "null" and s.get("type") != ["null"]
+            ]
+            if non_null:
+                base = _convert(non_null[0])
+                if is_nullable and isinstance(base, dict):
+                    base["nullable"] = True
+                return base
+            elif is_nullable:
+                return {"nullable": True}
+
+        raw_type = node.get("type")
+        if isinstance(raw_type, list):
+            nullable = "null" in raw_type
+            types = [t for t in raw_type if t != "null"]
+            out["type"] = types[0] if types else "string"
+            if nullable:
+                out["nullable"] = True
+        elif isinstance(raw_type, str):
+            out["type"] = raw_type
+
+        if "const" in node:
+            val = node["const"]
+            out["enum"] = [val]
+            if "type" not in out:
+                if isinstance(val, int) and not isinstance(val, bool):
+                    out["type"] = "integer"
+                elif isinstance(val, float):
+                    out["type"] = "number"
+                elif isinstance(val, bool):
+                    out["type"] = "boolean"
+                else:
+                    out["type"] = "string"
+
+        if "enum" in node and isinstance(node["enum"], list):
+            enum_vals = node["enum"]
+            has_none = None in enum_vals
+            clean_enum = [v for v in enum_vals if v is not None]
+            out["enum"] = clean_enum
+            if has_none:
+                out["nullable"] = True
+            if "type" not in out and clean_enum:
+                if all(isinstance(v, int) and not isinstance(v, bool) for v in clean_enum):
+                    out["type"] = "integer"
+                elif all(isinstance(v, str) for v in clean_enum):
+                    out["type"] = "string"
+
+        if "properties" in node and isinstance(node["properties"], dict):
+            out["properties"] = {k: _convert(v) for k, v in node["properties"].items()}
+
+        if "items" in node:
+            out["items"] = _convert(node["items"])
+
+        if "required" in node and isinstance(node["required"], list):
+            out["required"] = list(node["required"])
+
+        if "description" in node and isinstance(node["description"], str):
+            out["description"] = node["description"]
+
+        if node.get("nullable"):
+            out["nullable"] = True
+
+        for num_key in ("minimum", "maximum", "minLength", "maxLength"):
+            if num_key in node:
+                out[num_key] = node[num_key]
+
+        return out
+
+    converted = _convert(schema)
+    return converted if isinstance(converted, dict) else {}
+
+
+class GeminiProvider:
+    name = "gemini"
+
+    def __init__(self, api_key: str, http_client: Any = None) -> None:
+        self._api_key = api_key
+        self._client: Any = http_client
+
+    def complete(
+        self,
+        *,
+        model: str,
+        system: str,
+        user: str,
+        tool_name: str,
+        schema: dict[str, Any],
+        max_tokens: int,
+        timeout: float,
+    ) -> ProviderResponse:
+        url = f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent"
+        payload = {
+            "contents": [
+                {
+                    "role": "user",
+                    "parts": [{"text": user}],
+                }
+            ],
+            "systemInstruction": {
+                "parts": [{"text": system}],
+            },
+            "generationConfig": {
+                "responseMimeType": "application/json",
+                "responseSchema": convert_schema(schema),
+                "maxOutputTokens": max_tokens,
+            },
+        }
+        headers = {
+            "x-goog-api-key": self._api_key,
+            "Content-Type": "application/json",
+        }
+        client = self._client or httpx.Client()
+        try:
+            resp = client.post(url, json=payload, headers=headers, timeout=timeout)
+        except (httpx.TimeoutException, httpx.NetworkError) as exc:
+            raise ProviderCallError("timeout", retryable=True) from exc
+        except Exception as exc:
+            if "Timeout" in type(exc).__name__ or "Connect" in type(exc).__name__:
+                raise ProviderCallError("timeout", retryable=True) from exc
+            raise
+
+        if resp.is_error:
+            retry_after: float | None = None
+            raw = resp.headers.get("retry-after")
+            if raw is not None:
+                try:
+                    retry_after = float(raw)
+                except ValueError:
+                    retry_after = None
+            retryable = resp.status_code in (408, 409, 429) or resp.status_code >= 500
+            raise ProviderCallError(f"http_{resp.status_code}", retryable=retryable, retry_after=retry_after)
+
+        try:
+            body = resp.json()
+        except Exception:
+            return ProviderResponse(None, 0, 0)
+
+        usage = body.get("usageMetadata") or {}
+        input_tokens = int(usage.get("promptTokenCount") or 0)
+        output_tokens = int(usage.get("candidatesTokenCount") or 0)
+
+        candidates = body.get("candidates")
+        if not candidates or not isinstance(candidates, list) or len(candidates) == 0:
+            return ProviderResponse(None, input_tokens, output_tokens)
+
+        candidate = candidates[0]
+        finish_reason = candidate.get("finishReason")
+        if finish_reason in ("SAFETY", "RECITATION", "BLOCKLIST", "PROHIBITED_CONTENT"):
+            return ProviderResponse(None, input_tokens, output_tokens)
+
+        content = candidate.get("content") or {}
+        parts = content.get("parts") or []
+        if not parts or not isinstance(parts, list) or len(parts) == 0:
+            return ProviderResponse(None, input_tokens, output_tokens)
+
+        text_content = parts[0].get("text")
+        if not text_content or not isinstance(text_content, str):
+            return ProviderResponse(None, input_tokens, output_tokens)
+
+        try:
+            data = json.loads(text_content)
+            if not isinstance(data, dict):
+                data = None
+        except json.JSONDecodeError, ValueError:
+            data = None
+
+        return ProviderResponse(data, input_tokens, output_tokens)
+
+
 def make_provider(settings: Settings) -> Provider:
-    if settings.anthropic_api_key is None:
-        raise NotConfigured("no AI provider key is configured")
-    client = HTTP_CLIENT_FACTORY() if HTTP_CLIENT_FACTORY is not None else None
-    return AnthropicProvider(settings.anthropic_api_key.get_secret_value(), client)
+    if settings.ai_provider == "gemini":
+        if settings.gemini_api_key is None:
+            raise NotConfigured("no AI provider key is configured")
+        if settings.ai_model == "claude-sonnet-5-5":
+            raise NotConfigured("set AI_MODEL for the gemini provider")
+        client = HTTP_CLIENT_FACTORY() if HTTP_CLIENT_FACTORY is not None else None
+        return GeminiProvider(settings.gemini_api_key.get_secret_value(), client)
+    elif settings.ai_provider == "anthropic":
+        if settings.anthropic_api_key is None:
+            raise NotConfigured("no AI provider key is configured")
+        client = HTTP_CLIENT_FACTORY() if HTTP_CLIENT_FACTORY is not None else None
+        return AnthropicProvider(settings.anthropic_api_key.get_secret_value(), client)
+    else:
+        raise NotConfigured(f"unsupported AI provider: {settings.ai_provider}")
 
 
 def cost_usd(settings: Settings, input_tokens: int, output_tokens: int) -> Decimal:
@@ -263,7 +486,7 @@ class Gateway:
             sleep=self._sleep,
             reraise=True,
         )
-        return retrying(
+        return retrying(  # type: ignore[no-any-return]
             self.provider.complete,
             model=model,
             system=system,

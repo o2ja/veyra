@@ -12,7 +12,8 @@ on staff change and immediately on suspected leak (then also follow `incident-te
 | `POSTGRES_PASSWORD` | `ALTER ROLE postgres PASSWORD ...` via `$C exec postgres psql -U postgres`, then update `.env.prod` (only backups and init-db use it) | |
 | `S3_ACCESS_KEY_ID` / `S3_SECRET_ACCESS_KEY` | Update `.env.prod`, `$C up -d seaweedfs api worker` (SeaweedFS rewrites its identity from env at start). Presigned URLs issued before the change stop working (<= 5 min) | |
 | `SEAWEEDFS_SSE_KEY` | Do NOT change on a populated store: objects written under the old key become unreadable. A rotation needs a re-encrypting copy into a new store; plan it as a migration | |
-| SMTP / LLM credentials | Rotate at the provider, update `.env.prod`, `$C up -d worker` | |
+| `GEMINI_API_KEY` / `ANTHROPIC_API_KEY` | Generate new key at Google AI Studio / Anthropic Console, update `.env.prod`, `$C up -d api worker`, verify extraction smoke test, revoke old key at provider | Active calls during reload fail and retry; queued jobs pick up the new key |
+| SMTP credentials | Rotate at the provider, update `.env.prod`, `$C up -d worker` | |
 | Cloudflare / registry / backup-storage credentials | Rotate at the provider; update the cron/CI that uses them | |
 
 After rotating: smoke tests from `deploy-rollback.md`, then record the date and which secrets in the ops log. If a
