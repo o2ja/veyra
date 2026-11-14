@@ -146,6 +146,8 @@ DOC_PERMISSIONS: dict[str, str] = {
     "settings.read": "APNV",
     "data.read": "APNV",
     "report.read": "APNV",
+    "report.refresh": "APN",  # API_SPECIFICATION.md section 2.9: POST /dashboard/refresh A P N
+    "audit_pack.export": "APV",  # API_SPECIFICATION.md section 2.9: audit pack A P V
     "audit.read": "APV",
     "file.upload": "APN",
     "import.run": "APN",
