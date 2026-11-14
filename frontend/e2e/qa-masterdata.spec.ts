@@ -97,6 +97,7 @@ test.describe("QA Master Data: manufacturers, branches, customers, products, UoM
     await viewerPage.getByLabel("Your name").fill("QA MD Viewer");
     await viewerPage.getByLabel("Password").fill(PASSWORD);
     await viewerPage.getByRole("button", { name: "Accept invitation" }).click();
+    await expect(viewerPage).toHaveURL(/\/login\?reason=invited/);
 
     await signIn(viewerPage, viewerEmail);
     await enrolMfa(viewerPage);

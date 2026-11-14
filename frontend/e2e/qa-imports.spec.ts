@@ -78,6 +78,7 @@ test.describe("QA Imports: import history, new import wizard, sales & purchase l
     await viewerPage.getByLabel("Your name").fill("QA Imports Viewer");
     await viewerPage.getByLabel("Password").fill(PASSWORD);
     await viewerPage.getByRole("button", { name: "Accept invitation" }).click();
+    await expect(viewerPage).toHaveURL(/\/login\?reason=invited/);
 
     await signIn(viewerPage, viewerEmail);
     await enrolMfa(viewerPage);
