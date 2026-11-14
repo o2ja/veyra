@@ -389,6 +389,11 @@ test("S7 claims adjustments: queue, four-eyes approval, rejection, carry into ba
   await rejectDialog.getByRole("button", { name: "Reject adjustment" }).click();
   await expect(rejectDialog).toBeHidden();
   await approver2Page.getByRole("tab", { name: "Rejected" }).click();
+  await expect(approver2Page.getByRole("tab", { name: "Rejected" })).toHaveAttribute("aria-selected", "true");
+  // on failure this prints the real table text (CI keeps no page snapshot)
+  await expect(approver2Page.getByRole("main"), "Rejected tab content").toContainText(secondClaimRef, {
+    timeout: 20_000,
+  });
   await expect(approver2Page.getByRole("row", { name: new RegExp(escapeRe(secondClaimRef)) })).toBeVisible({
     timeout: 20_000, // the hosted runner is much slower than a laptop
   });
