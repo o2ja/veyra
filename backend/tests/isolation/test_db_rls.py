@@ -851,7 +851,7 @@ def test_d3_s8_update_foreign_row_affects_nothing(app_engine: Engine, world: Wor
     assert got == "n=0", breach(f"A updated B's {table} row ({got})")
 
 
-def test_d3_s8_the_app_role_cannot_change_remittance_line_evidence(app_engine: Engine, world: World) -> None:
+def test_s8_the_app_role_cannot_change_remittance_line_evidence(app_engine: Engine, world: World) -> None:
     """Only the three categorisation columns are granted; the money and identifiers of a line are evidence."""
     with as_app(app_engine, world.a.tenant_id) as conn:
         got = _outcome(
