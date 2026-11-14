@@ -399,6 +399,105 @@ class GeminiProvider:
         return ProviderResponse(data, input_tokens, output_tokens)
 
 
+def _inline_refs(schema: dict[str, Any]) -> dict[str, Any]:
+    """Plain JSON Schema without ``$ref``/``$defs`` (hosts behind OpenRouter differ in what they accept)."""
+    defs = {**schema.get("definitions", {}), **schema.get("$defs", {})}
+
+    def walk(node: Any, seen: tuple[str, ...]) -> Any:
+        if isinstance(node, list):
+            return [walk(n, seen) for n in node]
+        if not isinstance(node, dict):
+            return node
+        ref = node.get("$ref")
+        if isinstance(ref, str):
+            name = ref.rsplit("/", 1)[-1]
+            if name not in defs or name in seen:
+                raise ValueError(f"cannot inline schema reference {ref!r}")
+            return walk({**defs[name], **{k: v for k, v in node.items() if k != "$ref"}}, (*seen, name))
+        return {k: walk(v, seen) for k, v in node.items() if k not in ("$defs", "definitions")}
+
+    out: dict[str, Any] = walk(schema, ())
+    return out
+
+
+class OpenRouterProvider:
+    """OpenAI-compatible chat completions with one forced tool call (works for models without json_schema output)."""
+
+    name = "openrouter"
+    URL = "https://openrouter.ai/api/v1/chat/completions"
+
+    def __init__(self, api_key: str, data_collection: str = "deny", http_client: Any = None) -> None:
+        self._api_key = api_key
+        self._data_collection = data_collection
+        self._client: Any = http_client
+
+    def complete(
+        self,
+        *,
+        model: str,
+        system: str,
+        user: str,
+        tool_name: str,
+        schema: dict[str, Any],
+        max_tokens: int,
+        timeout: float,
+    ) -> ProviderResponse:
+        payload = {
+            "model": model,
+            "max_tokens": max_tokens,
+            "stream": False,
+            "messages": [{"role": "system", "content": system}, {"role": "user", "content": user}],
+            "tools": [
+                {
+                    "type": "function",
+                    "function": {
+                        "name": tool_name,
+                        "description": "Record the extraction result.",
+                        "parameters": _inline_refs(schema),
+                    },
+                }
+            ],
+            "tool_choice": {"type": "function", "function": {"name": tool_name}},
+            "provider": {"require_parameters": True, "data_collection": self._data_collection},
+        }
+        headers = {"Authorization": f"Bearer {self._api_key}", "Content-Type": "application/json"}
+        try:
+            resp = (self._client or httpx.Client()).post(
+                self.URL, json=payload, headers=headers, timeout=timeout
+            )
+        except httpx.TransportError as exc:
+            raise ProviderCallError("timeout", retryable=True) from exc
+
+        try:
+            body = resp.json()
+        except ValueError:
+            body = {}
+        err = body.get("error") if isinstance(body, dict) else None
+        status = resp.status_code
+        if status < 400 and isinstance(err, dict) and isinstance(err.get("code"), int):
+            status = err["code"]  # OpenRouter can answer HTTP 200 with an error object
+        if resp.is_error or isinstance(err, dict):
+            raw = resp.headers.get("retry-after")
+            try:
+                retry_after = float(raw) if raw is not None else None
+            except ValueError:
+                retry_after = None
+            retryable = status in (408, 409, 429) or status >= 500
+            raise ProviderCallError(f"http_{status}", retryable=retryable, retry_after=retry_after)
+
+        usage = body.get("usage") or {}
+        tokens_in, tokens_out = int(usage.get("prompt_tokens") or 0), int(usage.get("completion_tokens") or 0)
+        choices = body.get("choices") or []
+        if not choices or choices[0].get("finish_reason") == "content_filter":
+            return ProviderResponse(None, tokens_in, tokens_out)
+        calls = (choices[0].get("message") or {}).get("tool_calls") or []
+        try:
+            data = json.loads(calls[0]["function"]["arguments"])
+        except IndexError, KeyError, TypeError, ValueError:
+            return ProviderResponse(None, tokens_in, tokens_out)
+        return ProviderResponse(data if isinstance(data, dict) else None, tokens_in, tokens_out)
+
+
 def make_provider(settings: Settings) -> Provider:
     if settings.ai_provider == "gemini":
         if settings.gemini_api_key is None:
@@ -407,6 +506,15 @@ def make_provider(settings: Settings) -> Provider:
             raise NotConfigured("set AI_MODEL for the gemini provider")
         client = HTTP_CLIENT_FACTORY() if HTTP_CLIENT_FACTORY is not None else None
         return GeminiProvider(settings.gemini_api_key.get_secret_value(), client)
+    elif settings.ai_provider == "openrouter":
+        if settings.openrouter_api_key is None:
+            raise NotConfigured("no AI provider key is configured")
+        if settings.ai_model == "claude-sonnet-5-5":
+            raise NotConfigured("set AI_MODEL for the openrouter provider")
+        client = HTTP_CLIENT_FACTORY() if HTTP_CLIENT_FACTORY is not None else None
+        return OpenRouterProvider(
+            settings.openrouter_api_key.get_secret_value(), settings.openrouter_data_collection, client
+        )
     elif settings.ai_provider == "anthropic":
         if settings.anthropic_api_key is None:
             raise NotConfigured("no AI provider key is configured")
