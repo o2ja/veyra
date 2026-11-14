@@ -72,7 +72,7 @@ warn_unused_ignores = true
 check_untyped_defs = true
 
 [[tool.mypy.overrides]]
-module = ["rebate_engine.*", "rebate_matching.*"]
+module = ["rebate_engine.*", "rebate_matching.*", "rebate.modules.recovery.domain.*"]
 strict = true
 
 [tool.pytest.ini_options]

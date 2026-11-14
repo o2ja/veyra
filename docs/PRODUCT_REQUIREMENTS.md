@@ -123,7 +123,7 @@
 |---|---|---|
 | FR-RP-01 | Dashboard: claimed, collected, short-paid, recovered, written-off, at-risk, expiring soon; filter by manufacturer, month, branch. | P0 |
 | FR-RP-02 | Rebate tier tracker: YTD qualifying volume vs tier thresholds, distance to next tier, accrued vs earned. | P1 |
-| FR-RP-03 | Audit-ready trace export per claim batch (PDF/XLSX): invoice line → agreement version → claim → payment. | P1 |
+| FR-RP-03 | Audit-ready trace export per claim batch (XLSX/CSV in Release 1; PDF in Release 1.1, owner decision 2026-11-13): invoice line → agreement version → claim → payment. | P1 |
 | FR-RP-04 | Tier-crossing simulation, scorecards, forecasting, benchmarks, suggested journal entries. | R2 |
 
 ## 2. Non-functional requirements

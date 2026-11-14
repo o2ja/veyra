@@ -11,7 +11,11 @@ export default defineConfig({
     host: "0.0.0.0",
     port: 5173,
     strictPort: true,
-    watch: { usePolling: process.env.VITE_POLL === "1" }, // bind mounts from Windows hosts
+    watch: {
+      usePolling: process.env.VITE_POLL === "1", // bind mounts from Windows hosts
+      // Playwright writes reports into frontend/; a change there made Vite reload the page mid-test (e2e flake)
+      ignored: ["**/junit-*.xml", "**/test-results/**", "**/playwright-report/**"],
+    },
     proxy: { "/api": { target: apiTarget, changeOrigin: false } },
   },
   test: {

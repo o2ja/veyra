@@ -19,28 +19,43 @@ from rebate.modules.ingestion.idempotency import parse_key, replay, store
 from rebate.modules.ingestion.normalizers import (
     CARD_REMOVED,
     NormError,
+    NumberFormat,
     canonical_code,
     canonical_uom,
     find_card_number,
     normalise_header,
+    parse_date,
     parse_decimal,
+    parse_int,
+    text_value,
 )
-from rebate.modules.ingestion.readers import ReadError, csv_source, records, xlsx_source
+from rebate.modules.ingestion.readers import EXTRA_CELLS, ReadError, Source, csv_source, records, xlsx_source
 from rebate.modules.ingestion.router import router
-from rebate.modules.ingestion.service import mapping_sample
+from rebate.modules.ingestion.service import get_template, mapping_sample
+from rebate.modules.ingestion.validators import FIELDS, Field, MappingInvalid, check_mapping, suggest_mapping
 
 __all__ = [
     "CARD_REMOVED",
+    "EXTRA_CELLS",
+    "FIELDS",
+    "Field",
+    "MappingInvalid",
     "NormError",
+    "NumberFormat",
     "ReadError",
+    "Source",
     "canonical_code",
     "canonical_uom",
+    "check_mapping",
     "csv_source",
     "find_card_number",
+    "get_template",
     "line_quantities",
     "mapping_sample",
     "normalise_header",
+    "parse_date",
     "parse_decimal",
+    "parse_int",
     "parse_key",
     "purchase_volume_rows",
     "records",
@@ -53,5 +68,7 @@ __all__ = [
     "sales_rows",
     "sales_volume_rows",
     "store",
+    "suggest_mapping",
+    "text_value",
     "xlsx_source",
 ]
