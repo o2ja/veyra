@@ -39,7 +39,7 @@ const formFieldsSchema = z.object({
   total_amount: z
     .string()
     .optional()
-    .refine((v) => !v || /^-?\d+(\.\d+)?$/.test(v.trim()), {
+    .refine((v) => !v || /^-?\d+$/.test(v.trim()) || /^-?\d+\.\d+$/.test(v.trim()), {
       message: "Must be a valid decimal string",
     }),
   currency_code: z.string().optional(),

@@ -2,9 +2,18 @@ import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 
 import AxeBuilder from "@axe-core/playwright";
-import { expect, test, type Page } from "@playwright/test";
+import { expect, type Page } from "@playwright/test";
 
-import { PASSWORD, enrolMfa, signIn, tokenFromMail, uniqueEmail } from "./support";
+import {
+  PASSWORD,
+  batchStatus,
+  clientIpHeader,
+  enrolMfa,
+  signIn,
+  test,
+  tokenFromMail,
+  uniqueEmail,
+} from "./support";
 
 const data = (rel: string) => fileURLToPath(new URL(`../../testdata/generated/${rel}`, import.meta.url));
 const truth = (name: string) => JSON.parse(readFileSync(data(`ground_truth/${name}`), "utf8")) as unknown;
@@ -101,12 +110,13 @@ test.describe("S8 reconciliation workbench", () => {
     await page.getByRole("button", { name: "Invite" }).click();
     await expect(page.getByText(`Invitation created for ${approver}`)).toBeVisible();
 
-    const approverCtx = await browser.newContext();
+    const approverCtx = await browser.newContext({ extraHTTPHeaders: clientIpHeader() });
     const approverPage = await approverCtx.newPage();
     await approverPage.goto(`/accept-invite#token=${await tokenFromMail(approver)}`);
     await approverPage.getByLabel("Your name").fill("Reconciliation Approver");
     await approverPage.getByLabel("Password").fill(PASSWORD);
     await approverPage.getByRole("button", { name: "Accept invitation" }).click();
+    await expect(approverPage).toHaveURL(/\/login\?reason=invited/);
     await signIn(approverPage, approver);
     await enrolMfa(approverPage);
 
@@ -132,13 +142,14 @@ test.describe("S8 reconciliation workbench", () => {
     for (const [i, it] of [
       { sku: "BRK-3P-100A", ref: "100.00", dev: "78.00", sell: "88.00" },
       { sku: "BRK-3P-60A", ref: "64.50", dev: "52.00", sell: "58.00" },
-      { sku: "PNL-200A", ref: "412.00", dev: "360.00", sell: "389.00" },
+      { sku: "PNL-200A", ref: "412.00", dev: "360.00", sell: "389.00", cap: "100" },
     ].entries()) {
       await page.getByRole("button", { name: "Add item" }).click();
       await page.getByLabel(`Item ${i + 1} SKU`).fill(it.sku);
       await page.getByLabel(`Item ${i + 1} reference cost`).fill(it.ref);
       await page.getByLabel(`Item ${i + 1} deviated cost`).fill(it.dev);
       await page.getByLabel(`Item ${i + 1} sell price`).fill(it.sell);
+      if (it.cap) await page.getByLabel(`Item ${i + 1} max quantity`).fill(it.cap);
     }
 
     await page.getByRole("button", { name: "Save draft" }).click();
@@ -168,7 +179,7 @@ test.describe("S8 reconciliation workbench", () => {
     // 7. Create and submit VOLT claim batch
     await page.getByRole("link", { name: "Claims" }).click();
     await expect(page).toHaveURL("/claims/missed");
-    await page.getByLabel("Manufacturer").selectOption({ index: 1 });
+    await page.getByLabel("Manufacturer").selectOption({ label: "Voltara Electric (SYNTHETIC) (VOLT)" });
     await page.getByRole("button", { name: "Apply filters" }).click();
 
     await expect(page.getByRole("table", { name: "Missed claim lines" })).toBeVisible();
@@ -185,27 +196,29 @@ test.describe("S8 reconciliation workbench", () => {
 
     // Approver approves claim batch
     await approverPage.goto(`/claims/batches/${batchId}`);
-    await expect(approverPage.getByText("Draft", { exact: true })).toBeVisible();
+    await expect(batchStatus(approverPage)).toHaveText("Draft");
     const approveBatchBtn = approverPage.getByRole("button", { name: "Approve batch" });
     await expect(approveBatchBtn).toBeEnabled();
     await approveBatchBtn.click();
     await approverPage.getByRole("dialog").getByRole("button", { name: "Approve batch" }).click();
-    await expect(approverPage.getByText("Approved", { exact: true })).toBeVisible({ timeout: 15_000 });
+    await expect(batchStatus(approverPage)).toHaveText("Approved", { timeout: 20_000 });
 
     // Admin submits claim batch
     await page.goto(`/claims/batches/${batchId}`);
-    await expect(page.getByText("Approved", { exact: true })).toBeVisible();
+    await expect(batchStatus(page)).toHaveText("Approved");
     await page.getByRole("button", { name: "Submit batch" }).click();
     const submitDialog = page.getByRole("dialog");
     await expect(submitDialog).toBeVisible();
     await submitDialog.getByLabel("External reference").fill("VOLT-BATCH-01");
     await submitDialog.getByRole("button", { name: "Confirm submission" }).click();
-    await expect(page.getByText("Submitted", { exact: true })).toBeVisible({ timeout: 15_000 });
+    await expect(batchStatus(page)).toHaveText("Submitted", { timeout: 20_000 });
 
     // 8. Reason codes configuration (/reconciliation/reason-codes)
     await page.goto("/reconciliation/reason-codes");
     await noViolations(page, "Reconciliation reason-codes");
-    await page.getByRole("combobox", { name: "Manufacturer" }).selectOption({ index: 1 });
+    await page
+      .getByRole("combobox", { name: "Manufacturer" })
+      .selectOption({ label: "Voltara Electric (SYNTHETIC) (VOLT)" });
 
     // Add E12 -> rejected_price_mismatch
     await page.getByRole("button", { name: "Add mapping" }).click();
@@ -231,12 +244,13 @@ test.describe("S8 reconciliation workbench", () => {
     await page.getByRole("button", { name: "Invite" }).click();
     await expect(page.getByText(`Invitation created for ${viewer}`)).toBeVisible();
 
-    const viewerCtx = await browser.newContext();
+    const viewerCtx = await browser.newContext({ extraHTTPHeaders: clientIpHeader() });
     const viewerPage = await viewerCtx.newPage();
     await viewerPage.goto(`/accept-invite#token=${await tokenFromMail(viewer)}`);
     await viewerPage.getByLabel("Your name").fill("Reconciliation Viewer");
     await viewerPage.getByLabel("Password").fill(PASSWORD);
     await viewerPage.getByRole("button", { name: "Accept invitation" }).click();
+    await expect(viewerPage).toHaveURL(/\/login\?reason=invited/);
     await signIn(viewerPage, viewer);
     await enrolMfa(viewerPage);
 
@@ -247,18 +261,24 @@ test.describe("S8 reconciliation workbench", () => {
 
     // Viewer check on new remittance page: permission denied
     await viewerPage.goto("/reconciliation/new");
-    await expect(viewerPage.getByText(/permission denied|don't have permission/i)).toBeVisible();
+    await expect(viewerPage.getByRole("heading", { name: "Not available" })).toBeVisible();
+    await expect(viewerPage.getByText("Your role does not include this page.")).toBeVisible();
 
     // 10. Ingest: Admin uploads remittance file
     await page.goto("/reconciliation");
     await noViolations(page, "Reconciliation list (admin)");
-    await page.getByRole("link", { name: "New remittance" }).click();
+    await page
+      .getByRole("region", { name: "Remittances" })
+      .getByRole("link", { name: "New remittance" })
+      .click();
     await expect(page).toHaveURL("/reconciliation/new");
     await noViolations(page, "Reconciliation new upload");
 
     const remittanceFile = data("remittance/credit_memo_VOLT_CM-7781.csv");
     await page.getByLabel("Remittance file").setInputFiles(remittanceFile);
-    await page.getByRole("combobox", { name: "Manufacturer" }).selectOption({ index: 1 });
+    await page
+      .getByRole("combobox", { name: "Manufacturer" })
+      .selectOption({ label: "Voltara Electric (SYNTHETIC) (VOLT)" });
     await page.getByRole("combobox", { name: "Document type" }).selectOption("credit_memo");
     await page.getByRole("combobox", { name: "Channel" }).selectOption("credit_memo");
     await page.getByLabel("Document number").fill("CM-7781");
@@ -271,13 +291,21 @@ test.describe("S8 reconciliation workbench", () => {
 
     // 11. Test duplicate remittance scenario
     await page.goto("/reconciliation/new");
-    await page.getByLabel("Remittance file").setInputFiles(remittanceFile);
-    await page.getByRole("combobox", { name: "Manufacturer" }).selectOption({ index: 1 });
+    await page.getByLabel("Remittance file").setInputFiles({
+      name: "credit_memo_VOLT_CM-7781_resend.csv",
+      mimeType: "text/csv",
+      buffer: Buffer.concat([readFileSync(remittanceFile), Buffer.from("\n")]), // different bytes: not a file-level duplicate
+    });
+    await page
+      .getByRole("combobox", { name: "Manufacturer" })
+      .selectOption({ label: "Voltara Electric (SYNTHETIC) (VOLT)" });
     await page.getByRole("combobox", { name: "Document type" }).selectOption("credit_memo");
     await page.getByRole("combobox", { name: "Channel" }).selectOption("credit_memo");
     await page.getByLabel("Document number").fill("CM-7781");
     await page.getByRole("button", { name: "Create and ingest remittance" }).click();
-    await expect(page.getByRole("alert")).toBeVisible();
+    await expect(
+      page.getByText("A remittance with this document number already exists for this manufacturer."),
+    ).toBeVisible();
 
     // 12. Viewer on detail page: review is limited to reconcilers
     await viewerPage.goto(remittanceUrl);
@@ -301,12 +329,18 @@ test.describe("S8 reconciliation workbench", () => {
 
     await page.getByRole("button", { name: "Run matching" }).click();
     await expect(page.getByRole("region", { name: "Remittance line 1" })).toBeVisible({ timeout: 60_000 });
-    await expect(page.getByRole("region", { name: "Remittance line 5" })).toBeVisible();
+    // the lines are listed before matching runs: wait for the job's subset-sum suggestion on line 5
+    await expect(
+      page.getByRole("region", { name: "Remittance line 5" }).getByRole("button", { name: "Confirm" }),
+    ).toBeVisible({ timeout: 120_000 });
 
     // 15. Stale tab 409 invalid_state scenario & confirm Line 5
     const tab2 = await page.context().newPage();
     await tab2.goto(remittanceUrl);
     await expect(tab2.getByRole("region", { name: "Remittance line 5" })).toBeVisible();
+    await expect(
+      tab2.getByRole("region", { name: "Remittance line 5" }).getByRole("button", { name: "Reject" }),
+    ).toBeVisible();
 
     // Page 1 confirms Line 5
     const line5InPage = page.getByRole("region", { name: "Remittance line 5" });
@@ -323,16 +357,25 @@ test.describe("S8 reconciliation workbench", () => {
     ).toBeVisible();
     await tab2.close();
 
-    // 16. Manual match Line 4 -> CL-4 200.00 -> short_paid 50.00
-    const line4Region = page.getByRole("region", { name: "Remittance line 4" });
-    await line4Region.getByRole("button", { name: "Manual match" }).click();
+    // 16. Lines 1-4 were auto-confirmed by invoice-line matching (ground truth: line 4 has no variance, so there
+    // is nothing to match by hand). Open the manual-match dialog on the unmatched line 6 and check it offers the
+    // submitted batch's claim lines, then close it without applying (line 6 stays an unmatched payment).
+    await expect(
+      page.getByRole("region", { name: "Remittance line 4" }).getByRole("button", { name: "Manual match" }),
+    ).toHaveCount(0);
+    const line6Manual = page.getByRole("region", { name: "Remittance line 6" });
+    await line6Manual.getByRole("button", { name: "Manual match" }).click();
 
     const manualMatchDialog = page.getByRole("dialog", { name: "Manual match" });
     await expect(manualMatchDialog).toBeVisible();
     await manualMatchDialog.getByLabel("Submitted claim batch:").selectOption({ index: 1 });
-    await manualMatchDialog.getByLabel("Claim line:").selectOption({ index: 4 });
-    await manualMatchDialog.getByLabel("Allocated amount").fill("200.00");
-    await manualMatchDialog.getByRole("button", { name: "Apply match" }).click();
+    const claimLine = manualMatchDialog.getByLabel("Claim line:");
+    await expect(claimLine.locator("option", { hasText: "Claimed: 660" })).toHaveCount(1);
+    await claimLine.selectOption({
+      label: (await claimLine.locator("option", { hasText: "Claimed: 660" }).innerText()).trim(),
+    });
+    await manualMatchDialog.getByLabel("Allocated amount").fill("75.00");
+    await page.keyboard.press("Escape");
     await expect(manualMatchDialog).not.toBeVisible();
 
     // 17. Early finalisation check: server returns 409 uncategorised_lines
@@ -341,7 +384,7 @@ test.describe("S8 reconciliation workbench", () => {
     await expect(finaliseDialog).toBeVisible();
     await finaliseDialog.getByRole("button", { name: "Confirm finalisation" }).click();
 
-    await expect(finaliseDialog.getByRole("alert")).toBeVisible();
+    await expect(finaliseDialog.getByRole("alert")).toHaveCount(2); // the message and the per-category counts
     await expect(
       finaliseDialog.getByText("Match or categorise every remittance line before finalising."),
     ).toBeVisible();
@@ -374,16 +417,17 @@ test.describe("S8 reconciliation workbench", () => {
     await expect(findingsTable.getByRole("row", { name: /Short-paid.*150\.00/i })).toBeVisible();
 
     // Line 3: rejected 2080.00
-    await expect(findingsTable.getByRole("row", { name: /Rejected.*2080\.00/i })).toBeVisible();
+    await expect(findingsTable.getByRole("row", { name: /Rejected.*2,080\.00/i })).toBeVisible();
 
-    // Line 4: short_paid 50.00
-    await expect(findingsTable.getByRole("row", { name: /Short-paid.*50\.00/i })).toBeVisible();
+    // Line 4: matched in full (variance null in ground truth), so exactly three findings in total
+    await expect(page.getByText("Reconciliation findings (3)")).toBeVisible();
 
     // Line 6: unmatched_payment 75.00
     await expect(findingsTable.getByRole("row", { name: /Unmatched payment.*75\.00/i })).toBeVisible();
 
-    // Line 7: unpaid 660.00
-    await expect(findingsTable.getByRole("row", { name: /Unpaid.*660\.00/i })).toBeVisible();
+    // Line 7 (CL for INV-10060, 660.00, not on the remittance): ground truth makes "unpaid" due only after
+    // submitted_at + payment_lag_days_expected; the batch was submitted minutes ago, so no unpaid finding yet
+    await expect(findingsTable.getByRole("row", { name: /Unpaid/i })).toHaveCount(0);
 
     await viewerCtx.close();
     await approverCtx.close();

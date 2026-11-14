@@ -135,11 +135,12 @@ export const CASE_TYPE_LABELS: Record<FindingOut["case_type"], string> = {
 export function formatDecimal(value: string | number | null | undefined): string {
   if (value === null || value === undefined || value === "") return "—";
   const str = String(value).trim();
-  const match = /^(-?)(\d+)(\.\d+)?$/.exec(str);
-  if (!match) return str;
-  const [, sign, intPart, fracPart] = match;
-  const grouped = (intPart ?? "").replace(/\B(?=(\d{3})+(?!\d))/g, ",");
-  return `${sign ?? ""}${grouped}${fracPart ?? ""}`;
+  const sign = str.startsWith("-") ? "-" : "";
+  const [intPart = "", fracPart, extra] = (sign ? str.slice(1) : str).split(".");
+  const digits = (d: string) => d !== "" && [...d].every((c) => c >= "0" && c <= "9");
+  if (extra !== undefined || !digits(intPart) || (fracPart !== undefined && !digits(fracPart))) return str;
+  const grouped = BigInt(intPart).toLocaleString("en-US"); // exact digit grouping, no float
+  return `${sign}${grouped}${fracPart === undefined ? "" : `.${fracPart}`}`;
 }
 
 export interface EvidenceNode {
