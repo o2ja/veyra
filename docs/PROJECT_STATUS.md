@@ -1,14 +1,15 @@
 # Project Status
 
-> Living document. Updated at the end of every stage and whenever a decision, risk or known issue changes. Last updated: 2026-11-13.
+> Living document. Updated at the end of every stage and whenever a decision, risk or known issue changes. Last updated: 2026-11-14.
 
 ## 1. Current position
 
 | Item | State |
 |---|---|
 | Phase | **Release 1 build** |
-| Current stage | **S3–S6 batch in progress** (S2 approved 2026-11-10); S3–S6 backends merged, UI for S5/S6 pending; see §3 |
-| Application code | S0 skeleton + S1 (identity, tenancy, audit, auth/MFA/sessions/CSRF, isolation suite with negative control); S2 files + job queue; S3 ingestion; S4 agreements; S5 calculation runs; S6 AI extraction (backends; S3/S4 UI) |
+| Current stage | **Release 1 build: backend S0-S10 and UI S3-S10 merged to `main`** (Playwright specs under `frontend/e2e` for each UI). Remaining S11 items: S11.2 performance (the 1M-line run never completed), S11.4 accessibility pass (axe covers the S1-S3 routes on `main`; cross-cutting axe specs are in open PR #34), S11.5 deployment, S11.6 WAL/PITR (only a local dump restore drill exists), S11.8 pilot review; see §3 |
+| Application code | S0 skeleton; S1 identity, tenancy, audit, auth/MFA/sessions/CSRF, isolation suite; S2 files + job queue; S3 ingestion; S4 agreements; S5 calculation runs; S6 AI extraction; S7 claims and adjustments; S8 reconciliation; S9 recovery; S10 reporting; S11.1 audit seal, S11 ops, S11.3 hardening, S11.6 restore drill and S11.7 guides (partial S11); UI S3-S10 |
+| AI provider | Anthropic, Gemini and OpenRouter are selectable by `AI_PROVIDER` (#8, #26). Synthetic documents only until OD-2 is decided; live calls use no real customer data |
 | Synthetic test data | Generated and self-checked (`testdata/`) |
 
 ## 2. Completed
@@ -18,7 +19,10 @@
 - [x] Documentation package (`docs/`, `CLAUDE.md`, `README.md`)
 - [x] Synthetic dataset generator and ground truth (`testdata/generate.py`)
 - [x] S0 Foundation and tooling (signed off 2026-11-09)
-- [x] S1 and S2 (signed off 2026-11-10); S3, S4, S5, S6 backends merged to `main` (UI for S5/S6 pending); 1M-row baselines in `reports/PERFORMANCE_BASELINES.md`
+- [x] S1 and S2 (signed off 2026-11-10); 1M-row baselines in `reports/PERFORMANCE_BASELINES.md`
+- [x] S3-S6 backends and UIs merged to `main` (#2-#13, #16); S5 signed off by the owner 2026-11-12
+- [x] S7-S10 backends merged in integration PR #25 (after #15 S7 core, #17 S8 matching); UIs merged: S7 #30, S8 #31, S9 #32, S10 #33 (each with its Playwright spec)
+- [x] S11 parts merged: S11.1 audit seal (#21), ops/backup/runbooks/dependency audit (#18), restore drill (local dump) and guides (#20), S11.3 security hardening (#22), ESLint security plugin and weekly Dependabot (#24), `make ci-local` gate (#23), Gemini and OpenRouter providers (#26)
 - [x] Independent check of every worked example in `BUSINESS_LOGIC.md` (`testdata/verify_business_logic_examples.py`, passes)
 
 ## 3. In progress
@@ -27,9 +31,14 @@ S1 signed off by the owner 2026-11-10. Evidence and open points: `docs/reports/S
 
 **CI and merging (owner, 2026-11-13):** GitHub Actions is unpaid; the merge gate is `make ci-local` (6/6 on the exact commit, posted as a PR comment with the SHA) after merging latest `main`, plus the required reviews; nothing skipped or failing. Workflow runs only on ready-for-review PRs and pushes to `main`, with path filters; WIP PRs are drafts. At most 2 agents; full suite + Playwright once per merge; never two full suites at once. Full text: `CLAUDE.md` §19.
 
-**Resume point (2026-11-14):** `docs/reports/notes/resume-prompt.md` + `FINISH_PLAN.md`. Backend S7–S10 built and reviewed (all findings fixed); UI S7–S10 built, reviews in progress, not Playwright-verified; #21 needs a fresh gate; owner merges; D-N11 open.
+**Resume point (2026-11-14):** Release 1 build merged (backend S0-S10, UI S3-S10). Remaining work:
+- S11.2 performance: the 1M-line run never completed; measure 100k/250k per D-N9.
+- S11.4 accessibility: merge PR #34 (cross-cutting axe, empty/not-found/403 states) once gated, then axe-check every route; not complete today.
+- S11.5 deployment, S11.6 WAL/PITR (only the local dump drill, `docs/reports/RESTORE_DRILL_2026-11-13.md`), S11.8 pilot readiness review: need OD-3/OD-4.
+- Owner decisions open: D-N11 (reconciling a payment against the carrying batch of an adjustment), D-N4 (retention/deletion path, legal review; only the dry-run exists), OD-2, OD-3, OD-4 (see §5).
+- Dependabot PRs #27-#29 are open on purpose, not merged for Release 1: #27 moves Python 3.14->3.15 and Node 24->26 (contradicts the ADR-027 pins); #28 moves React 18->19 and TypeScript 5->7 (contradicts `TECH_STACK.md`); #29 bundles a gunicorn 26->27 major among minors. See `docs/reports/DEPENDENCY_AUDIT_2026-11.md`.
 
-### S3–S6 batch (in progress, started 2026-11-10; S2 approved)
+### S3–S6 batch (complete 2026-11-12; history)
 
 Multi-agent waves (worktree branches, orchestrator merges). Resume point:
 - Wave A merged: `s6-pure` (#3), `s5-engine` (#2), `s3-backend` (#4, 2026-11-11: security + DB reviews 2nd pass PASS;
@@ -44,7 +53,7 @@ Multi-agent waves (worktree branches, orchestrator merges). Resume point:
   `ui-report-s4.md`. Orchestrator verifies + reviews before merge. (S3 frontend was already merged in #5.)
 - **S3–S6 batch complete (2026-11-12):** #16 S5/S6 UI merged (c41e448); report `docs/reports/S3_S6_BATCH_REPORT.md`
   (full suite 1630 passed; S5 sign-off is the owner's).
-- **Resume point (2026-11-12 afternoon):** PR #15 S7 core (gated on F2 `s7-adjustments`, financial review running);
+- **Earlier resume point (2026-11-12 afternoon, superseded):** PR #15 S7 core (gated on F2 `s7-adjustments`, financial review running);
   PR #17 S8 matching (financial review: no discrepancy; findings fixed); PR #18 S11 ops (CI + security review);
   S7 UI with Antigravity on `ui/s7` (brief `docs/reports/notes/ui-brief-s7.md` on that branch).
 - Earlier (2026-11-12 midday): merged #12 D2 (financial review PASS), #13 S3 gaps + end-to-end
@@ -61,7 +70,7 @@ Multi-agent waves (worktree branches, orchestrator merges). Resume point:
 
 ## 4. Pending
 
-S5/S6 UI, then S7 onwards per `DEVELOPMENT_ROADMAP.md` / `IMPLEMENTATION_PLAN.md`. NFR-04 evidence (shared dev VM, one run each): 1M-row import 22.9 min (target < 30), 1M-line calculation 12.7 min (target < 15), both on a file where no line is eligible; list-endpoint p95 on 5M lines not measured. Release 2 candidates are listed in the roadmap and are not scheduled.
+S11 remainder (see §3); Release 2 per `DEVELOPMENT_ROADMAP.md` / `IMPLEMENTATION_PLAN.md`. NFR-04 evidence (shared dev VM, one run each): 1M-row import 22.9 min (target < 30), 1M-line calculation 12.7 min (target < 15), both on a file where no line is eligible; list-endpoint p95 on 5M lines not measured. Release 2 candidates are listed in the roadmap and are not scheduled.
 
 ## 5. Decisions outstanding
 
@@ -106,7 +115,15 @@ Top items only; full list in the analysis and `SECURITY.md` §12.
 | S0 | 2026-11-09 | 2026-11-09 | 2026-11-09 | Approved |
 | S1 | 2026-11-09 | 2026-11-10 | 2026-11-10 | Approved |
 | S2 | 2026-11-10 | 2026-11-10 | – | Complete, awaiting owner review |
-| S3–S11 | – | – | – | Not started |
+| S3 | – | 2026-11-10 (backend #4, UI #5; gaps #13 2026-11-12) | - | Merged |
+| S4 | – | 2026-11-12 (backend #6 2026-11-11, UI #11) | - | Merged |
+| S5 | – | 2026-11-12 (backend #7 2026-11-11, UI #16) | 2026-11-12 | Approved |
+| S6 | – | 2026-11-12 (backend #8 2026-11-11, UI #16); providers #26 2026-11-14 | - | Merged; OD-2 deferred, synthetic documents only |
+| S7 | – | 2026-11-14 (#15, #25, UI #30) | - | Merged |
+| S8 | – | 2026-11-14 (#17 2026-11-12, #25, UI #31) | - | Merged |
+| S9 | – | 2026-11-14 (#25, UI #32) | - | Merged |
+| S10 | – | 2026-11-14 (#25, UI #33) | - | Merged |
+| S11 | – | – | - | Partial: S11.1 #21, S11.3 #22, S11.6 local drill + S11.7 #20, ops #18; S11.2/S11.4/S11.5/S11.6 PITR/S11.8 open |
 
 ## 9. Change log
 
@@ -123,3 +140,4 @@ Top items only; full list in the analysis and `SECURITY.md` §12.
 | 2026-11-12 | Owner decisions: S5 signed off; OD-1 approved; OD-2 deferred (recorded fixtures); 3 validator refusals + split-period tiers moved to Release 2; `cannot_be_net_claimed` adjustments stay `proposed` and batches <= 0 are refused unless `allow_negative_claims`; unpaid line without rejection code = `short_paid_unexplained` (BUSINESS_LOGIC §10.3) |
 | 2026-11-13 | Owner rules: `make ci-local` merge gate, draft-PR/path-filtered workflow, 2-agent limit (`CLAUDE.md` §19). Owner decisions D-N1/D-N3/D-N7 (an adjustment belongs to the batch that carries it; frozen claim lines reconcile at their frozen amount; no return_reversal/agreement_change for a return netted into a frozen claim), D-N2 (unpaid deadline = submission date + dispute window), D-N5 (closed cases immutable; separate "recovered after write-off" S10 figure), D-N6 (dashboard definitions; one at-risk definition; month buckets in tenant business time zone; XLSX audit pack for Release 1, PDF Release 1.1), D-N4 deferred (legal review; dry-run only), D-N8 (ESLint security plugin + weekly grouped Dependabot approved; ZAP/pen test wait for staging), D-N9 (no 1M run locally; measure 100k/250k import memory, growth = streaming bug) |
 | 2026-11-13 | Owner decision D-N10: a return netted into a frozen claim and later reduced or voided → claimed original evaluated on q − min(netted, current returns); shortfall proposed as `agreement_change`, carried by a later batch |
+| 2026-11-14 | S7-S10 integrated (#25) and UIs S7-S10 merged (#30-#33); S11.1 (#21), S11.3 (#22), D-N8 tooling (#24), Gemini and OpenRouter providers (#26) merged; status docs and `IMPLEMENTATION_PLAN.md` ticks brought up to date; dependency/licence audit `docs/reports/DEPENDENCY_AUDIT_2026-11.md`; Dependabot #27-#29 decided not merged for Release 1. AI providers: Anthropic, Gemini, OpenRouter selectable by `AI_PROVIDER`, synthetic documents only until OD-2 |
