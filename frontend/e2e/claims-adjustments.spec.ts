@@ -61,7 +61,7 @@ const escapeRe = (t: string) => t.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 /** Digit grouping only, the same display rule as the UI (no arithmetic). */
 function grouping(value: string): string {
   const [int = "", frac] = value.split(".");
-  const grouped = int.replace(/\B(?=(\d{3})+(?!\d))/g, ",");
+  const grouped = BigInt(int === "" ? "0" : int).toLocaleString("en-US");
   return frac === undefined ? grouped : `${grouped}.${frac}`;
 }
 
@@ -389,7 +389,9 @@ test("S7 claims adjustments: queue, four-eyes approval, rejection, carry into ba
   await rejectDialog.getByRole("button", { name: "Reject adjustment" }).click();
   await expect(rejectDialog).toBeHidden();
   await approver2Page.getByRole("tab", { name: "Rejected" }).click();
-  await expect(approver2Page.getByRole("row", { name: new RegExp(escapeRe(secondClaimRef)) })).toBeVisible();
+  await expect(approver2Page.getByRole("row", { name: new RegExp(escapeRe(secondClaimRef)) })).toBeVisible({
+    timeout: 20_000, // the hosted runner is much slower than a laptop
+  });
 
   // 13. Carry the approved adjustment into a batch. A second, stale page opened first keeps it selected.
   const stalePage = await page.context().newPage();

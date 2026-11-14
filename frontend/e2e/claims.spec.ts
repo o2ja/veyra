@@ -272,7 +272,9 @@ test("S7 claims: missed scan, batch creation, four-eyes approval, templates, exp
   await page.getByRole("link", { name: "Claim batches" }).click();
   await expect(page).toHaveURL("/claims/batches");
   await noViolations(page, "/claims/batches");
-  await expect(page.getByRole("table", { name: "Claim batches" }).getByText("Submitted", { exact: true })).toBeVisible();
+  await expect(
+    page.getByRole("table", { name: "Claim batches" }).getByText("Submitted", { exact: true }),
+  ).toBeVisible();
 
   // 11. Verify submitted line is no longer in missed claims scan
   await page.goto("/claims/missed");

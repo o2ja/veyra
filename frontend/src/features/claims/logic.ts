@@ -87,11 +87,13 @@ export const ADJUSTMENT_STATUS_LABELS: Record<string, string> = {
 export function formatDecimal(value: string | null | undefined): string {
   if (value === null || value === undefined || value === "") return "—";
   const trimmed = value.trim();
-  const match = /^(-?)(\d+)(\.\d+)?$/.exec(trimmed);
-  if (!match) return trimmed;
-  const [, sign, intPart, fracPart] = match;
-  const grouped = (intPart ?? "").replace(/\B(?=(\d{3})+(?!\d))/g, ",");
-  return `${sign ?? ""}${grouped}${fracPart ?? ""}`;
+  const sign = trimmed.startsWith("-") ? "-" : "";
+  const [intPart = "", fracPart, extra] = (sign ? trimmed.slice(1) : trimmed).split(".");
+  const digits = (s: string) => s !== "" && [...s].every((c) => c >= "0" && c <= "9");
+  if (extra !== undefined || !digits(intPart) || (fracPart !== undefined && !digits(fracPart)))
+    return trimmed;
+  const grouped = BigInt(intPart).toLocaleString("en-US"); // exact digit grouping, no float
+  return `${sign}${grouped}${fracPart === undefined ? "" : `.${fracPart}`}`;
 }
 
 export type SourceKind = "text" | "int" | "date" | "decimal";
