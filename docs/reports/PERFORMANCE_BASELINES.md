@@ -141,3 +141,24 @@ Finding from S11.2: the import validator kept whole-file state per row (natural 
 | `test_calculation_performance.py`, `PERF_ROWS=100000`, peak RSS during import (whole test process) | 386 MB (S11.2 run above) | 368 MB (370 MB `ru_maxrss`) |
 
 The end-to-end reduction is small (about 18 MB, 5%) because the validator's dictionaries are only part of the import's footprint; the rest of the 368 MB is the in-process API and worker, the master-data index, SQLAlchemy and per-chunk buffers, which this change does not touch. The before figure for the end-to-end line is the S11.2 measurement, not a re-run on the same day. Wall time is noisy (two after-runs: 173 s and 123 s import) and is not compared. Projection from the validator-only slope: roughly 40 MB less per 100k rows, about 0.4 GB less at 1M rows; not measured at 1M. Not done: releasing state per chunk (duplicates and credit-note originals are whole-file rules), and per-document header state still grows with the number of documents.
+
+## 2026-11-14: missed-claims list, before/after (branch `perf/missed-claims`)
+
+NFR-04 target: list endpoints p95 < 500 ms. Same harness and generated files as the S11.2 section (`PERF_ROWS`, clock pinned to 2026-07-10), same laptop and Docker VM. Single warm in-process call, not p95. "Before" at 100k was re-measured on `main` (444970c) in this task, the 250k "before" is the S11.2 figure.
+
+**Plans.** Before: `DISTINCT ON` over every result, external merge sort (3 x 6.5 MB), per-row `NOT EXISTS`, top-N sort, then `LIMIT 50`; 1,522 ms execution (S11.2), and about 1 s of that is JIT compilation triggered by the inflated cost estimate of the correlated recursive `NOT EXISTS`. After: `Limit` over an Index Scan Backward on `pk_calculation_results` with a per-row anti-join probe (`ix_calculation_results_tenant_id_sales_document_line_id` plus `uq_calculation_runs_tenant_id_id`) and a `claim_lines` index-only probe; it stops after 51 rows. 100k: 0.96 ms execution, 635 buffers, all hits. 250k: 1.02 ms, 633 buffers (flat in row count).
+
+| Measurement | 100k before | 100k after | 250k before (S11.2) | 250k after |
+|---|---|---|---|---|
+| `GET /missed-claims?limit=50` (endpoint call) | 1,948 ms (re-measured; S11.2 run: 1,468 ms) | **48 ms** | 2,026 ms | **58 ms** |
+| EXPLAIN ANALYZE execution time | 2,017 ms (S11.2: 1,522 ms) | 0.96 ms | 2,093 ms | 1.02 ms |
+| Rows returned equal to the old query | n/a | 93,048 of 93,048, same order, all columns | n/a | 232,720 of 232,720 |
+
+**What changed** (`backend/src/rebate/modules/claims/missed.py`, migration `20261121_0900_sdl_superseded_by`, no row semantics change):
+- `LATEST` is an anti-join: a result is the newest of its line when no result of a completed run ranks above it on `(completed_at, id)`. Same order as the old `ORDER BY completed_at DESC, id DESC`; `completed_at` is never NULL for a completed run (`ck_calculation_runs_completed`). Used for bounded reads (`LIMIT`, explicit result ids). The old `DISTINCT ON` is kept as `LATEST_SCAN` for the summary and unbounded reads, where it measured faster than the anti-join (summary-shaped query: 0.2-0.4 s per pass versus about 1.2 s).
+- `UNCLAIMED` checks the line's own active claim first, then walks only the strict ancestors. New partial index `ix_sales_document_lines_tenant_id_superseded_by_id` (`(tenant_id, superseded_by_id) WHERE superseded_by_id IS NOT NULL`, tiny). Found while testing: once any active claim exists the old recursive walk seq-scanned `sales_document_lines` for every candidate row (20,000 seeded claims at the head of the list: the old form did not finish in 2 minutes; the new one returned in 175 ms). The perf data has no claims, so the 48 ms figure does not include that case.
+- `SET LOCAL jit = off` in `missed()` and `summary()`: the JIT compile (about 1 s on the summary, about 0.95 s on the list) outweighed the work.
+
+**Equivalence proof.** `backend/tests/integration/missed_reference.py` keeps the old SQL as an oracle and compares every column and the row order for eligible and exception lines, for both `LATEST` variants. It runs (a) in `test_claims_batches.py` after a second run with claimed lines, (b) in `test_adjustment_flows.py` on a two-deep re-import chain with a claim on the first version, (c) at the end of `test_calculation_performance.py` on the 100k and 250k data (93,048 and 232,720 eligible rows identical).
+
+**Not fixed / next step.** The summary endpoint still reads every result (about 0.8 s for its three queries at 100k with JIT off; was about 2.6 s with JIT; summary not measured end to end through the API). A real fix is a maintained `latest_result` projection. The list also walks past claimed or superseded rows: a tenant whose newest thousands of results are all claimed pays the skip cost (175 ms for 20,000 skipped); a projection (or a partial index on unclaimed eligible results) would bound that.
