@@ -38,7 +38,7 @@ def parse_encryption_keys(raw: str) -> dict[str, bytes]:
 
 
 class Settings(BaseSettings):
-    model_config = SettingsConfigDict(extra="ignore", frozen=True)
+    model_config = SettingsConfigDict(extra="ignore", frozen=True, env_ignore_empty=True)
 
     app_env: AppEnv
     secret_key: SecretStr = Field(min_length=32)
@@ -111,7 +111,12 @@ class Settings(BaseSettings):
     database_url_ai: SecretStr | None = (
         None  # rebate_ai_writer connection; the gateway refuses to run without it
     )
+    ai_provider: Literal["anthropic", "gemini", "openrouter"] = "anthropic"
     anthropic_api_key: SecretStr | None = None
+    gemini_api_key: SecretStr | None = None
+    openrouter_api_key: SecretStr | None = None
+    # OpenRouter routes to third-party hosts: "deny" only uses hosts that do not store or train on prompts (OD-2)
+    openrouter_data_collection: Literal["allow", "deny"] = "deny"
     ai_model: str = "claude-sonnet-5-5"
     ai_model_pass_b: str | None = None  # a different model for pass B, if configured
     ai_max_output_tokens: int = Field(default=16000, ge=256, le=64000)
@@ -120,6 +125,7 @@ class Settings(BaseSettings):
     ai_backoff_base_seconds: float = Field(default=2.0, ge=0)
     ai_backoff_max_seconds: float = Field(default=30.0, ge=0)
     # ASSUMPTION: list prices in USD per million tokens; review with the provider terms (OD-2).
+    # For Gemini, the owner must set AI_PRICE_INPUT_PER_MTOK and AI_PRICE_OUTPUT_PER_MTOK.
     ai_price_input_per_mtok: Decimal = Decimal("3.00")
     ai_price_output_per_mtok: Decimal = Decimal("15.00")
     ai_daily_cost_cap_usd: Decimal = Decimal("25.00")  # per tenant and UTC day

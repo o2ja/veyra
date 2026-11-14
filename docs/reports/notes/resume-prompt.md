@@ -1,40 +1,33 @@
-# Resume prompt (2026-11-12 night stop): paste into a new session started in D:\veyra\rebate-recovery-docs\rebate-recovery
+# Resume prompt (2026-11-14): paste into a new session started in D:\veyra\rebate-recovery-docs\rebate-recovery
 
 Resume the Veyra Recover build. The deadline is 2026-11-15.
 
-Read ONLY these: this file, docs/reports/STATUS_2026-11-12.md, docs/PROJECT_STATUS.md §3, and your memory. The per-branch resume notes are `docs/reports/notes/<branch>-resume.md`, each on its own branch. Read one only when you work on that branch.
+Read ONLY these: this file, the SUMMARY at the top of `docs/reports/notes/overnight-log.md`, `docs/PROJECT_STATUS.md` §3, and your memory. Per-branch notes (`docs/reports/notes/<branch>-resume.md`, `<id>-*.md`) live on their branches; read one only when you work on that branch.
 
-First run `git worktree list`, `git status`, `gh pr list` and `git fetch`. Commit and push any leftovers.
+First run `git worktree list`, `git status`, `gh pr list` and `git fetch`. Commit and push any leftovers. Start the dev stack if it is down: `docker compose --env-file .env -f infra/docker/compose.dev.yml --profile s2 up -d` (from main).
 
-## Update 2026-11-13 (overnight run) — read this first
-State and decisions: `docs/reports/notes/overnight-log.md` MORNING SUMMARY (D-N0 CI billing, D-N1/D-N3 financial hard stops, D-N2, D-N4).
-- Merged: #18. Ready, waiting for CI: PR #20 (s11-docs-drill), PR #21 (s11-audit-seal). Merge each only with 6/6 green.
-- Held by D-N1/D-N3: s7-adjustments 17a70c9 → s7-claims/#15; s8-reconciliation edaa230 (re-chained, 1 head).
-- s9-recovery (stacked on S8): 2nd-pass serious N1 + negctl fixes by J1; then a 2nd-pass check of that diff. s10-reporting (stacked on S9): S10 core backend by M1.
-- Agents die with the session: relaunch from the branch resume notes (`<branch>-resume.md`, `docs/reports/notes/<id>-*.md`).
+## State (2026-11-14, ~82% usage)
+- **Main:** this commit. Gate = `make ci-local` 6/6 (CLAUDE.md §19); `gh pr merge` blocked by the auto-mode classifier → owner merges. Plan: `docs/reports/notes/FINISH_PLAN.md`.
+- **Machine:** C: freed (30 GB). RAM tight: run a gate + at most 1 agent; one test container at a time.
+- **#21 S11.1** `s11-audit-seal` (head = enrolMfa e2e fix): needs main merged in + a full gate. Two e2e flake root causes are fixed on this branch: Vite reload on junit write (4f95e43) and `enrolMfa` returning before the post-MFA `navigate("/")` (wait added in e2e/support.ts). The 06:00 gate was stopped for the docs push.
+- **#22** a7f7f6a, **#24** draft: after #21.
+- **S7** `s7-claims` e43aefd: final (5th financial review MERGEABLE). PR #15: merge main, gate.
+- **S8** `s8-reconciliation` 40dc42f: final (reviews 3–5). D-N11 owner question open (see below).
+- **S9** `s9-recovery` 1983f5a: final S8 merged, reviewed, minors fixed.
+- **S10** `s10-reporting` 79614c0: full review MERGEABLE WITH MINORS (`s10-review-full.md`) → minors fixed (audit pack is now **POST**; AUDIT_PACK_REQUESTED audited; property test widened). Targeted set not re-run after the property-test fix → the gate covers it.
+- **UI:** `ui/s7` ea0b3e2, `ui/s7-adjustments` dccc040 (review fixed), `ui/s8` (final S8 merged in; review 1 NOT MERGEABLE → `docs/reports/notes/ui-review-s8-1.md` on ui/s8: send all items to a Claude UI fixer; its job-polling bug (statuses queued|running|succeeded|failed) also exists in claims/claim-batch-detail-page.tsx:215 on ui/s7 + ui/s7-adjustments — fix there too), `ui/s9` 9f8a39d (OpenCode, not reviewed), `ui/s10` 0084ee0 (not reviewed; must switch the audit pack call to POST), `ui/qa-1` 423d306. None Playwright-verified.
+- **Preview for the owner:** api/worker/frontend run from `D:/veyra/veyra-ui-s10` on database `rebate_preview` via the override `preview.yml` (session scratchpad; content: api + worker `DATABASE_URL` → `.../rebate_preview`). The dev DB `rebate` is untouched (still at #21's head). Before the next gate run `make up` in main (ci-local recreates the containers anyway).
+- **Owner items:** D-N11 (S8 H2: under the interim rule a later payment of B2 shows INV-10020 short 50.00 next to CL-4's 50.00 — the same 50.00 twice; decide how a cross-batch adjustment item is matched), D-N4, D-N8, D-N9.
 
 ## Next steps, in order
-1. **PR #18 (s11-ops, 9c7ba2c):** it is ready, with three security passes and CI green. Merge it if the owner has allowed `gh pr merge`; otherwise ask the owner to merge it.
-2. **s7-adjustments (worktree .claude/worktrees/agent-adc7160f14611b131):** finish the WIP fixes for the 2nd financial review (B1 double deduction, S1 DB triggers, M1–M4; see the resume note). Run ONE full suite with REBATE_AI_WRITER_PASSWORD set, plus isolation, the RLS-off control (negctl), ruff, mypy and lint-imports. Fix the mypy error in tests/integration/test_end_to_end.py:17. Then run an independent financial pass on the fix diff, merge s7-adjustments into s7-claims, and merge PR #15 when CI is green.
-3. **s8-reconciliation (worktree .claude/worktrees/i1-s8):**
-   - Merge origin/s7-adjustments in.
-   - **Re-chain** the migration: `20261117_0900_remittances.down_revision = 20261117_0900_neg_claims_guard`, then check that `alembic heads` = 1.
-   - Finish S8.4–S8.7 per brief I1 and its resume note.
-   - Reviews: financial, then security + DB.
-   - Open the PR and merge it.
-4. **s9-recovery (worktree .claude/worktrees/j1-s9):**
-   - Merge origin/s8-reconciliation in after its re-chain.
-   - Finish Phase B per brief J1 and its resume note.
-   - Reviews: security + DB, and financial on any recovered or written-off amounts.
-   - Open the PR and merge it after S8.
-5. **Antigravity:**
-   - After ui/s7 is reported, read ui-report-s7.md and the diff. Run lint, typecheck, vitest, and Playwright in batches of at most 4 specs (clear rate_limit_counters between them; stop veyra-recover-frontend-1 while running vite from a worktree and restart it afterwards). Get a reviewer pass, then merge after #15.
-   - Its next task is ready: docs/reports/notes/antigravity-prompt-qa-1.md.
-   - Write UI briefs for the S7 adjustments queue, S8 workbench and S9 queue as each backend merges.
-6. **S10** (summary job, dashboard and drill-down, tier tracker, trace resolver, audit pack), then the rest of **S11** per IMPLEMENTATION_PLAN. Core first, extras second.
+1. #21: merge main, full gate, post, owner merges.
+2. Reviews (opus, one at a time): ui/s8 (if not done), ui/s9, ui/s10 → Claude UI fixer per review (ui/s10 also switches audit pack to POST).
+3. Merge chain, one gate each: #15 S7 (+ui/s7, ui/s7-adjustments) → S8 (+ui/s8) → S9 (+ui/s9) → S10 (+ui/s10) → #22 → ui/qa-1. Merge main into each first; Playwright runs inside the gate.
+4. S11.4 a11y pass, RELEASE_1_REPORT.md. Owner: S11.5 deploy, S11.8 pilot, D-N items.
 
-## Owner decisions pending (see STATUS)
-OD-3/OD-4 production object storage; the merge permission. Do not block on them: log them and continue.
+## Test helpers (session scratchpad, recreate if gone)
+- One-off pytest in a worktree: see `docs/reports/notes/briefs/COMMON.md`; pass `-e REBATE_AI_WRITER_PASSWORD` and your own `REBATE_TEST_DB`. Tests reading `infra/` need `-v <worktree>/infra:/infra:ro` with `MSYS_NO_PATHCONV=1` in Git Bash.
+- Negative control: `python -m tests.isolation.negative_control` (one agent at a time).
 
 ## Rules
 - **Building:**
@@ -46,11 +39,11 @@ OD-3/OD-4 production object storage; the merge permission. Do not block on them:
   - An independent financial review on all money logic.
   - One review pass per stage, plus a second pass on the fix diff only.
 - **Merging:**
-  - CI green before any merge.
+  - Merge gate: CLAUDE.md §19 (`make ci-local` 6/6 on the exact SHA, posted on the PR, after merging latest main).
   - The full suite once per merged wave.
   - Commit and push after every merged piece.
 - **Agents:**
-  - At most 3 at once.
+  - At most 2 at once (CLAUDE.md §19).
   - Use the cheaper model (sonnet) for builders and opus for reviewers.
   - Ponytail rules apply: shortest working diff, reuse before writing, no new dependencies or abstractions. They never relax quality.
 - **Decisions:**

@@ -1,5 +1,6 @@
 [
   {
+    "allow_negative_claims": true,
     "claim_window_basis": "invoice_date",
     "claim_window_days": 60,
     "code": "VOLT",

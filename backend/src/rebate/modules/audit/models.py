@@ -1,11 +1,11 @@
-"""audit_log (append-only, RLS; DATABASE_SCHEMA.md §3.2) and idempotency_keys. Mirror of migrations."""
+"""audit_log and audit_seals (append-only, RLS; DATABASE_SCHEMA.md §3.2) and idempotency_keys. Mirror of migrations."""
 
 from datetime import datetime
 from typing import Any
 from uuid import UUID
 
 from sqlalchemy import BigInteger, ForeignKey, Identity, Index, Integer, Text, UniqueConstraint
-from sqlalchemy.dialects.postgresql import INET, JSONB
+from sqlalchemy.dialects.postgresql import CHAR, INET, JSONB
 from sqlalchemy.orm import Mapped, mapped_column
 from sqlalchemy.types import DateTime
 
@@ -55,3 +55,22 @@ class IdempotencyKey(Base):
     response_body: Mapped[dict[str, Any]] = mapped_column(JSONB)
     created_at: Mapped[datetime] = mapped_column(TS, server_default="now()")
     expires_at: Mapped[datetime] = mapped_column(TS)
+
+
+class AuditSeal(Base):
+    """Hash-chain seal over a range of one tenant's audit_log entries (written only by ``seal.py``)."""
+
+    __tablename__ = "audit_seals"
+    __table_args__ = (
+        UniqueConstraint("tenant_id", "id", name="uq_audit_seals_tenant_id_id"),
+        UniqueConstraint("tenant_id", "from_audit_id", name="uq_audit_seals_tenant_id_from_audit_id"),
+        UniqueConstraint("tenant_id", "to_audit_id", name="uq_audit_seals_tenant_id_to_audit_id"),
+    )
+
+    tenant_id: Mapped[UUID] = mapped_column(ForeignKey("tenants.id", name="fk_audit_seals_tenants"))
+    id: Mapped[int] = mapped_column(BigInteger, Identity(always=True), primary_key=True)
+    from_audit_id: Mapped[int] = mapped_column(BigInteger)
+    to_audit_id: Mapped[int] = mapped_column(BigInteger)
+    prev_hash: Mapped[str | None] = mapped_column(CHAR(64))
+    seal_hash: Mapped[str] = mapped_column(CHAR(64))
+    sealed_at: Mapped[datetime] = mapped_column(TS, server_default="now()")

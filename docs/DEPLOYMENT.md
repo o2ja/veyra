@@ -62,7 +62,12 @@ Defined by `core/config.py` (pydantic-settings). `.env.example` contains placeho
 | `SMTP_STARTTLS`, `SMTP_USER`, `SMTP_PASSWORD` | | Required STARTTLS in staging/production |
 | `CLAMD_HOST`, `CLAMD_PORT` | `clamav`, `3310` | |
 | `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASSWORD`, `MAIL_FROM` | | Mailpit locally |
-| `LLM_PROVIDER`, `LLM_API_KEY`, `LLM_MODEL_PRIMARY`, `LLM_MODEL_SECONDARY`, `AI_DAILY_COST_CAP_USD` | | **Unset by default; AI disabled** until OD-2 approval |
+| `AI_PROVIDER` | `anthropic` / `gemini` / `openrouter` | Default `anthropic` |
+| `ANTHROPIC_API_KEY` | `sk-ant-...` | Anthropic API key |
+| `GEMINI_API_KEY` | | Google Gemini API key (sent via `x-goog-api-key` header, never in URL); required if `AI_PROVIDER=gemini` |
+| `OPENROUTER_API_KEY`, `OPENROUTER_DATA_COLLECTION` | `deny` | OpenRouter key (sent as `Authorization: Bearer`, never in a URL); required if `AI_PROVIDER=openrouter`. `deny` only routes to hosts that do not store or train on prompts; free models usually need `allow` (synthetic documents only until OD-2) |
+| `AI_MODEL` | `claude-sonnet-5-5` | Primary model; required without default when `AI_PROVIDER=gemini` |
+| `AI_PRICE_INPUT_PER_MTOK`, `AI_PRICE_OUTPUT_PER_MTOK`, `AI_DAILY_COST_CAP_USD` | `3.00`, `15.00`, `25.00` | Token pricing and cost cap; **Unset by default; AI disabled** until OD-2 approval |
 | `ENCRYPTION_KEYS` | `k1:<base64 32 bytes>` | MFA secrets (AES-256-GCM). Comma-separated `kid:key`; the **first is active** for new encryptions, all listed keys decrypt. **Rotation:** add the new key first in the list, deploy, run the re-encrypt command (added with the first rotation need; until then old keys stay listed), remove the old key. Never reuse a kid |
 | `TRUSTED_PROXY_IPS` | `` (empty) | `X-Forwarded-For` honoured only from these peers (Caddy) |
 | `CLOUDFLARE_IP_RANGES` | `` (empty) | Comma-separated Cloudflare CIDRs. `CF-Connecting-IP` is used only when the peer is in `TRUSTED_PROXY_IPS` and Caddy saw the request arrive from one of these ranges. List source and update: `infra/runbooks/cloudflare-ip-update.md` |
