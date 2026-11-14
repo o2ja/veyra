@@ -51,6 +51,9 @@ import { DashboardPage } from "../features/reporting/dashboard-page";
 import { DrilldownPage } from "../features/reporting/drilldown-page";
 import { TracePage } from "../features/reporting/trace-page";
 import { AuditPackPage } from "../features/reporting/audit-pack-page";
+import { NotificationsPage } from "../features/recovery/notifications-page";
+import { RecoveryCasePage } from "../features/recovery/recovery-case-page";
+import { RecoveryQueuePage } from "../features/recovery/recovery-queue-page";
 import { NewRemittancePage } from "../features/reconciliation/new-remittance-page";
 import { ReasonCodesPage } from "../features/reconciliation/reason-codes-page";
 import { RemittanceDetailPage } from "../features/reconciliation/remittance-detail-page";
@@ -223,6 +226,10 @@ export const routes: RouteObject[] = [
       guarded("dashboard/:metric", "data.read", <DrilldownPage />),
       guarded("trace/:kind/:id", "data.read", <TracePage />),
       guarded("reports/audit-pack", "data.read", <AuditPackPage />),
+      // S9: recovery queue, case work and reminders
+      guarded("recovery", "data.read", <RecoveryQueuePage />),
+      guarded("recovery/:caseId", "data.read", <RecoveryCasePage />),
+      guarded("notifications", "data.read", <NotificationsPage />),
       // S8: reconciliation
       guarded("reconciliation", "data.read", <RemittancesPage />),
       guarded("reconciliation/new", "remittance.reconcile", <NewRemittancePage />),
