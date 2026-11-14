@@ -935,3 +935,55 @@ def test_db_batch_without_matching_lines_cannot_commit(sc: Scenario, app_engine:
         )
         msg = attempt(conn, ins, {"t": sc.ws.tenant_id, "m": mfr, "u": user})
         assert "differ from the lines" in msg, msg
+
+
+# ---- R3: per-user throttle and in-flight dedupe on job-enqueuing endpoints; NUL in free text is a 422 ---------
+
+
+def test_export_requests_are_throttled_per_user_with_retry_after(sc: Scenario, env: Env) -> None:
+    from rebate.api.deps import JOB_REQUESTS_PER_MINUTE
+
+    spammer = member(env.stack, env.app, sc.ws.api, "viewer")  # fresh user: its own counter
+    for _ in range(JOB_REQUESTS_PER_MINUTE):
+        assert spammer.get("/missed-claims", params={"format": "csv"}).status_code == 202
+    r = spammer.get("/missed-claims", params={"format": "csv"})
+    assert r.status_code == 429 and r.json()["error"]["code"] == "rate_limited"
+    assert int(r.headers["Retry-After"]) >= 1
+    other = member(env.stack, env.app, sc.ws.api, "viewer")
+    assert other.get("/missed-claims", params={"format": "csv"}).status_code == 202
+    drain(env.app)
+
+
+def test_the_same_export_in_flight_is_the_same_job(sc: Scenario, env: Env) -> None:
+    api = member(env.stack, env.app, sc.ws.api, "viewer")
+    a = api.get("/missed-claims", params={"format": "xlsx"}).json()
+    b = api.get("/missed-claims", params={"format": "xlsx"}).json()
+    assert a["file_id"] == b["file_id"] and a["job"]["id"] == b["job"]["id"]
+    c = api.get("/missed-claims", params={"format": "csv"}).json()
+    assert c["file_id"] != a["file_id"]
+    drain(env.app)
+    d = api.get("/missed-claims", params={"format": "xlsx"}).json()  # finished: a new export is a new job
+    assert d["job"]["id"] != a["job"]["id"]
+    drain(env.app)
+
+
+def test_a_nul_byte_in_free_text_is_a_422_not_a_500(sc: Scenario) -> None:
+    api, nul = sc.ws.api, "bad\u0000reason"
+    assert sc.approver.post(f"/claim-batches/{uuid.uuid4()}/void", json={"reason": nul}).status_code == 422
+    case = uuid.uuid4()
+    for path, body in (
+        (f"/cases/{case}/write-off", {"reason": nul}),
+        (f"/cases/{case}/notes", {"note": nul}),
+        (f"/cases/{case}/transition", {"to_status": "open", "note": nul}),
+    ):
+        r = api.post(path, json=body, headers={"If-Match": '"1"'})
+        assert r.status_code == 422, (path, r.status_code, r.text)
+    opts = {"delimiter": ",", "sheet_name": nul}
+    t = api.post(
+        "/claim-export-templates",
+        json={
+            "manufacturer_id": next(iter(sc.ws.manufacturers.values())),
+            **template_body(name="nul", options=opts),
+        },
+    )
+    assert t.status_code == 422

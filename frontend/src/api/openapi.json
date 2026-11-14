@@ -1210,6 +1210,7 @@
           "reason": {
             "maxLength": 1000,
             "minLength": 1,
+            "pattern": "^[^\\x00-\\x08\\x0b\\x0c\\x0e-\\x1f\\x7f]+$",
             "title": "Reason",
             "type": "string"
           }
@@ -7329,6 +7330,7 @@
           "note": {
             "maxLength": 2000,
             "minLength": 1,
+            "pattern": "^[^\\x00-\\x08\\x0b\\x0c\\x0e-\\x1f\\x7f]+$",
             "title": "Note",
             "type": "string"
           }
@@ -7487,7 +7489,7 @@
             "default": "Claims",
             "maxLength": 31,
             "minLength": 1,
-            "pattern": "^[^\\\\/*?:\\[\\]]+$",
+            "pattern": "^[^\\\\/*?:\\[\\]\\x00-\\x1f\\x7f]+$",
             "title": "Sheet Name",
             "type": "string"
           }
@@ -11966,6 +11968,7 @@
               {
                 "maxLength": 2000,
                 "minLength": 1,
+                "pattern": "^[^\\x00-\\x08\\x0b\\x0c\\x0e-\\x1f\\x7f]+$",
                 "type": "string"
               },
               {
@@ -12918,6 +12921,7 @@
           "reason": {
             "maxLength": 1000,
             "minLength": 1,
+            "pattern": "^[^\\x00-\\x08\\x0b\\x0c\\x0e-\\x1f\\x7f]+$",
             "title": "Reason",
             "type": "string"
           }

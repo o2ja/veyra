@@ -408,3 +408,22 @@ def test_roles_viewers_follow_every_number_and_only_writers_refresh(env: Env, st
     assert analyst.post(f"/reports/claim-batches/{batch}/audit-pack").status_code == 403
     assert admin.post(f"/reports/claim-batches/{batch}/audit-pack").status_code == 202
     drain(env.app)
+
+
+def test_audit_pack_requests_dedupe_in_flight_and_are_throttled_per_user(env: Env, story: Story) -> None:
+    from rebate.api.deps import JOB_REQUESTS_PER_MINUTE
+
+    api = story.ws.api
+    path = f"/reports/claim-batches/{_batch_of(story, 'INV-10001')}/audit-pack"
+    drain(env.app)
+    first = api.post(path, json={"format": "csv"}).json()
+    again = api.post(path, json={"format": "csv"}).json()
+    assert again["file_id"] == first["file_id"] and again["job"]["id"] == first["job"]["id"]
+    assert api.post(path, json={"format": "xlsx"}).json()["file_id"] != first["file_id"]
+    for _ in range(JOB_REQUESTS_PER_MINUTE - 3):
+        assert api.post(path, json={"format": "csv"}).status_code == 202
+    r = api.post(path, json={"format": "csv"})
+    assert r.status_code == 429 and int(r.headers["Retry-After"]) >= 1
+    other = member(env.stack, env.app, api, "viewer")
+    assert other.post(path, json={"format": "csv"}).status_code == 202
+    drain(env.app)
