@@ -145,10 +145,14 @@ export async function inviteMember(
   await memberPage.getByLabel("Your name").fill(fullName);
   await memberPage.getByLabel("Password").fill(PASSWORD);
   await memberPage.getByRole("button", { name: "Accept invitation" }).click();
+  await expect(memberPage).toHaveURL(/\/login\?reason=invited/);
   await signIn(memberPage, email);
   await enrolMfa(memberPage);
   return { page: memberPage, context };
 }
+
+// The API checks Origin on every unsafe call; a bare request context sends none.
+const ORIGIN = process.env.E2E_BASE_URL ?? "http://localhost:5173";
 
 async function csrfToken(page: Page): Promise<string> {
   return (await page.context().cookies()).find((cookie) => cookie.name === "__Host-csrf")?.value ?? "";
@@ -165,7 +169,7 @@ export async function apiJson<T>(
   const response = await page.request.fetch(path, {
     method,
     ...(body === undefined ? {} : { data: body }),
-    headers: { "X-CSRF-Token": await csrfToken(page), ...extraHeaders },
+    headers: { "X-CSRF-Token": await csrfToken(page), Origin: ORIGIN, ...extraHeaders },
   });
   if (!response.ok()) {
     throw new Error(`${method} ${path} failed: ${response.status()} ${await response.text()}`);
@@ -184,7 +188,7 @@ export async function apiStatus(
   const response = await page.request.fetch(path, {
     method,
     ...(body === undefined ? {} : { data: body }),
-    headers: { "X-CSRF-Token": await csrfToken(page), ...extraHeaders },
+    headers: { "X-CSRF-Token": await csrfToken(page), Origin: ORIGIN, ...extraHeaders },
   });
   return response.status();
 }
@@ -444,7 +448,7 @@ export async function bootstrapRecovery(
   await expect(page).toHaveURL(/\/agreement-drafts\/[0-9a-f-]+$/);
   const draftId = page.url().split("/").pop() ?? "";
   await page.getByLabel("Agreement type").selectOption("spa");
-  await page.getByLabel("External number").fill("SPA-REC-2026");
+  await page.getByLabel("External number").fill("SPA-VOLT-2026-884");
   await page.getByLabel("Manufacturer code").fill("VOLT");
   await page.getByLabel("Name", { exact: true }).fill("Voltara contractor SPA (SYNTHETIC)");
   await page.getByLabel("Valid from").fill("2026-01-01");
@@ -458,13 +462,14 @@ export async function bootstrapRecovery(
   for (const [index, item] of [
     { sku: "BRK-3P-100A", ref: "100.00", dev: "78.00", sell: "88.00" },
     { sku: "BRK-3P-60A", ref: "64.50", dev: "52.00", sell: "58.00" },
-    { sku: "PNL-200A", ref: "412.00", dev: "360.00", sell: "389.00" },
+    { sku: "PNL-200A", ref: "412.00", dev: "360.00", sell: "389.00", cap: "100" },
   ].entries()) {
     await page.getByRole("button", { name: "Add item" }).click();
     await page.getByLabel(`Item ${index + 1} SKU`).fill(item.sku);
     await page.getByLabel(`Item ${index + 1} reference cost`).fill(item.ref);
     await page.getByLabel(`Item ${index + 1} deviated cost`).fill(item.dev);
     await page.getByLabel(`Item ${index + 1} sell price`).fill(item.sell);
+    if (item.cap) await page.getByLabel(`Item ${index + 1} max quantity`).fill(item.cap);
   }
   await page.getByRole("button", { name: "Save draft" }).click();
   await expect(page.getByText("Draft saved.")).toBeVisible();
@@ -518,11 +523,25 @@ export async function bootstrapRecovery(
     { "Idempotency-Key": crypto.randomUUID() },
   );
 
+  // The ground truth's reason_code_mappings (E07, E12) are manufacturer configuration, set before reconciling.
+  const truthMappings = (
+    JSON.parse(readFileSync(generated("ground_truth/expected_reconciliation.json"), "utf8")) as {
+      reason_code_mappings: Record<string, string>;
+    }
+  ).reason_code_mappings;
+  await apiJson(page, "PUT", `/api/v1/manufacturers/${voltara.id}/reason-code-mappings`, {
+    mappings: Object.entries(truthMappings).map(([external_code, reason_code]) => ({
+      external_code,
+      external_text: external_code,
+      reason_code,
+    })),
+  });
+
   // Upload CM-7781 through the real files screen.
   const remittanceName = "credit_memo_VOLT_CM-7781.csv";
   await page.goto("/files");
   await page.getByLabel("Type").selectOption("remittance");
-  await page.getByLabel("File").setInputFiles(generated(`remittance/${remittanceName}`));
+  await page.getByLabel("File", { exact: true }).setInputFiles(generated(`remittance/${remittanceName}`));
   await page.getByRole("button", { name: "Upload" }).click();
   await expect(page.getByText(`${remittanceName} uploaded`)).toBeVisible({ timeout: 60_000 });
 
@@ -566,6 +585,7 @@ export async function bootstrapRecovery(
 
   await apiJson(page, "POST", `/api/v1/remittances/${created.remittance.id}/accept`, {
     corrections: [],
+    total_amount: "7545.00", // ground truth document_total; the CSV states no total
     document_number: "CM-7781",
     document_date: "2026-07-31",
     payment_date: "2026-07-31",
@@ -578,7 +598,7 @@ export async function bootstrapRecovery(
   await pollJob(page, reconciled.job.id, "CM-7781 reconciliation job");
 
   // The unique subset match is a suggestion: a person must confirm it before finalising.
-  const lines = await apiJson<{ data: { matches: MatchRow[] }[] }>(
+  const lines = await apiJson<{ data: { line: { id: string; line_number: number }; matches: MatchRow[] }[] }>(
     page,
     "GET",
     `/api/v1/remittances/${created.remittance.id}/reconciliation?limit=200`,
@@ -591,6 +611,13 @@ export async function bootstrapRecovery(
       });
     }
   }
+
+  // Line 6 (INV-99999, 75.00) has no claim line: a person marks it an unmatched payment (ground truth).
+  const line6 = lines.data.find((row) => row.line.line_number === 6);
+  if (!line6) throw new Error("CM-7781 line 6 missing");
+  await apiJson(page, "POST", `/api/v1/remittance-lines/${line6.line.id}/categorise`, {
+    category: "unmatched_payment",
+  });
 
   await apiJson(page, "POST", `/api/v1/remittances/${created.remittance.id}/finalize`, undefined, {
     "Idempotency-Key": crypto.randomUUID(),
@@ -608,9 +635,11 @@ export async function bootstrapRecovery(
   };
   const expectedCases = truth.expected
     .flatMap((line) => (line.variance ? [line.variance] : []))
-    .map((v) => `${v.case_type}|${v.reason_code}|${v.amount}`)
+    .map((v) => `${v.case_type}|${v.reason_code}|${Number(v.amount).toFixed(2)}`)
     .sort();
-  const actualCases = cases.data.map((c) => `${c.case_type}|${c.reason_code}|${c.variance_amount}`).sort();
+  const actualCases = cases.data
+    .map((c) => `${c.case_type}|${c.reason_code}|${Number(c.variance_amount).toFixed(2)}`)
+    .sort();
   expect(actualCases).toEqual(expectedCases);
 
   return {

@@ -247,7 +247,7 @@ export function RecoveryQueuePage() {
                         <td className="py-2 pr-4">
                           <Link
                             to={`/recovery/${item.id}`}
-                            aria-label={`Open recovery case ${item.id}`}
+                            aria-label={`${item.deadline_unknown ? "Unknown deadline" : usDate(item.deadline_date)}, open recovery case ${item.id}`}
                             className="font-medium text-brand underline after:absolute after:inset-0 after:content-['']"
                           >
                             {item.deadline_unknown ? (

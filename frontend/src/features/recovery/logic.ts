@@ -90,8 +90,15 @@ export function usDateTime(value: string | null | undefined): string {
   }).format(date);
 }
 
-/** Server amount as given; the UI never adds, subtracts or rounds it. */
-export const amountText = (value: string | null | undefined): string => value ?? "—";
+/**
+ * Server amount, lossless: the API sends 4 decimal places ("150.0000"); trailing zeros beyond 2 are dropped.
+ * The UI never adds, subtracts or rounds it.
+ */
+export function amountText(value: string | null | undefined): string {
+  if (value == null) return "—";
+  const [whole = "", fraction = ""] = value.split(".");
+  return `${whole}.${fraction.replace(/0+$/, "").padEnd(2, "0")}`;
+}
 
 export const ownerText = (
   ownerUserId: string | null | undefined,

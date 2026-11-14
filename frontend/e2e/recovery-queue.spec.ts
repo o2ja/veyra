@@ -9,6 +9,12 @@ import {
   uniqueEmail,
 } from "./support";
 
+// The API sends 4 decimal places; the screen shows them without the extra trailing zeros.
+const money = (value: string): string => {
+  const [whole = "", fraction = ""] = value.split(".");
+  return `${whole}.${fraction.replace(/0+$/, "").padEnd(2, "0")}`;
+};
+
 test("S9 recovery queue: server order, unknown deadline first, reason filter, summary, viewer read-only", async ({
   page,
   browser,
@@ -36,7 +42,7 @@ test("S9 recovery queue: server order, unknown deadline first, reason filter, su
       at_risk: { deadline_within_days: number; count: number; amount: string };
     }>(page, "GET", "/api/v1/cases/summary");
     await expect(summary).toContainText(
-      `At risk within ${serverSummary.at_risk.deadline_within_days} days: ${serverSummary.at_risk.count} cases, ${serverSummary.at_risk.amount}`,
+      `At risk within ${serverSummary.at_risk.deadline_within_days} days: ${serverSummary.at_risk.count} cases, ${money(serverSummary.at_risk.amount)}`,
     );
 
     const table = page.getByRole("table", { name: "Recovery cases" });
@@ -44,7 +50,10 @@ test("S9 recovery queue: server order, unknown deadline first, reason filter, su
     await expect(rows).toHaveCount(4);
     const firstRow = rows.first();
     await expect(firstRow.getByText("Unknown deadline")).toBeVisible();
-    await expect(firstRow).toContainText(unknownFirst?.variance_amount ?? "");
+    // BUSINESS_LOGIC.md section 12: an unpaid case counts from the claim submission date (D-N2), so the unmatched
+    // payment (75.00 in expected_reconciliation.json, no claim line) is the one without a computable deadline.
+    expect(unknownFirst?.case_type).toBe("unmatched_payment");
+    await expect(firstRow).toContainText("75.00");
 
     // The reason filter narrows the queue exactly as the server does.
     const reason = unknownFirst?.reason_code ?? "";

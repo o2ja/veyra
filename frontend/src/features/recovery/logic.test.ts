@@ -36,6 +36,9 @@ describe("recovery display helpers", () => {
   it("shows amounts exactly as the server sent them", () => {
     expect(amountText("150.00")).toBe("150.00");
     expect(amountText("0.00")).toBe("0.00");
+    expect(amountText("150.0000")).toBe("150.00");
+    expect(amountText("0.0000")).toBe("0.00");
+    expect(amountText("12.3450")).toBe("12.345");
     expect(amountText(null)).toBe("—");
   });
 
