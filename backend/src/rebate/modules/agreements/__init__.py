@@ -3,7 +3,12 @@ four-eyes approval, immutable versions with split-supersede, cancellation, expir
 and diff (FR-AG-01..12). Public API below."""
 
 from rebate.modules.agreements import jobs as _jobs  # noqa: F401  (registers job handlers)
-from rebate.modules.agreements.calc_reads import VersionsInForce, draft_for_preview, versions_in_force
+from rebate.modules.agreements.calc_reads import (
+    VersionsInForce,
+    draft_for_preview,
+    version_rules,
+    versions_in_force,
+)
 from rebate.modules.agreements.models import AgreementDraft
 from rebate.modules.agreements.router import router
 from rebate.modules.agreements.schemas import Payload
@@ -21,5 +26,6 @@ __all__ = [
     "router",
     "validate",
     "version_payload",
+    "version_rules",
     "versions_in_force",
 ]

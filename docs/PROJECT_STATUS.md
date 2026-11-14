@@ -27,7 +27,7 @@ S1 signed off by the owner 2026-11-10. Evidence and open points: `docs/reports/S
 
 **CI and merging (owner, 2026-11-13):** GitHub Actions is unpaid; the merge gate is `make ci-local` (6/6 on the exact commit, posted as a PR comment with the SHA) after merging latest `main`, plus the required reviews; nothing skipped or failing. Workflow runs only on ready-for-review PRs and pushes to `main`, with path filters; WIP PRs are drafts. At most 2 agents; full suite + Playwright once per merge; never two full suites at once. Full text: `CLAUDE.md` §19.
 
-**Resume point (2026-11-13 overnight):** see `docs/reports/notes/resume-prompt.md` "Update 2026-11-13". #18 merged; S7 blocked by financial discrepancy D-N1 (owner); S8/S9/S11.1 on branches.
+**Resume point (2026-11-14):** `docs/reports/notes/resume-prompt.md` + `FINISH_PLAN.md`. Backend S7–S10 built and reviewed (all findings fixed); UI S7–S10 built, reviews in progress, not Playwright-verified; #21 needs a fresh gate; owner merges; D-N11 open.
 
 ### S3–S6 batch (in progress, started 2026-11-10; S2 approved)
 
@@ -93,6 +93,7 @@ S5/S6 UI, then S7 onwards per `DEVELOPMENT_ROADMAP.md` / `IMPLEMENTATION_PLAN.md
 ## 7. Risks being watched
 
 Top items only; full list in the analysis and `SECURITY.md` §12.
+- **R-2 Restore drill (2026-11-13, local dev stack, who: builder L1):** backup 8 s, restore 16 s, row counts of all tables, alembic head, 100/100 object SHA-256 all equal; isolation + golden suites 380 passed against a fresh test DB. WAL/PITR NOT set up or drilled; not run against production-sized data or the restored DB itself. Details: `docs/reports/RESTORE_DRILL_2026-11-13.md`.
 - **R-1 Dev/prod storage parity:** local/CI use SeaweedFS, production uses the provider chosen in OD-3/OD-4. Before the first pilot, run the same storage test suite (presigned expiry, versioning, SSE, quarantine → clean copy) against the production provider.
 - Agreement and remittance formats vary widely; mapping and review UX will matter more than extraction accuracy.
 - Provider terms for LLM data processing (OD-2).

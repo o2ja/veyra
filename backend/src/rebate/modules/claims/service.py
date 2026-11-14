@@ -12,7 +12,6 @@ from uuid import UUID
 from zoneinfo import ZoneInfo
 
 from sqlalchemy import Row, select, text
-from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
@@ -22,13 +21,13 @@ from rebate.core.ids import new_id
 from rebate.core.jobs import enqueue
 from rebate.modules import agreements, audit, masterdata, tenancy
 from rebate.modules.claims import frozen, loaders, runs
-from rebate.modules.claims.models import CalculationRun, ClaimAdjustment
+from rebate.modules.claims.models import CalculationRun
 from rebate.modules.masterdata import Who, keyset
 from rebate_engine.deadlines import rebate_deadline
 from rebate_engine.models import EngineRuleError, LineResult, RebateVersion, SpaRunInput, Status, Tier
 from rebate_engine.rebate import calculate_accrual
 from rebate_engine.rules import RulesError, parse_rebate_rules, spa_version_from_payload
-from rebate_engine.spa import calculate_spa, propose_recalculation
+from rebate_engine.spa import calculate_spa
 from rebate_engine.trace import ENGINE_VERSION
 
 JOB_KIND = "calculation_run"
@@ -284,70 +283,8 @@ def tracker(db: Session, tenant_id: UUID) -> list[dict[str, Any]]:
     return out
 
 
-# ---- recalculation proposals (S5.3, completed by S7) --------------------------------------------------------
-
-
-def propose_adjustments(
-    db: Session, who: Who, run_id: UUID, source: frozen.FrozenClaimSource | None = None
-) -> tuple[int, list[ClaimAdjustment]]:
-    """BUSINESS_LOGIC.md §9.3: compare the run's results with the frozen claims of the same lines and insert
-    ``agreement_change`` proposals (equal -> nothing; different -> new - frozen; now an exception -> -frozen).
-    Idempotent per (claim line, type, run). Until S7 builds ``claim_lines`` the source returns no frozen claims."""
-    source = source or frozen.source
-    run = completed_run(db, who.tenant_id, run_id)
-    rows = db.execute(
-        text(
-            "SELECT id, sales_document_line_id, status, exception_code, claim_amount FROM calculation_results "
-            "WHERE tenant_id = :t AND run_id = :r AND status IN ('eligible', 'exception', 'not_applicable') "
-            "ORDER BY id"
-        ),
-        {"t": who.tenant_id, "r": run_id},
-    ).all()
-    by_line = {r.sales_document_line_id: r for r in rows}
-    claims = source.frozen_claims(db, who.tenant_id, sorted(by_line))
-    made: list[ClaimAdjustment] = []
-    for line_id, claim in sorted(claims.items()):
-        row = by_line.get(line_id)
-        if row is None:
-            continue
-        new = LineResult(
-            line_id=str(line_id),
-            status=Status(row.status),
-            exception_code=None,
-            agreement_version_id=None,
-            claim_amount=row.claim_amount,
-        )
-        amount = propose_recalculation(claim.claim_amount, new)
-        if amount is None:
-            continue
-        reason = (
-            f"Recalculation {run.id}: now {row.exception_code or row.status}, frozen claim {claim.claim_amount}"
-            if row.status != "eligible"
-            else f"Recalculation {run.id}: new amount {row.claim_amount} versus frozen {claim.claim_amount}"
-        )
-        inserted = db.execute(
-            insert(ClaimAdjustment)
-            .values(
-                tenant_id=who.tenant_id,
-                id=new_id(),
-                manufacturer_id=claim.manufacturer_id,
-                adjustment_type="agreement_change",
-                claim_line_id=claim.claim_line_id,
-                calculation_result_id=row.id,
-                run_id=run_id,
-                amount=amount,
-                reason=reason,
-                status="proposed",
-                proposed_by=who.user_id,
-                created_at=clock.now(),
-            )
-            .on_conflict_do_nothing()
-            .returning(ClaimAdjustment)
-        ).scalar_one_or_none()
-        if inserted is not None:
-            made.append(inserted)
-    _audit(db, who, audit.Action.CALCULATION_ADJUSTMENTS_PROPOSED, run_id, after={"proposed": len(made)})
-    return len(claims), made
+def audit_proposals(db: Session, who: Who, run_id: UUID, proposed: int) -> None:
+    _audit(db, who, audit.Action.CALCULATION_ADJUSTMENTS_PROPOSED, run_id, after={"proposed": proposed})
 
 
 # ---- draft preview ------------------------------------------------------------------------------------------

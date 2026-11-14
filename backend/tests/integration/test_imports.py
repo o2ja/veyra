@@ -162,8 +162,8 @@ def test_claimed_line_change_is_flagged_through_the_hook(
     assert len(seen[-1]) == 2  # both superseded lines were asked about
 
 
-def test_hook_reports_no_claims_before_s7() -> None:
-    assert claims_hook.claimed_line_ids(None, uuid.uuid4(), [uuid.uuid4()]) == frozenset()  # type: ignore[arg-type]
+def test_hook_asks_nothing_of_the_database_for_no_lines() -> None:
+    assert claims_hook.claimed_line_ids(None, uuid.uuid4(), []) == frozenset()  # type: ignore[arg-type]
 
 
 def test_error_file_partial_import_and_unmapped_queue(ws: Workspace, admin_engine: Engine) -> None:

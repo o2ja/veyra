@@ -355,6 +355,7 @@ def _calculate(
                     db,
                     tenant_id,
                     ingestion.sales_line_ids(db, tenant_id, group, scope.date_from, scope.date_to, cutoff),
+                    cutoff,
                 )
             )
         for d_from, d_to in windows:
@@ -436,7 +437,11 @@ def _carry(
         if pc is None or ln.product_id is None:
             continue
         factor = find_factor(conversions, ln.product_id, ln.uom, pc.claim_uom)
-        returned = ln.returned_quantity * factor if factor is not None else Decimal(0)
+        returned = (
+            max(ln.returned_quantity - pc.netted_returned_quantity, Decimal(0)) * factor
+            if factor is not None
+            else Decimal(0)
+        )
         key = (pc.agreement_id, ln.product_id)
         consumed[key] = consumed.get(key, Decimal(0)) + max(pc.quantity - returned, Decimal(0))
 

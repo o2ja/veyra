@@ -1,12 +1,20 @@
 # Day log (2026-11-13, owner present)
 
-## SUMMARY (current)
-- Owner decisions 2026-11-13 recorded (PROJECT_STATUS change log): D-N1/D-N3/D-N7 money rule, D-N2, D-N4 deferred, D-N5, D-N6, D-N8, D-N9; plus **D-N10**: a return netted into a frozen claim and later reduced/voided → the claimed original is evaluated on q − min(netted, current returns); the shortfall is proposed as an agreement_change (INV-10021 200.00 → 225.00 = +25.00), carried by a later batch.
-- CI: GitHub Actions unpaid → merge gate `make ci-local` (CLAUDE.md §19). #23 merged (ci-local 6/6 at 1c08c09).
-- In progress: #20 gate run (main merged in, 719d32d); F3 S7 money rule on s7-adjustments (review 1: NOT MERGEABLE, 2 serious → fixing, incl. D-N10).
-- Next: #20 → #21 → #22 (one at a time, ci-local each), then s7 → #15 → S8 → S9 → S10, then UI briefs.
+## SUMMARY (current, 2026-11-14)
+- Backend S7–S10 all reviewed; last fixes in (S10 79614c0). Waiting: #21 gate (main merge first) → owner merges; then the merge chain.
+- UI: ui/s7-adjustments fixed; ui/s8 review running/redo; ui/s9, ui/s10 to review. None Playwright-verified.
+- Owner: D-N11 decides a real double count (INV-10020 vs CL-4, 50.00) once B2 is paid; D-N4, D-N8, D-N9.
+- Preview app for the owner runs from ui/s10 on DB rebate_preview (http://localhost:5173).
 
 ## Log
+- 2026-11-14: C: freed by owner. S10 verified after the S9 merge (single head, 17 pass). Full S10 review MERGEABLE WITH MINORS (no discrepancy; claimed 10,672.50, collected 7,470.00, short-paid 2,940.00) → fixed 79614c0 (audit pack POST). #21 gate 5/6: e2e flake root cause = enrolMfa returned before the post-MFA navigate("/") → wait added; full gate started then stopped for the docs push. ui/s8: final S8 merged in (e2761ac), opus review launched. ui/s8 + ui/s10 work committed for the external agents. Preview app started from ui/s10 on rebate_preview.
+- 2026-11-13 late: owner hired OpenCode (prompt 3, ui/s9); Antigravity did prompts 1, 2 and 4 (ui/s7-adjustments, ui/s8, ui/s10) — committed by me (their sandbox cannot run hooks). Plan with 2 Claude agents (sonnet builder + opus reviewer) → FINISH_PLAN.md.
+- ui/s7-adjustments review 1: NOT MERGEABLE (stub e2e spec, unreachable tabs + 13 more) → Claude UI fixer, dccc040.
+- Builder B1: S9 ← final S8 (8d8de1e, single head; fifth case CL-4 short_paid 50.00 by D-N3/D-N11 interim), S10 ← S9 (2 expectations corrected per D-N3: 6 collected rows, CL-4 paid 200.00; total 7,470.00 unchanged). S9 review MERGEABLE WITH MINORS → fixed 1983f5a; S10 merged it (7054beb), tests not re-run (C: full).
+- Docker Desktop crashed at ~23:20 (RAM 0.8 GB free with gate + 2 agents + external agents) → restarted services. #21 re-gate failed for that reason, then a later re-run was cut off by the session end.
+- Evening session: Docker Desktop was down → restarted, stack up. #21's earlier gate: 5/6, e2e failed (calculations.spec). Re-run: files.spec failed. Root cause: Vite reloaded the page when Playwright wrote junit-e2e.xml into frontend/; fix 4f95e43 (watch.ignored). Full gate 6/6 PASS at 4f95e43; comment posted; merge blocked by the auto-mode classifier → owner.
+- S8 third pass (fresh, the killed one void): NOT MERGEABLE, no financial discrepancy (all GT values re-derived). Serious: a positive cross-batch adjustment allocation (e.g. D-N10 +25.00) was uncounted cash, breaking §10.2; the §10.3 sentence saying so came from the builder, not the owner → treated as a code defect. Ruling: cross-batch allocation counts max(amount, 0). Rounds 3–5 (b6d17b1, 0051a13, b48546f) + my test tightening 40dc42f. Passes 4 and 5: no financial discrepancy; final MERGEABLE WITH MINORS, minors fixed and verified (reconciliation tests 20 pass, standalone pass).
+- UI: branches ui/s7-adjustments, ui/s8, ui/s9, ui/s10 created on their backend branches + ui/s7, briefs + Antigravity prompts committed. ui/qa-1 e2e not run: dev DB at #21's audit_seals head, branch lacks it → after #21 merges.
 - #23 merged (9a63f6d). #15 converted to draft (WIP).
 - F3 6dc4325: D-N1 fixed (claimed original evaluated on its frozen netting basis; no migration). Financial review 1 NOT MERGEABLE: S1 netted-return reduction ignored (→ owner D-N10), S2 cap clamp; minors engine version + trace, nits. Fix round running.
 

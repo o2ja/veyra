@@ -224,6 +224,7 @@ def load_sales_lines(
         db, tenant_id, manufacturer_id, date_from, date_to, data_cutoff, product_ids=product_ids, limit=limit
     )
     returned = ingestion.returned_quantities(db, tenant_id, manufacturer_id, data_cutoff)
+    before = ingestion.returned_before(db, tenant_id, manufacturer_id, data_cutoff)
     originals = {r.id for r in rows if r.quantity >= 0}
     original_ids = sorted(
         {r.original_line_id for r in rows if r.quantity < 0 and r.original_line_id is not None}
@@ -241,6 +242,7 @@ def load_sales_lines(
                 quantity=original_qty[oid],
                 returned_quantity=returned.get(oid, Decimal(0)),
                 prior_claim=prior.get(oid),
+                returned_before=before.get(r.id, Decimal(0)),
             )
         lines.append(
             SalesLine(

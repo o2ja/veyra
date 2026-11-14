@@ -27,6 +27,7 @@ TENANT_TABLES: dict[str, str] = {
     "memberships": "tenant_id",
     "invitations": "tenant_id",
     "audit_log": "tenant_id",
+    "audit_seals": "tenant_id",
     "idempotency_keys": "tenant_id",
     "file_objects": "tenant_id",
     # S3 master data and import pipeline
@@ -61,6 +62,22 @@ TENANT_TABLES: dict[str, str] = {
     "calculation_results": "tenant_id",
     "rebate_accrual_entries": "tenant_id",
     "claim_adjustments": "tenant_id",
+    # S7 claims
+    "claim_export_templates": "tenant_id",
+    "claim_batches": "tenant_id",
+    "claim_lines": "tenant_id",
+    # S8 reconciliation
+    "remittance_documents": "tenant_id",
+    "remittance_lines": "tenant_id",
+    "remittance_extraction_staging": "tenant_id",
+    "reconciliation_matches": "tenant_id",
+    # S9 recovery
+    "variance_cases": "tenant_id",
+    "variance_case_events": "tenant_id",
+    "case_attachments": "tenant_id",
+    "notifications": "tenant_id",
+    # S10 reporting
+    "summary_claims_monthly": "tenant_id",
     # S6 AI extraction
     "document_extractions": "tenant_id",
     "ai_invocations": "tenant_id",
@@ -82,6 +99,10 @@ class TenantData:
     s4: dict[str, UUID] = field(default_factory=dict)  # one row id per S4 tenant table
     s5: dict[str, UUID] = field(default_factory=dict)  # one row id per S5 tenant table
     s6: dict[str, UUID] = field(default_factory=dict)  # one row id per S6 tenant table
+    s7: dict[str, UUID] = field(default_factory=dict)  # one row id per S7 tenant table
+    s8: dict[str, UUID] = field(default_factory=dict)  # one row id per S8 tenant table
+    s9: dict[str, UUID] = field(default_factory=dict)  # one row id per S9 tenant table
+    s10: dict[str, UUID] = field(default_factory=dict)  # one row id per S10 tenant table
 
 
 @dataclass
@@ -142,12 +163,25 @@ def _tenant(conn: Connection, name: str, admin_email: str) -> TenantData:
     data.s4 = _s4_rows(conn, tid, admin, data.s3)
     data.s5 = _s5_rows(conn, tid, admin, data.s3, data.s4)
     data.s6 = _s6_rows(conn, tid, admin, fid)
+    data.s7 = _s7_rows(conn, tid, admin, data.s3, data.s4, data.s5)
+    data.s8 = _s8_rows(conn, tid, admin, fid, data.s3, data.s7)
+    data.s9 = _s9_rows(conn, tid, admin, data.s3, data.s8)
+    data.s10 = _s10_rows(conn, tid, data.s3)
+    data.s5["adj"] = data.s7.pop("adj")  # a proposal needs its claim line (S7.4 FK), so S7 inserts it
     conn.execute(
         text(
             "INSERT INTO audit_log (tenant_id, occurred_at, actor_type, actor_user_id, action, "
             "entity_type, entity_id) VALUES (:t, now(), 'user', :u, 'tenant.created', 'tenant', :t)"
         ),
         {"t": tid, "u": admin},
+    )
+    conn.execute(
+        text(
+            "INSERT INTO audit_seals (tenant_id, from_audit_id, to_audit_id, seal_hash) "
+            "SELECT tenant_id, min(id), max(id), repeat('a', 64) FROM audit_log WHERE tenant_id = :t "
+            "GROUP BY tenant_id"
+        ),
+        {"t": tid},
     )
     conn.execute(
         text(
@@ -235,8 +269,9 @@ def _s4_rows(conn: Connection, t: UUID, user: UUID, s3: dict[str, UUID]) -> dict
 def _s5_rows(
     conn: Connection, t: UUID, user: UUID, s3: dict[str, UUID], s4: dict[str, UUID]
 ) -> dict[str, UUID]:
-    """One row in every S5 tenant table (a completed run with one result, one ledger entry, one proposal)."""
-    ids = {k: new_id() for k in ("run", "res", "acc", "adj")}
+    """One row in every S5 tenant table (a completed run with one result and one ledger entry; the proposal that
+    needs a claim line is created with the S7 rows)."""
+    ids = {k: new_id() for k in ("run", "res", "acc")}
     p = {"t": t, "u": user, "mfr": s3["mfr"], "sline": s3["sline"], "ver": s4["ver"], "agr": s4["agr"], **ids}
     for sql in (
         "INSERT INTO calculation_runs (tenant_id, id, scope, scope_hash, as_of, data_cutoff, run_date, "
@@ -250,8 +285,6 @@ def _s5_rows(
         "manufacturer_id, external_number, agreement_name, tiers, period_start, period_end, as_of_date, cumulative_qualifying, cumulative_payout_base, cumulative_earned, "
         "prior_cumulative_accrued, delta, trace, inputs_hash) VALUES (:t, :acc, :run, :agr, :ver, :mfr, "
         "'SPA-ISO', 'Iso SPA', '[]', '2026-01-01', '2026-12-31', '2026-06-01', 1, 1, 1, 0, 1, '{}', 'h')",
-        "INSERT INTO claim_adjustments (tenant_id, id, manufacturer_id, adjustment_type, calculation_result_id, "
-        "run_id, amount, reason) VALUES (:t, :adj, :mfr, 'agreement_change', :res, :run, -1, 'iso')",
     ):
         conn.execute(text(sql), p)
     return ids
@@ -268,6 +301,109 @@ def _s6_rows(conn: Connection, t: UUID, user: UUID, file_id: UUID) -> dict[str, 
         "VALUES (:t, :invocation, :extraction, 'agreement_pass_a', 'anthropic', 'm', 'v', 'ok')",
     ):
         conn.execute(text(sql), p)
+    return ids
+
+
+def _s7_rows(
+    conn: Connection, t: UUID, user: UUID, s3: dict[str, UUID], s4: dict[str, UUID], s5: dict[str, UUID]
+) -> dict[str, UUID]:
+    """One row in each S7 tenant table: a template, a draft batch and its single claim line (one transaction:
+    the batch/line totals are checked at commit), plus the S5 proposal against that line (returned as ``adj``)."""
+    ids = {k: new_id() for k in ("tpl", "batch", "line", "adj")}
+    p = {
+        "t": t,
+        "u": user,
+        "mfr": s3["mfr"],
+        "sline": s3["sline"],
+        "ver": s4["ver"],
+        "res": s5["res"],
+        "run": s5["run"],
+        **ids,
+    }
+    for sql in (
+        "INSERT INTO claim_export_templates (tenant_id, id, manufacturer_id, name, format, columns, created_by) "
+        'VALUES (:t, :tpl, :mfr, \'iso\', \'csv\', \'[{"header": "Ref", "source": "claim_reference"}]\', :u)',
+        "INSERT INTO claim_batches (tenant_id, id, manufacturer_id, batch_number, line_count, total_amount, "
+        "created_by) VALUES (:t, :batch, :mfr, 'CB-ISO-000001', 1, 1, :u)",
+        "INSERT INTO claim_lines (tenant_id, id, batch_id, claim_reference, source_kind, sales_document_line_id, "
+        "calculation_result_id, agreement_version_id, claim_amount) VALUES (:t, :line, :batch, 'CL-ISO-000001', "
+        "'sales_line', :sline, :res, :ver, 1)",
+        "INSERT INTO claim_adjustments (tenant_id, id, manufacturer_id, adjustment_type, claim_line_id, "
+        "calculation_result_id, run_id, amount, reason) VALUES (:t, :adj, :mfr, 'agreement_change', :line, :res, "
+        ":run, -1, 'iso')",
+    ):
+        conn.execute(text(sql), p)
+    return ids
+
+
+def _s8_rows(
+    conn: Connection, t: UUID, user: UUID, file_id: UUID, s3: dict[str, UUID], s7: dict[str, UUID]
+) -> dict[str, UUID]:
+    """One row in each S8 tenant table: an accepted remittance (1.00, one line, one staging row) with a suggested
+    match to the S7 claim line (the document is accepted in the same transaction, as the real flow does)."""
+    ids = {k: new_id() for k in ("doc", "rline", "stg", "match")}
+    p = {"t": t, "u": user, "mfr": s3["mfr"], "file": file_id, "line": s7["line"], **ids}
+    for sql in (
+        "INSERT INTO remittance_documents (tenant_id, id, manufacturer_id, file_id, doc_type, channel, "
+        "document_number, total_amount, created_by) VALUES (:t, :doc, :mfr, :file, 'credit_memo', 'credit_memo', "
+        "'CM-ISO', 1, :u)",
+        "INSERT INTO remittance_extraction_staging (tenant_id, id, remittance_document_id, line_number, "
+        "amount_paid) VALUES (:t, :stg, :doc, 1, 1)",
+        "INSERT INTO remittance_lines (tenant_id, id, remittance_document_id, line_number, amount_paid) "
+        "VALUES (:t, :rline, :doc, 1, 1)",
+        "UPDATE remittance_documents SET status = 'accepted', accepted_by = :u, accepted_at = now() "
+        "WHERE tenant_id = :t AND id = :doc",
+        "INSERT INTO reconciliation_matches (tenant_id, id, match_id, remittance_line_id, claim_line_id, "
+        "allocated_amount, method, evidence, status) VALUES (:t, :match, :match, :rline, :line, 1, 'manual', "
+        "'{}', 'suggested')",
+    ):
+        conn.execute(text(sql), p)
+    return ids
+
+
+def _s9_rows(
+    conn: Connection, t: UUID, user: UUID, s3: dict[str, UUID], s8: dict[str, UUID]
+) -> dict[str, UUID]:
+    """One row in each S9 tenant table: an open unmatched-payment case of 1.00 on the S8 remittance line, its
+    created event, a clean-scanned attachment on it, and a deadline reminder for the admin."""
+    ids = {k: new_id() for k in ("case", "event", "attachment", "notification", "file")}
+    p = {
+        "t": t,
+        "u": user,
+        "mfr": s3["mfr"],
+        "rline": s8["rline"],
+        "doc": s8["doc"],
+        "k": f"quarantine/{t}/{ids['file']}",
+        **ids,
+    }
+    for sql in (
+        "INSERT INTO variance_cases (tenant_id, id, manufacturer_id, remittance_line_id, remittance_document_id, "
+        "case_type, reason_code, paid_amount, variance_amount, created_by) VALUES (:t, :case, :mfr, :rline, :doc, "
+        "'unmatched_payment', 'unmatched_payment', 1, 1, :u)",
+        "INSERT INTO variance_case_events (tenant_id, id, case_id, event_type, actor_user_id) "
+        "VALUES (:t, :event, :case, 'created', :u)",
+        "INSERT INTO file_objects (tenant_id, id, kind, original_name, storage_key, size_bytes, sha256, "
+        "detected_mime, uploaded_by, scan_status, scanned_at) VALUES (:t, :file, 'attachment', 'iso.pdf', :k, 10, "
+        "repeat('a', 64), 'application/pdf', :u, 'clean', now())",
+        "INSERT INTO case_attachments (tenant_id, id, case_id, file_id, added_by) "
+        "VALUES (:t, :attachment, :case, :file, :u)",
+        "INSERT INTO notifications (tenant_id, id, user_id, kind, entity_type, entity_id, title, dedupe_key) "
+        "VALUES (:t, :notification, :u, 'deadline_reminder', 'variance_case', :case, 'iso', 'iso:deadline_reminder:14')",
+    ):
+        conn.execute(text(sql), p)
+    return ids
+
+
+def _s10_rows(conn: Connection, t: UUID, s3: dict[str, UUID]) -> dict[str, UUID]:
+    """One monthly summary row (claimed 1.00) of the tenant's manufacturer."""
+    ids = {"summary": new_id()}
+    conn.execute(
+        text(
+            "INSERT INTO summary_claims_monthly (tenant_id, id, manufacturer_id, month, claimed, as_of_date, "
+            "refreshed_at) VALUES (:t, :summary, :mfr, '2026-07-01', 1, '2026-07-10', now())"
+        ),
+        {"t": t, "mfr": s3["mfr"], **ids},
+    )
     return ids
 
 

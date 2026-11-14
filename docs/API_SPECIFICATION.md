@@ -185,10 +185,10 @@ Legend: **R** = roles allowed (A admin, P approver, N analyst, V viewer). Writes
 | `GET /calculation-results/{id}` | Includes `trace` | all |
 | `GET /missed-claims` | Eligible-unclaimed from latest runs: filters + `GET /missed-claims/summary`, `?format=csv|xlsx` → export job | all |
 | `GET /rebate-accruals` | Ledger entries of completed runs (filters `agreement_id`, `run_id`); `GET /rebate-tracker` returns `{data: [...]}`: latest entry per agreement and period with tiers, next tier and amount to go | all |
-| `GET /claim-adjustments`, `POST /claim-adjustments/{id}/approve|reject` | Proposed adjustments | read all; approve A P |
-| `POST /calculation-runs/{id}/propose-adjustments` | Compare vs frozen claims → proposals | A P N |
-| `GET/POST /claim-export-templates`, `PUT /claim-export-templates/{id}` | Column layouts | A P N |
-| `POST /claim-batches` | `{manufacturer_id, result_ids[] \| filter, include_adjustment_ids[]}`; 409 `already_claimed` lists conflicts | A P N |
+| `GET /claim-adjustments`, `POST /claim-adjustments/{id}/approve\|reject` | Adjustments. Filters `status`, `manufacturer_id`, `adjustment_type`, `claim_line_id`, `included_in_batch_id`; keyset, newest first; rows carry `claim_reference` of the corrected line. Approve only from `proposed` (four-eyes against the proposer: 403 `four_eyes_violation`), reject from `proposed\|approved`; otherwise 409 `invalid_state` | read all; approve A P |
+| `POST /calculation-runs/{id}/propose-adjustments` | Compare vs frozen claims and the ledger → proposals (`return_reversal`, `agreement_change`, `rebate_clawback`), netted against earlier non-rejected corrections of the same claim line (BUSINESS_LOGIC §9.3). 409 `invalid_state` when the run is not completed or a newer completed run covers any of its lines (propose from the latest run) | A P N |
+| `GET/POST /claim-export-templates`, `PUT /claim-export-templates/{id}` | Column layouts; a column `source` may also be `line_type` (`claim`, `rebate_claim`, `adjustment:<type>`): a batch file lists its sales claims, rebate claims and included adjustments (signed amounts) | A P N |
+| `POST /claim-batches` | `{manufacturer_id, include_adjustment_ids[]?}` plus exactly one of `result_ids[]`, `filter` or `accrual_entry_ids[]` (rebate accrual entries with a positive delta, one `rebate_accrual` claim line each; `LineOut.calculation_result_id` is null for them). 409 `already_claimed` lists conflicts (a line whose earlier version is claimed counts as claimed); 409 `adjustment_already_included` (details `adjustment_id`, `batch_id`); 409 `cannot_net_claim` (a negative return reversal of a manufacturer without `allow_negative_claims`); 422 `batch_total_not_positive` (total ≤ 0 without `allow_negative_claims`); 422 details `not_found`, `wrong_manufacturer`, `not_approved` (adjustment), `not_claimable` (accrual delta ≤ 0). The batch total is the lines plus the signed adjustments; `line_count` counts lines | A P N |
 | `GET /claim-batches`, `GET /claim-batches/{id}`, `GET /claim-batches/{id}/lines` | | all |
 | `POST /claim-batches/{id}/approve` | `approver` (four-eyes) | A P |
 | `POST /claim-batches/{id}/export` | → 202 export job → file | A P N |
@@ -199,14 +199,18 @@ Legend: **R** = roles allowed (A admin, P approver, N analyst, V viewer). Writes
 
 | Method & path | Purpose | R |
 |---|---|---|
-| `POST /remittances` | `{file_id, manufacturer_id, doc_type, channel, mapping_template_id?}` → 202 | A P N |
-| `GET /remittances`, `GET /remittances/{id}`, `GET /remittances/{id}/lines` | | all |
-| `GET /remittances/{id}/extraction`, `POST /remittances/{id}/accept` | PDF path: review/correct lines then accept | A P N |
-| `POST /remittances/{id}/reconcile` | Run matching → 202 | A P N |
-| `GET /remittances/{id}/reconciliation` | Side-by-side view with match status | all |
-| `POST /matches/{id}/confirm`, `POST /matches/{id}/reject` | | A P N |
-| `POST /matches` | Manual match `{remittance_line_id, claim_line_id, allocated_amount}` | A P N |
-| `POST /remittances/{id}/finalize` | Classify variances → cases | A P N |
+| `POST /remittances` | `{file_id, manufacturer_id, doc_type, channel, mapping_template_id?, document_number?, document_date?, payment_date?, total_amount?, currency_code?}` → 202 `{remittance, job}` (the `remittance_ingest` job reads the file). `Idempotency-Key` required. A PDF needs `ai_processing_enabled` (else 409 `ai_not_enabled`; CSV/XLSX never use AI). Same manufacturer + `document_number` as a non-void remittance → 409 `duplicate_remittance`; a file already used by a remittance → 409 `conflict`. A CSV/XLSX with no stated total (none in the request, none in the file) is not auto-accepted: it waits in `pending_review` with the problem `total_required` and `accept` answers 422 `total_required` until `total_amount` is entered. CSV/XLSX that pass every check are `accepted` by the requesting user; a PDF always lands in `pending_review` | A P N |
+| `GET /remittances` (filters `status`, `manufacturer_id`), `GET /remittances/{id}`, `GET /remittances/{id}/lines` | Cursor pagination. Lines exist only after acceptance (`remittance_lines`); before that read the staging rows via `/extraction` | all |
+| `GET /remittances/{id}/extraction` | Staged lines, per-line `issues` and document-level `problems` (`total_mismatch`, `not_in_document`, `negative_amount`, ...) | all |
+| `POST /remittances/{id}/accept` | `{document_number?, document_date?, payment_date?, total_amount?, corrections?: [{line_number, ...}]}`: corrections are kept as evidence; refused with 409 `cannot_accept` (details = the remaining problems) unless every line has an amount, none is negative and the lines add up to the document total (+-0.01). Lines become matchable only on acceptance | A P N |
+| `POST /remittances/{id}/void` | Only while `uploaded` or `pending_review` (else 409 `invalid_state`); `void` is final | A P N |
+| `POST /remittances/{id}/reconcile` | Run matching → 202 `{job}`; 409 `invalid_state` unless `accepted`. A re-run keeps confirmed matches and recomputes the rest | A P N |
+| `GET /remittances/{id}/reconciliation` | Side-by-side view: per line `state` (`matched`, `suggested`, `unmatched`) and its matches with allocations | all |
+| `GET /matches` (filters `remittance_id`, `status`), `GET /matches/{id}` | Match with allocations and evidence; `ETag` = revision | all |
+| `POST /matches/{id}/confirm`, `POST /matches/{id}/reject` | `If-Match` revision required (428 without, 412 on mismatch); only `suggested` matches | A P N |
+| `POST /matches` | Manual match `{remittance_line_id, claim_line_id, allocated_amount}`; `allocated_amount` is positive, or 0.00 only when the line's `amount_paid` is 0.00 (the claim line is then `rejected`). Interim (pending owner decision D-N11): instead of `claim_line_id`, `claim_adjustment_id` names an adjustment item carried by another batch (the adjustment's sign, 0 < |amount| <= |adjustment|) | A P N |
+| `POST /remittance-lines/{id}/categorise` | `{category: "unmatched_payment"}` (the only value): a person's persisted, audited decision for a line without a match. 409 `line_matched` if the line has a confirmed match, 409 `invalid_state` if already categorised or the remittance is not `accepted`; once categorised, a manual match or a confirm on the line is refused 409 `line_categorised` (final, conservative interim); 404 for a foreign line. Returns the line (`category`, `categorised_at`) | A P N |
+| `POST /remittances/{id}/finalize` | `Idempotency-Key` required. Refused unless `accepted` with no `suggested` match left (409 `unresolved_suggestions`) and every line has a confirmed match or a category (409 `uncategorised_lines`). Classifies variances (`findings`: `case_type`, `reason_code`, `amount`, ...) in one transaction, sets the document `reconciled` (immutable) and calls the registered S9 hooks, which create the cases | A P N |
 
 ### 2.8 Recovery
 
@@ -214,23 +218,32 @@ Legend: **R** = roles allowed (A admin, P approver, N analyst, V viewer). Writes
 |---|---|---|
 | `GET /cases` | Queue; filters `status`, `manufacturer_id`, `owner_user_id`, `deadline_before`, `reason_code`; sort by deadline | all |
 | `GET /cases/summary` | Totals by status/reason, at-risk | all |
-| `GET /cases/{id}`, `GET /cases/{id}/events` | Detail with trace refs and dispute assessment | all |
-| `PATCH /cases/{id}` | Assign owner, update fields | A P N |
+| `GET /cases/{id}`, `GET /cases/{id}/events`, `GET /cases/{id}/attachments` | Detail with trace refs and dispute assessment; timeline; attachments | all |
+| `PATCH /cases/{id}` | `{owner_user_id}` (assign or clear; the owner must be a member) | A P N |
 | `POST /cases/{id}/transition` | `{to_status, note}` (state machine validated) | A P N (except write-off) |
 | `POST /cases/{id}/notes` | | A P N |
 | `POST /cases/{id}/attachments` | `{file_id}` | A P N |
 | `POST /cases/{id}/write-off` | `{reason}`; four-eyes | A P |
 | `POST /cases/{id}/reclaim` | Creates a `recovery_reclaim` adjustment proposal | A P N |
-| `GET /notifications`, `POST /notifications/{id}/read` | In-app | all |
+| `GET /notifications`, `POST /notifications/{id}/read` | In-app; the caller's own only (`unread=true`, keyset paging); another user's id is 404 | all |
+
+Cases (S9): the queue lists `deadline_unknown` cases first, then by `deadline_date`, then id (`sort` accepts only that order).
+`deadline_unknown` is `deadline_date = null`, not a case type. Every change to a case (`PATCH`, `transition`, `write-off`,
+`reclaim`) needs `If-Match: "<revision>"` (412 `precondition_failed` otherwise) and returns the new `ETag`; `write-off`
+also needs `Idempotency-Key`. With workspace four-eyes on, the first approver's `write-off` records a proposal (case stays
+as is, event `write_off_proposed`) and a different approver completes it; the same person gets 403 `four_eyes_violation`.
+`reclaim` returns `{case, adjustment_id}`. A completed `write-off` rejects the case's proposed/approved `recovery_reclaim` adjustment in the same transaction and is refused with 409 `reclaim_included` while that adjustment is in a draft or approved claim batch (once the batch is submitted the write-off of variance − recovered is allowed); a pending write-off proposal is voided by any recovery or status change. `/cases/summary` groups carry `variance_amount`, `recovered_amount` and `written_off_amount` (the last is the sum of what was written off). Notes and reasons are trimmed; blank is 422. Reminders (14/7/3 days before the deadline) are created by the daily sweep and
+mailed once as a digest; there is no endpoint to create them.
 
 ### 2.9 Reporting, trace, audit
 
 | Method & path | Purpose | R |
 |---|---|---|
-| `GET /dashboard` | Claimed/collected/short-paid/recovered/written-off/at-risk/expiring; filters `manufacturer_id`, `month`, `branch_id`; includes `as_of` | all |
-| `GET /dashboard/drilldown` | Rows behind a figure (`metric`, filters) | all |
-| `GET /trace/{kind}/{id}` | Full chain for `calculation_result`, `claim_line`, `remittance_line`, `variance_case` | all |
-| `GET /reports/claim-batches/{id}/audit-pack` | Trace export (CSV/XLSX → job) | A P V |
+| `GET /dashboard` | Claimed/collected/short-paid/recovered/written-off/recovered-after-write-off/at-risk/expiring (definitions: BUSINESS_LOGIC §12.2): Σ of `summary_claims_monthly` rows for the filters `manufacturer_id`, `month` (any day of the month), `branch_id`, plus the same figures per month; `as_of` (when the summary was rebuilt, null = never) and `as_of_date` (business date at-risk/expiring were computed for) | all |
+| `POST /dashboard/refresh` | Queue a summary rebuild (202 `{job_id}`; null when one is already queued this minute). Also queued by every remittance finalisation and hourly | A P N |
+| `GET /dashboard/drilldown` | `metric` + the same filters, cursor-paged: the rows behind the figure (`id`, `trace_kind`, `trace_id`, `manufacturer_id`, `branch_id`, `month`, `amount`, `label`); `figure` (dashboard), `total` (Σ of all matching rows now), `consistent` (`total == figure`, false only if data changed since the refresh). Σ `amount` of all pages = `total` | all |
+| `GET /trace/claim_line/{id}`, `/trace/remittance_line/{id}`, `/trace/variance_case/{id}`, `/trace/claim_adjustment/{id}`, `/trace/calculation_result/{id}` | Chain `{kind, id, chain: [{kind, id, label, fields}]}` from the record to its source file row (`source_row`: file name and row number), through invoice line, claim batch, agreement version, calculation result, confirmed/suggested payments, remittance document and file row, and cases. A rebate claim line ends at its accrual entry (many purchases, no single row). Another tenant's id: 404 | all |
+| `POST /reports/claim-batches/{id}/audit-pack` | body `{format?: csv\|xlsx}` (default csv; audited as `audit_pack.requested`; no PDF in Release 1, PDF in Release 1.1: owner decision 2026-11-13); adjustments are listed under the batch that carries them → 202 `{job, file_id}`; the file has one row per claim line and included adjustment: invoice line, source file row, agreement version, claim, confirmed payment and remittance documents | A P V |
 | `GET /audit-log` | Filters `entity_type`, `entity_id`, `actor_user_id`, `action`, date range | A P V |
 
 ### 2.10 System
@@ -253,7 +266,7 @@ Idempotency-Key: 7d6f…
 ```
 ```json
 { "job": {"id": "0192…", "status": "queued", "progress": 0, "result_url": "/api/v1/calculation-runs/0192…"},
-  "run": {"id": "0192…", "status": "queued", "as_of": "2026-11-09T12:03:11Z", "engine_version": "1.0.0"} }
+  "run": {"id": "0192…", "status": "queued", "as_of": "2026-11-09T12:03:11Z", "engine_version": "1.1.0"} }
 ```
 
 **Calculation result with trace reference**
