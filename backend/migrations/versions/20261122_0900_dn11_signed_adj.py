@@ -10,14 +10,14 @@ unchanged (same-batch exact amount, per-adjustment cap, serialisation locks). Mi
 
 Forward-only like the rest of the chain.
 
-Revision ID: 20261121_0900_dn11_signed_adj
-Revises: 20261120_0900_after_write_off
+Revision ID: 20261122_0900_dn11_signed_adj
+Revises: 20261121_0900_sdl_superseded_by
 """
 
 from alembic import op
 
-revision = "20261121_0900_dn11_signed_adj"
-down_revision = "20261120_0900_after_write_off"
+revision = "20261122_0900_dn11_signed_adj"
+down_revision = "20261121_0900_sdl_superseded_by"
 branch_labels = None
 depends_on = None
 
