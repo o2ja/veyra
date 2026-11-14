@@ -1,6 +1,14 @@
 import { expect } from "@playwright/test";
 
-import { PASSWORD, enrolMfa, expectNoA11yViolations as noViolations, signIn, test, tokenFromMail, uniqueEmail } from "./support";
+import {
+  PASSWORD,
+  enrolMfa,
+  expectNoA11yViolations as noViolations,
+  signIn,
+  test,
+  tokenFromMail,
+  uniqueEmail,
+} from "./support";
 
 test.describe("QA Extractions: document extractions, AI usage, error/empty states, axe", () => {
   test("covers extractions list empty/populated states, AI usage, not-found error, and axe", async ({

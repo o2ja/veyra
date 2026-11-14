@@ -1,6 +1,14 @@
 import { expect } from "@playwright/test";
 
-import { PASSWORD, enrolMfa, expectNoA11yViolations as noViolations, signIn, test, tokenFromMail, uniqueEmail } from "./support";
+import {
+  PASSWORD,
+  enrolMfa,
+  expectNoA11yViolations as noViolations,
+  signIn,
+  test,
+  tokenFromMail,
+  uniqueEmail,
+} from "./support";
 
 test.describe("QA Imports: import history, new import wizard, sales & purchase lines, 403, axe", () => {
   test("covers imports list empty/populated states, line browsers, permission checks, and axe", async ({

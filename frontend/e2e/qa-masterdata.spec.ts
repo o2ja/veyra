@@ -1,6 +1,14 @@
 import { expect } from "@playwright/test";
 
-import { PASSWORD, enrolMfa, expectNoA11yViolations as noViolations, signIn, test, tokenFromMail, uniqueEmail } from "./support";
+import {
+  PASSWORD,
+  enrolMfa,
+  expectNoA11yViolations as noViolations,
+  signIn,
+  test,
+  tokenFromMail,
+  uniqueEmail,
+} from "./support";
 
 test.describe("QA Master Data: manufacturers, branches, customers, products, UoM, unmapped, 403, axe", () => {
   test("covers master data management, pagination, error/empty states, 403, and axe compliance", async ({

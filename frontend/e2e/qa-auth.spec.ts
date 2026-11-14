@@ -1,6 +1,14 @@
 import { expect } from "@playwright/test";
 
-import { PASSWORD, enrolMfa, expectNoA11yViolations as noViolations, signIn, test, tokenFromMail, uniqueEmail } from "./support";
+import {
+  PASSWORD,
+  enrolMfa,
+  expectNoA11yViolations as noViolations,
+  signIn,
+  test,
+  tokenFromMail,
+  uniqueEmail,
+} from "./support";
 
 test.describe("QA Auth: registration, verification, login, MFA, password reset, security, axe", () => {
   test("covers auth happy path, validation errors, invalid link, and accessibility", async ({ page }) => {
