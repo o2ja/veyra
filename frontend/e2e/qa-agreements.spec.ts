@@ -80,6 +80,8 @@ test.describe("QA Agreements: agreements list, drafts, editor, validation, appro
     await page.getByLabel("Valid from").fill("2026-01-01");
     await page.getByLabel("Valid to").fill("2026-12-31");
 
+    await page.getByLabel("Customer scope").selectOption("all");
+
     // Add an item row
     await page.getByRole("button", { name: "Add item" }).click();
     await page.getByLabel("Item 1 SKU").fill("SKU-TEST-01");
@@ -116,6 +118,7 @@ test.describe("QA Agreements: agreements list, drafts, editor, validation, appro
     await approverPage.getByLabel("Your name").fill("QA Agr Approver");
     await approverPage.getByLabel("Password").fill(PASSWORD);
     await approverPage.getByRole("button", { name: "Accept invitation" }).click();
+    await expect(approverPage).toHaveURL(/\/login\?reason=invited/);
 
     await signIn(approverPage, approverEmail);
     await enrolMfa(approverPage);

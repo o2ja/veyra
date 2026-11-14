@@ -1,6 +1,6 @@
 import { expect } from "@playwright/test";
 
-import { PASSWORD, enrolMfa, expectNoA11yViolations as noViolations, signIn, test, tokenFromMail, uniqueEmail } from "./support";
+import { PASSWORD, clientIpHeader, enrolMfa, expectNoA11yViolations as noViolations, signIn, test, tokenFromMail, uniqueEmail } from "./support";
 
 test.describe("QA Admin: users, invitations, settings, audit log, jobs, 403 checks, axe", () => {
   test("covers admin management, settings update, role 403, and axe compliance", async ({
@@ -30,7 +30,7 @@ test.describe("QA Admin: users, invitations, settings, audit log, jobs, 403 chec
     // 2. Users page
     await page.goto("/admin/users");
     await expect(page.getByRole("heading", { name: "Users" })).toBeVisible();
-    await expect(page.getByText(adminEmail)).toBeVisible();
+    await expect(page.getByRole("table").getByRole("cell", { name: adminEmail })).toBeVisible();
     await noViolations(page, "/admin/users");
 
     // 3. Invitations page: Happy path & error state
@@ -62,7 +62,7 @@ test.describe("QA Admin: users, invitations, settings, audit log, jobs, 403 chec
     await noViolations(page, "/audit");
 
     // 7. Accept invite as Viewer and verify 403 on admin routes
-    const viewerCtx = await browser.newContext();
+    const viewerCtx = await browser.newContext({ extraHTTPHeaders: clientIpHeader() });
     const viewerPage = await viewerCtx.newPage();
     const inviteToken = await tokenFromMail(viewerEmail);
 
@@ -70,6 +70,7 @@ test.describe("QA Admin: users, invitations, settings, audit log, jobs, 403 chec
     await viewerPage.getByLabel("Your name").fill("QA Viewer User");
     await viewerPage.getByLabel("Password").fill(PASSWORD);
     await viewerPage.getByRole("button", { name: "Accept invitation" }).click();
+    await expect(viewerPage).toHaveURL(/\/login\?reason=invited/);
 
     await signIn(viewerPage, viewerEmail);
     await enrolMfa(viewerPage);

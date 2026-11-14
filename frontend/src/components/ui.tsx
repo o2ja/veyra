@@ -97,7 +97,7 @@ export function ErrorAlert({ error }: { error: ApiError | null | undefined }) {
   return (
     <Alert>
       {error.message}
-      {error.requestId && <span className="block text-xs opacity-70">Reference: {error.requestId}</span>}
+      {error.requestId && <span className="block text-xs">Reference: {error.requestId}</span>}
     </Alert>
   );
 }
