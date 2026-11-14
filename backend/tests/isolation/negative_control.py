@@ -22,7 +22,7 @@ from sqlalchemy import create_engine, make_url, text
 BACKEND = Path(__file__).resolve().parents[2]
 BREACH = "ISOLATION-BREACH"
 
-MIN_TESTS = 283  # tests/isolation size at S4; raise it as the suite grows
+MIN_TESTS = 353  # tests/isolation size at S7.4; raise it as the suite grows
 
 # Tests whose protection comes from RLS. They must fail with a BREACH assertion once RLS is off.
 RLS_DEPENDENT = (

@@ -57,3 +57,17 @@ def customer_parent_rows(db: Session, tenant_id: UUID) -> list[Any]:
             text("SELECT id, parent_customer_id FROM customers WHERE tenant_id = :t"), {"t": tenant_id}
         )
     )
+
+
+def product_alias_rows(db: Session, tenant_id: UUID) -> list[Any]:
+    """Columns: alias, sku (the product's canonical SKU), for remittance matching (BUSINESS_LOGIC.md §10.2)."""
+    return list(
+        db.execute(
+            text(
+                "SELECT a.alias, p.sku FROM product_aliases a "
+                "JOIN products p ON p.tenant_id = a.tenant_id AND p.id = a.product_id "
+                "WHERE a.tenant_id = :t ORDER BY a.alias"
+            ),
+            {"t": tenant_id},
+        )
+    )

@@ -14,11 +14,17 @@ from rebate.modules.extraction.documents import (
     extract_pdf,
     extract_xlsx,
 )
+from rebate.modules.extraction.gateway import Gateway, GatewayError, make_provider
 from rebate.modules.extraction.injection import Indicator, IndicatorKind, detect
+from rebate.modules.extraction.models import DocumentExtraction
+from rebate.modules.extraction.prompts import RULES as PROMPT_RULES
+from rebate.modules.extraction.prompts import serialise as serialise_document
 from rebate.modules.extraction.router import (
     ExtractionResult,
     router,
 )
+from rebate.modules.extraction.service import MAX_PROMPT_CHARS, AiNotEnabled, ai_engine, audit_invocations
+from rebate.modules.extraction.service import _write as write_result
 from rebate.modules.extraction.verification import (
     CandidateField,
     CandidateFormatError,
@@ -31,14 +37,20 @@ from rebate.modules.extraction.verification import (
 )
 
 __all__ = [
+    "MAX_PROMPT_CHARS",
+    "PROMPT_RULES",
+    "AiNotEnabled",
     "CandidateField",
     "CandidateFormatError",
     "Cell",
     "Confidence",
+    "DocumentExtraction",
     "Evidence",
     "ExtractionFailure",
     "ExtractionResult",
     "FailureReason",
+    "Gateway",
+    "GatewayError",
     "Indicator",
     "IndicatorKind",
     "Limits",
@@ -47,10 +59,15 @@ __all__ = [
     "PdfText",
     "SheetText",
     "VerificationReport",
+    "ai_engine",
+    "audit_invocations",
     "detect",
     "extract_pdf",
     "extract_xlsx",
     "flatten",
+    "make_provider",
     "router",
     "run_verification",
+    "serialise_document",
+    "write_result",
 ]

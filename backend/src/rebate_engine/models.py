@@ -144,6 +144,8 @@ class PriorClaim:
     unit_amount: Decimal
     claim_amount: Decimal
     rounding: RoundingRule
+    # sum |qty| of the returns the claim was netted by (BUSINESS_LOGIC §7, owner decision 2026-11-13); 0 = claimed gross
+    netted_returned_quantity: Decimal = Decimal(0)
 
 
 @dataclass(frozen=True, slots=True, kw_only=True)
@@ -154,6 +156,8 @@ class ReturnOriginal:
     quantity: Decimal  # original line quantity (positive)
     returned_quantity: Decimal  # sum |qty| of all linked current returns dated <= data_cutoff
     prior_claim: PriorClaim | None = None
+    # sum |qty| of the linked returns that come before this return in processing order (adapter-supplied)
+    returned_before: Decimal = Decimal(0)
 
 
 @dataclass(frozen=True, slots=True, kw_only=True)
