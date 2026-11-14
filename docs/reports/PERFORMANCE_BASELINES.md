@@ -64,3 +64,69 @@ Findings:
 - Calculation figures are for a file with no eligible lines (see above).
 - Postgres memory is sampled every 20 s (peak may be higher).
 - Re-run on a dedicated VPS-sized machine before pilot.
+
+
+---
+
+## 2026-11-14: 100k and 250k rows with eligible lines (S11.2, branch `perf/s11-2`)
+
+Owner decision D-N9: no 1M run on the dev laptop; 100,000 and 250,000 rows only, one at a time, each in its own test database (`rebate_test_perf`). Docker survived both runs (no OOM, no Postgres restart). Single run each, no repetition.
+
+**Environment.** Windows 11 laptop, Docker VM 7.649 GiB RAM (`docker stats` limit; `docker info`: 12 CPUs), Postgres 16 container (`shared_buffers` 128 MB). The dev stack (api, worker, frontend, SeaweedFS, ClamAV, mailpit, Postgres) was running but idle; this task started no other load, but other host processes were not controlled for. Not the reference VPS.
+
+**What changed versus the 1M runs (the `eligible=0` caveat is fixed).** `backend/tests/integration/test_calculation_performance.py` now takes the scale from `PERF_ROWS` (default 100000) and pins the test clock to 2026-07-10 (the generator's `run_date`) before workspace setup, import and run. It must be before the import: the run's data cutoff and the visible agreement versions are both "now", so pinning only before the run (as the old `s11-perf` branch did) gives a run over 0 lines (I hit exactly that on the first attempt). The test asserts, from `testdata/generate.py` ground truth (`expected_volume_summary.json`, written by the generator's own replicate logic, not computed from the code under test): eligible count, per-code exception counts, and the eligible total. All matched exactly at both sizes.
+
+Reproduce (the file is git-ignored under `testdata/generated_volume/<rows>`): `python -I testdata/generate.py --volume 250000 --out testdata/generated_volume/250000`, then the one-off `api` container with `-e PERF_ROWS=250000 -v <repo>/testdata:/testdata:ro` and `pytest -q -s --no-cov -m performance tests/integration/test_calculation_performance.py`.
+
+### Measurements
+
+| Measurement | 100,000 rows | 250,000 rows | Ratio (2.5x rows) |
+|---|---|---|---|
+| Import wall (parse, validate, stage, load) | 122.6 s (816 rows/s) | 299.4 s (835 rows/s) | 2.44x, linear |
+| Calculation wall, whole period | 85.0 s (1,176 lines/s) | 184.5 s (1,355 lines/s) | 2.17x, linear |
+| Eligible lines (ground truth = engine) | 93,048 | 232,720 | match |
+| Exceptions (price_mismatch / ineligible_customer / missing_spa_reference) | 3,040 / 1,960 / 1,952 | 7,507 / 4,958 / 4,815 | match |
+| Eligible amount (ground truth = engine) | 48,868,373.00 | 122,430,644.50 | match |
+| Peak RSS during import (test process = API + worker in-process, sampled every 0.25 s from /proc) | **386 MB** | **526 MB** | +140 MB (+36%) |
+| Peak RSS during calculation | 1,016 MB | 1,039 MB | +23 MB (+2%) |
+| Postgres container peak memory (`docker stats`, 20 s samples) | 707 MiB | 1,267 MiB | 1.8x |
+| Test container peak (`docker stats`, 20 s samples) | 977 MiB | 1,026 MiB | |
+| Lines list `GET /sales-lines?limit=50` | 33 ms | 31 ms | |
+| Results list `GET /calculation-runs/{id}/results?status=eligible&limit=50` | 24 ms | 27 ms | |
+| Missed claims `GET /missed-claims?limit=50` | **1,468 ms** | **2,026 ms** | 1.4x |
+
+Request times are one in-process call each, warm, as the admin principal. They are not p95.
+
+### EXPLAIN (ANALYZE, BUFFERS) of the three list queries
+
+The test captures the SQL the endpoint actually issues (SQLAlchemy `before_cursor_execute`) and re-runs it under EXPLAIN as superuser (RLS is not part of the plan). The test prints the full plans (`PERF EXPLAIN ...`).
+
+| Query | 100k | 250k |
+|---|---|---|
+| Lines list | Backward Index Scan on `pk_sales_document_lines`, Memoize on `import_batches`; execution 0.15 ms, 11 buffers | same plan; 0.15 ms, 9 buffers |
+| Results list (eligible, keyset) | Backward Index Scan on `pk_calculation_results`; 0.08 ms, 18 buffers | same plan; 0.11 ms, 17 buffers |
+| Missed claims | `latest` CTE (DISTINCT ON `sales_document_line_id` over all results joined to runs and lines) sorted with an external merge (6-7 MB per worker), then a per-row NOT EXISTS SubPlan on `claim_lines`, then a top-N sort for LIMIT 50; execution **1,522 ms**, 198k shared hits + 17k reads, 2.5k temp blocks | same shape; **2,093 ms**, 475k hits + 63k reads, 6.1k temp blocks, external sorts 14-18 MB per worker |
+
+Finding: both keyset lists are index-bounded and flat in row count. Missed claims is not: it materialises every line's latest result before applying `LIMIT 50` (`backend/src/rebate/modules/claims/missed.py`, `LATEST` and `UNCLAIMED`), so its work grows with total lines (buffers 2.4x for 2.5x rows; wall 1.4x only because of 3 parallel workers). Extrapolation (not measured): at 5M lines it would take tens of seconds, far above the NFR-04 p95 < 500 ms target; it already exceeds 500 ms at 100k. The planner also estimates 250 rows for the filtered subquery where 93,048 come out. Not changed here; candidate fix: a keyset-friendly formulation or a stored "current result per line" flag.
+
+### Memory scaling
+
+- **Import memory grows with row count.** 386 MB at 100k, 526 MB at 250k: about 0.93 KB per row, i.e. a floor near 290 MB plus a linear term. This is the streaming-bug signal D-N9 asked about, although mild (extrapolated, not measured: about 1.2 GB at 1M, which matches the 1,184 MB peak of the earlier 1M run). Probable cause, from reading the code only (not profiled): `SalesValidator` in `backend/src/rebate/modules/ingestion/validators.py` keeps per-row state for the whole file: `self.seen` (natural key string to a (row, 64-char hash) tuple, set at line 379) and `self.file_keys` (a tuple per invoice line, line 494), plus similar dicts for credit-note originals and customer parents. They back in-file duplicate detection, so they are inherent to the current design; they could be replaced by a DB-side duplicate check over `import_staged_rows` or a compact digest set. No refactor done.
+- **Calculation memory is flat.** About 1.0 GB at both sizes (+2 percent for 2.5x rows). The test process does not release the import's memory before the run, so the figure is "after import plus run".
+- Postgres container memory grows with data (707 MiB to 1,267 MiB), as expected for cache, larger sorts and indexes; not a streaming issue.
+
+### NFR-04 comparison (extrapolation, clearly not measured at 1M)
+
+| Target | Measured here | Linear extrapolation to 1M | Verdict |
+|---|---|---|---|
+| 1M import < 30 min | 250k in 299 s (835 rows/s) | about 20 min (1,198 s) | Within target; consistent with the 22.9 min measured on 2026-11-12 |
+| 1M calculation < 15 min | 250k in 184.5 s (1,355 lines/s), 93 percent of lines eligible | about 12.3 min (738 s) | Within target. First figure with the eligible path loaded; per line it is not slower than the `eligible=0` run (1,313 lines/s), so the earlier worry that the eligible path would be slower is not borne out at this size |
+| List endpoints p95 < 500 ms on 5M lines | lines list and results list about 30 ms, flat | not extrapolated (index-bounded) | Lines and results lists plausible; **missed claims fails (1.5 s at 100k, 2.1 s at 250k)** |
+
+### Unverified
+
+- No 1M run (by decision): every 1M number above is a straight-line extrapolation from 100k and 250k, and import or calculation could be non-linear beyond 250k.
+- Single run per size, no p95, no lock-contention test with concurrent import/run, not the reference VPS.
+- RSS is the in-process test (API and worker in one process), not the separate `api` and `worker` containers of the real deployment; the per-process split is unmeasured.
+- The memory-growth location is from code reading, not a profiler.
+- Rebate-tier calculation and the claw-back path are not exercised by this volume file (SPA agreement only).
