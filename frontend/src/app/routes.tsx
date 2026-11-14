@@ -42,6 +42,7 @@ import { RunsPage } from "../features/calculations/runs-page";
 import { AiUsagePage } from "../features/extractions/ai-usage-page";
 import { ExtractionDetailPage } from "../features/extractions/extraction-detail-page";
 import { ExtractionsPage } from "../features/extractions/extractions-page";
+import { ClaimAdjustmentsPage } from "../features/claims/claim-adjustments-page";
 import { ClaimBatchDetailPage } from "../features/claims/claim-batch-detail-page";
 import { ClaimBatchesPage } from "../features/claims/claim-batches-page";
 import { ClaimExportTemplatesPage } from "../features/claims/claim-export-templates-page";
@@ -50,6 +51,10 @@ import { DashboardPage } from "../features/reporting/dashboard-page";
 import { DrilldownPage } from "../features/reporting/drilldown-page";
 import { TracePage } from "../features/reporting/trace-page";
 import { AuditPackPage } from "../features/reporting/audit-pack-page";
+import { NewRemittancePage } from "../features/reconciliation/new-remittance-page";
+import { ReasonCodesPage } from "../features/reconciliation/reason-codes-page";
+import { RemittanceDetailPage } from "../features/reconciliation/remittance-detail-page";
+import { RemittancesPage } from "../features/reconciliation/remittances-page";
 import { AppLayout } from "./app-layout";
 import { RequirePermission, RequireSession } from "./guards";
 import { RouteError } from "./route-error";
@@ -211,12 +216,18 @@ export const routes: RouteObject[] = [
       guarded("claims/missed", "data.read", <MissedClaimsPage />),
       guarded("claims/batches", "data.read", <ClaimBatchesPage />),
       guarded("claims/batches/:batchId", "data.read", <ClaimBatchDetailPage />),
+      guarded("claims/adjustments", "data.read", <ClaimAdjustmentsPage />),
       guarded("claims/templates", "claim_batch.create", <ClaimExportTemplatesPage />),
       // S10: reporting and dashboard
       guarded("dashboard", "data.read", <DashboardPage />),
       guarded("dashboard/:metric", "data.read", <DrilldownPage />),
       guarded("trace/:kind/:id", "data.read", <TracePage />),
       guarded("reports/audit-pack", "data.read", <AuditPackPage />),
+      // S8: reconciliation
+      guarded("reconciliation", "data.read", <RemittancesPage />),
+      guarded("reconciliation/new", "remittance.reconcile", <NewRemittancePage />),
+      guarded("reconciliation/reason-codes", "data.read", <ReasonCodesPage />),
+      guarded("reconciliation/:remittanceId", "data.read", <RemittanceDetailPage />),
     ],
   },
 ];

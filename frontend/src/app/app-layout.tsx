@@ -18,6 +18,7 @@ const NAV = [
   { to: "/extractions", label: "Extractions", permission: "data.read" },
   { to: "/claims", label: "Claims", permission: "data.read" },
   { to: "/reports/audit-pack", label: "Audit pack", permission: "data.read" },
+  { to: "/reconciliation", label: "Reconciliation", permission: "data.read" },
   { to: "/admin/users", label: "Users", permission: "user.manage" },
   { to: "/admin/invitations", label: "Invitations", permission: "invitation.manage" },
   { to: "/admin/settings", label: "Settings", permission: "settings.read" },

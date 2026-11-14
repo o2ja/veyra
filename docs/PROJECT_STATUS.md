@@ -85,7 +85,7 @@ S5/S6 UI, then S7 onwards per `DEVELOPMENT_ROADMAP.md` / `IMPLEMENTATION_PLAN.md
 | K-6 | `minio/minio` images are no longer publicly pullable (Docker Hub: not found; quay.io: 401) | Resolved 2026-11-09: owner approved SeaweedFS for local dev and CI (ADR-017); image added in S2 | Closed |
 | K-7 | Starlette deprecates `httpx` for `TestClient` (warning; suggests `httpx2`) | Test-only warning | Swap the test dependency when convenient |
 | K-9 | Temporary in-process background pool (S1) | — | **Closed in S2**: all email and the forgot-password work run as queued jobs with retries and a visible dead-letter state |
-| K-10 | Presigned downloads come straight from SeaweedFS without `X-Content-Type-Options: nosniff` (SECURITY.md §4 deviation) | Low: `Content-Disposition: attachment` + explicit type | Header at a proxy in front of storage with the hosting choice (OD-3/OD-4) |
+| K-10 | Presigned downloads without `X-Content-Type-Options: nosniff` | — | **Closed in S11.3**: the storage-host block of `infra/caddy/Caddyfile` sets nosniff, a CSP and HSTS (asserted by `tests/security/test_s11_hardening.py`; not yet verified on a live host, OD-3/OD-4) |
 | K-11 | Finished `jobs` rows are never purged; no external alert on dead letters | Table growth; failures seen only on the Jobs page and in logs | Retention sweep and alerting with S9 operations |
 | K-12 | Email delivery is at-least-once (a job can send twice if its commit fails after SMTP accepted) | Rare duplicate email; for token emails the later link wins | Accepted; documented in ARCHITECTURE.md §6 |
 | K-8 | `minimatch` 10.x advisory GHSA-g3hv-75wg-m249 in ESLint tooling (dev only) | None at runtime | npm `overrides` pins minimatch 11.0.5; remove the override once ESLint ships it |
