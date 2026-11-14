@@ -36,6 +36,7 @@ from tests.integration.calc_support import (
     run,
 )
 from tests.integration.conftest import Workspace
+from tests.integration.missed_reference import assert_same_as_reference
 from tests.support import Api, FakeClock, drain, fake_clock, make_app
 from tests.testdata import truth
 
@@ -759,7 +760,9 @@ def test_flow_submit_freezes_lines_and_the_scan_stays_clean(sc: Scenario) -> Non
     FLOW["submitted"] = done
 
 
-def test_flow_a_new_run_makes_old_results_stale_and_claimed_lines_stay_claimed(sc: Scenario) -> None:
+def test_flow_a_new_run_makes_old_results_stale_and_claimed_lines_stay_claimed(
+    sc: Scenario, admin_engine: Engine
+) -> None:
     api = sc.ws.api
     k = POOL4[0]
     old_id = pool(api)[k]["id"]
@@ -773,6 +776,8 @@ def test_flow_a_new_run_makes_old_results_stale_and_claimed_lines_stay_claimed(s
     assert k in now and now[k]["id"] != old_id and not set(FIX7) & set(now)  # claimed lines stay claimed
     fresh = one(sc, k)
     release(sc, fresh)
+    # two completed runs now cover every line and FIX7 is claimed: the rewritten SQL must equal the DISTINCT ON oracle
+    assert assert_same_as_reference(admin_engine, sc.ws.tenant_id) == len(now)
 
 
 # ---- freeze and transition invariants in the database, as the application role ------------------------------

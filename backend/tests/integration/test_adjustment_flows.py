@@ -37,6 +37,7 @@ from tests.integration.calc_support import (
     settings,
 )
 from tests.integration.conftest import CSV, Workspace, clean_file, import_file, run_import
+from tests.integration.missed_reference import assert_same_as_reference
 from tests.support import Api, FakeClock, drain, fake_clock, make_app
 from tests.testdata import truth
 
@@ -571,6 +572,9 @@ def test_a_changed_claimed_line_that_stays_eligible_is_never_offered_again(
     res = results(ws, run2["id"])["INV-10001/1"]
     assert res["status"] == "eligible" and Decimal(res["claim_amount"]) == Decimal("1760.00")  # 80 x 22.00
     assert "INV-10001/1" not in pool(ws.api)
+    assert_same_as_reference(
+        admin_engine, ws.tenant_id
+    )  # the superseded-chain walk equals the recursive oracle
     refused = new_batch(ws.api, res["manufacturer_id"], result_ids=[res["id"]])
     assert refused.status_code == 409 and refused.json()["error"]["code"] == "already_claimed", refused.text
     assert refused.json()["error"]["details"][0]["batch_number"] == batch["batch_number"]

@@ -241,6 +241,12 @@ class SalesDocumentLine(Base):
             postgresql_where=text("spa_reference IS NOT NULL"),
         ),
         Index("ix_sales_document_lines_tenant_id_original_line_id", "tenant_id", "original_line_id"),
+        Index(
+            "ix_sales_document_lines_tenant_id_superseded_by_id",
+            "tenant_id",
+            "superseded_by_id",
+            postgresql_where=text("superseded_by_id IS NOT NULL"),
+        ),
         Index("ix_sales_document_lines_tenant_id_import_batch_id", "tenant_id", "import_batch_id"),
         Index("ix_sales_document_lines_tenant_id_document_id", "tenant_id", "document_id"),
     )
