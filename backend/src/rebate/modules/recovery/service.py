@@ -596,6 +596,8 @@ def write_off(db: Session, who: Who, case_id: UUID, reason: str, revision: int) 
         _event(db, c, "write_off_proposed", who.user_id, note=reason)
         _audit(db, who, audit.Action.VARIANCE_CASE_WRITE_OFF_PROPOSED, c, before=before, after=view(c))
         return c
+    if c.write_off_reason is not None:
+        reason = c.write_off_reason  # the approver signs off what the proposer wrote, not a new text
     try:
         st.check_transition(
             _status(c), st.CaseStatus.WRITTEN_OFF, actor, write_off_proposed_by=proposer, four_eyes=four
