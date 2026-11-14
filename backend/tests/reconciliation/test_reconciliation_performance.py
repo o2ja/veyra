@@ -28,7 +28,9 @@ def test_a_5000_line_remittance_is_ingested_and_reconciled_in_bounded_time(migra
         noise = "".join(f"{7 + i},,,,,,10.00,,\n" for i in range(NOISE))
         body = (CM_CSV_LINES + noise).encode()
         t0 = time.perf_counter()
-        doc = ingest(ws, upload(ws, "big.csv", body, CSV), volt, document_number="BIG-1")
+        doc = ingest(
+            ws, upload(ws, "big.csv", body, CSV), volt, document_number="BIG-1", total_amount="57485.00"
+        )
         t1 = time.perf_counter()
         assert doc["status"] == "accepted" and Decimal(doc["total_amount"]) == Decimal("57485.00")
         reconcile(ws, doc["id"])

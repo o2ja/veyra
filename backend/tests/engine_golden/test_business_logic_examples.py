@@ -81,7 +81,7 @@ def test_gl_s1_price_difference() -> None:
         "timing": "per_line",
         "result": "2200.00",
     }
-    assert r.trace["engine_version"] == "1.0.0" and r.trace["rules_schema_version"] == 1
+    assert r.trace["engine_version"] == "1.1.0" and r.trace["rules_schema_version"] == 1
     assert list(s)[:3] == ["candidate_versions", "customer_scope", "product_scope"]
 
 

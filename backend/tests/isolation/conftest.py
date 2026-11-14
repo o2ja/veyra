@@ -27,6 +27,7 @@ TENANT_TABLES: dict[str, str] = {
     "memberships": "tenant_id",
     "invitations": "tenant_id",
     "audit_log": "tenant_id",
+    "audit_seals": "tenant_id",
     "idempotency_keys": "tenant_id",
     "file_objects": "tenant_id",
     # S3 master data and import pipeline
@@ -75,6 +76,8 @@ TENANT_TABLES: dict[str, str] = {
     "variance_case_events": "tenant_id",
     "case_attachments": "tenant_id",
     "notifications": "tenant_id",
+    # S10 reporting
+    "summary_claims_monthly": "tenant_id",
     # S6 AI extraction
     "document_extractions": "tenant_id",
     "ai_invocations": "tenant_id",
@@ -99,6 +102,7 @@ class TenantData:
     s7: dict[str, UUID] = field(default_factory=dict)  # one row id per S7 tenant table
     s8: dict[str, UUID] = field(default_factory=dict)  # one row id per S8 tenant table
     s9: dict[str, UUID] = field(default_factory=dict)  # one row id per S9 tenant table
+    s10: dict[str, UUID] = field(default_factory=dict)  # one row id per S10 tenant table
 
 
 @dataclass
@@ -162,6 +166,7 @@ def _tenant(conn: Connection, name: str, admin_email: str) -> TenantData:
     data.s7 = _s7_rows(conn, tid, admin, data.s3, data.s4, data.s5)
     data.s8 = _s8_rows(conn, tid, admin, fid, data.s3, data.s7)
     data.s9 = _s9_rows(conn, tid, admin, data.s3, data.s8)
+    data.s10 = _s10_rows(conn, tid, data.s3)
     data.s5["adj"] = data.s7.pop("adj")  # a proposal needs its claim line (S7.4 FK), so S7 inserts it
     conn.execute(
         text(
@@ -169,6 +174,14 @@ def _tenant(conn: Connection, name: str, admin_email: str) -> TenantData:
             "entity_type, entity_id) VALUES (:t, now(), 'user', :u, 'tenant.created', 'tenant', :t)"
         ),
         {"t": tid, "u": admin},
+    )
+    conn.execute(
+        text(
+            "INSERT INTO audit_seals (tenant_id, from_audit_id, to_audit_id, seal_hash) "
+            "SELECT tenant_id, min(id), max(id), repeat('a', 64) FROM audit_log WHERE tenant_id = :t "
+            "GROUP BY tenant_id"
+        ),
+        {"t": tid},
     )
     conn.execute(
         text(
@@ -378,6 +391,19 @@ def _s9_rows(
         "VALUES (:t, :notification, :u, 'deadline_reminder', 'variance_case', :case, 'iso', 'iso:deadline_reminder:14')",
     ):
         conn.execute(text(sql), p)
+    return ids
+
+
+def _s10_rows(conn: Connection, t: UUID, s3: dict[str, UUID]) -> dict[str, UUID]:
+    """One monthly summary row (claimed 1.00) of the tenant's manufacturer."""
+    ids = {"summary": new_id()}
+    conn.execute(
+        text(
+            "INSERT INTO summary_claims_monthly (tenant_id, id, manufacturer_id, month, claimed, as_of_date, "
+            "refreshed_at) VALUES (:t, :summary, :mfr, '2026-07-01', 1, '2026-07-10', now())"
+        ),
+        {"t": t, "mfr": s3["mfr"], **ids},
+    )
     return ids
 
 

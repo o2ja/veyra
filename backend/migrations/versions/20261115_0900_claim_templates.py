@@ -7,7 +7,7 @@ never deleted (history of what was exported stays explainable): ``active = false
 Forward-only like the rest of the chain (no downgrade functions).
 
 Revision ID: 20261115_0900_claim_templates
-Revises: 20261114_0900_calc_runs
+Revises: 20261115_0900_audit_seals
 """
 
 from alembic import op
@@ -15,7 +15,7 @@ from alembic import op
 from migrations._rls import enable_tenant_rls
 
 revision = "20261115_0900_claim_templates"
-down_revision = "20261114_0900_calc_runs"
+down_revision = "20261115_0900_audit_seals"
 branch_labels = None
 depends_on = None
 

@@ -173,6 +173,9 @@ def test_d8_unknown_tenant_sees_nothing(app_engine: Engine, world: World) -> Non
         "UPDATE audit_log SET action = 'x.y'",
         "DELETE FROM audit_log",
         "TRUNCATE audit_log",
+        "UPDATE audit_seals SET seal_hash = repeat('b', 64)",
+        "DELETE FROM audit_seals",
+        "TRUNCATE audit_seals",
     ],
 )
 def test_d9_app_role_cannot_bypass_rls(app_engine: Engine, world: World, statement: str) -> None:
@@ -374,6 +377,7 @@ S8_UPDATABLE = {
     "remittance_documents": "status = status",
     "remittance_extraction_staging": "corrected = corrected",
     "reconciliation_matches": "status = status",
+    "remittance_lines": "category = category",
 }
 
 
@@ -388,6 +392,10 @@ S9_UPDATABLE = {  # the columns the app role may update at all; events and attac
     "variance_cases": "status = status",
     "notifications": "read_at = now()",
 }
+
+
+# ---- S10 tables (reporting) -------------------------------------------------------------------------------
+S10_ROWS: dict[str, tuple[str, str]] = {"summary_claims_monthly": ("id", "summary")}
 
 
 def test_every_tenant_isolated_table_is_in_the_isolation_suite(admin_engine: Engine) -> None:
@@ -405,12 +413,20 @@ def test_every_tenant_isolated_table_is_in_the_isolation_suite(admin_engine: Eng
         "memberships",
         "invitations",
         "audit_log",
+        "audit_seals",
         "idempotency_keys",
         "file_objects",
     }
     assert policed == set(TENANT_TABLES), policed ^ set(TENANT_TABLES)
     everything = (
-        set(S3_ROWS) | set(S4_ROWS) | set(S5_ROWS) | set(S6_ROWS) | set(S7_ROWS) | set(S8_ROWS) | set(S9_ROWS)
+        set(S3_ROWS)
+        | set(S4_ROWS)
+        | set(S5_ROWS)
+        | set(S6_ROWS)
+        | set(S7_ROWS)
+        | set(S8_ROWS)
+        | set(S9_ROWS)
+        | set(S10_ROWS)
     )
     assert policed - s2 == everything, (policed - s2) ^ everything
 
@@ -835,6 +851,17 @@ def test_d3_s8_update_foreign_row_affects_nothing(app_engine: Engine, world: Wor
     assert got == "n=0", breach(f"A updated B's {table} row ({got})")
 
 
+def test_s8_the_app_role_cannot_change_remittance_line_evidence(app_engine: Engine, world: World) -> None:
+    """Only the three categorisation columns are granted; the money and identifiers of a line are evidence."""
+    with as_app(app_engine, world.a.tenant_id) as conn:
+        got = _outcome(
+            conn,
+            "UPDATE remittance_lines SET amount_paid = 1 WHERE id = :id",
+            {"id": world.a.s8["rline"]},
+        )
+    assert got.startswith("error: permission denied"), got
+
+
 S8_INSERT_AS_NEW = {  # what a copy must change so that the table's own BEFORE INSERT trigger lets it reach the policy
     "remittance_documents": "'status', 'uploaded', 'accepted_by', NULL, 'accepted_at', NULL",
 }
@@ -1000,3 +1027,55 @@ def test_d9_s9_nothing_is_deleted_and_the_tenant_column_cannot_move(
         )
     assert foreign.startswith("error: permission denied"), foreign
     assert moved.startswith("error: permission denied") or moved == "rls" or "are fixed" in moved, moved
+
+
+# ---- S10 attacks (the summary table is rebuilt by the refresh job: the app role may update and delete its rows) ----
+
+
+@pytest.mark.parametrize("table", sorted(S10_ROWS))
+def test_d2_s10_select_by_foreign_id_returns_nothing(app_engine: Engine, world: World, table: str) -> None:
+    column, key = S10_ROWS[table]
+    with as_app(app_engine, world.a.tenant_id) as conn:
+        own = conn.execute(
+            text(f"SELECT 1 FROM {table} WHERE {column} = :id"), {"id": world.a.s10[key]}
+        ).all()
+        rows = conn.execute(
+            text(f"SELECT 1 FROM {table} WHERE {column} = :id"), {"id": world.b.s10[key]}
+        ).all()
+    assert len(own) == 1 and rows == [], breach(f"A read B's {table} row")
+
+
+@pytest.mark.parametrize("table", sorted(S10_ROWS))
+def test_d3_d4_s10_update_and_delete_of_a_foreign_row_affect_nothing(
+    app_engine: Engine, world: World, table: str
+) -> None:
+    column, key = S10_ROWS[table]
+    with as_app(app_engine, world.a.tenant_id) as conn:
+        updated = _outcome(
+            conn, f"UPDATE {table} SET tenant_id = tenant_id WHERE {column} = :id", {"id": world.b.s10[key]}
+        )
+        deleted = _outcome(conn, f"DELETE FROM {table} WHERE {column} = :id", {"id": world.b.s10[key]})
+    assert (updated, deleted) == ("n=0", "n=0"), breach(f"A changed B's {table} row ({updated}, {deleted})")
+
+
+@pytest.mark.parametrize("table", sorted(S10_ROWS))
+def test_d5_d6_s10_insert_or_move_into_a_foreign_tenant_is_rejected(
+    app_engine: Engine, world: World, table: str
+) -> None:
+    column, key = S10_ROWS[table]
+    with as_app(app_engine, world.a.tenant_id) as conn:
+        inserted = _outcome(
+            conn,
+            f"INSERT INTO {table} SELECT (jsonb_populate_record(NULL::{table}, to_jsonb(x) || "
+            f"jsonb_build_object('tenant_id', CAST(:b AS uuid), 'id', gen_random_uuid()))).* "
+            f"FROM {table} x WHERE tenant_id = :a",
+            {"a": world.a.tenant_id, "b": world.b.tenant_id},
+        )
+        moved = _outcome(
+            conn,
+            f"UPDATE {table} SET tenant_id = :b WHERE {column} = :id",
+            {"b": world.b.tenant_id, "id": world.a.s10[key]},
+        )
+    assert (inserted, moved) == ("rls", "rls"), breach(
+        f"{table}: insert/move into tenant B ({inserted}, {moved})"
+    )

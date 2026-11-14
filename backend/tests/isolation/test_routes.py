@@ -15,7 +15,9 @@ from fastapi.routing import APIRoute
 from sqlalchemy import Engine, text
 
 from rebate.api.app import MODULE_ROUTERS
+from rebate.core.db import transaction
 from rebate.modules.files import storage
+from rebate.modules.reporting import service
 from tests.conftest import DbUrls
 from tests.integration.agreements_support import activate, payload
 from tests.integration.conftest import Workspace, clean_file, import_file, put, run_import, seed_master, walk
@@ -276,6 +278,7 @@ def _seed_s8(app: Any, admin: Engine, side: Side) -> dict[str, str]:
             "doc_type": "credit_memo",
             "channel": "credit_memo",
             "document_number": "ISO-1",
+            "total_amount": "5.00",  # hand: the file's one line; a file without a stated total is not auto-accepted
         },
         headers={"Idempotency-Key": str(uuid.uuid4())},
     )
@@ -308,7 +311,12 @@ def _claim_line(admin: Engine, side: Side) -> uuid.UUID:
         )
 
 
-S8_PARAMS = ("remittance_id", "match_id")
+S8_PARAMS = (
+    "remittance_id",
+    "match_id",
+    "remittance_line_id",
+    "claim_line_id",
+)  # the last two: S10 trace routes
 S6_PARAMS = ("extraction_id",)
 S9_PARAMS = ("case_id", "notification_id")
 S7_PARAMS = ("batch_id", "export_template_id", "adjustment_id")
@@ -378,6 +386,7 @@ def _call(api: Api, method: str, path: str, body: Any) -> Any:
 
 # A body that passes validation, so the response depends only on whether the id is visible.
 BODIES: dict[str, Any] = {
+    "/remittance-lines/{line_id}/categorise": {"category": "unmatched_payment"},
     "/users/{user_id}": {"role": "viewer"},
     "/manufacturers/{manufacturer_id}/reason-code-mappings": {"mappings": []},
     "/customers/{customer_id}/aliases": {"alias": "ISO ALIAS"},
@@ -664,6 +673,11 @@ def test_s8_foreign_remittances_lines_and_matches_are_unreachable(
         m = a.api.post("/matches", json={**miss, "allocated_amount": "1.00"})
         assert r.status_code == m.status_code and r.status_code in (404, 422), r.text
         assert r.json()["error"]["code"] == m.json()["error"]["code"]
+    # a foreign adjustment item looks like an unknown one
+    adj_own = {"remittance_line_id": a.s8["remittance_line_id"], "allocated_amount": "-1.00"}
+    r = a.api.post("/matches", json={**adj_own, "claim_adjustment_id": b.s7["adjustment_id"]})
+    m = a.api.post("/matches", json={**adj_own, "claim_adjustment_id": unknown})
+    assert r.status_code == m.status_code == 422 and r.json()["error"]["code"] == m.json()["error"]["code"]
     # the other tenant's rows are untouched by all of the above
     with admin_engine.connect() as conn:
         st = conn.execute(
@@ -674,6 +688,23 @@ def test_s8_foreign_remittances_lines_and_matches_are_unreachable(
         ).scalar_one()
     assert (st, n) == ("suggested", 1)
     assert b.api.get(f"/remittances/{b.s8['remittance_id']}").json()["status"] == "accepted"
+
+
+def test_s8_categorising_a_foreign_remittance_line_is_a_404_and_changes_nothing(
+    sides: tuple[Side, Side], admin_engine: Engine
+) -> None:
+    a, b = sides
+    body = {"category": "unmatched_payment"}
+    foreign = a.api.post(f"/remittance-lines/{b.s8['remittance_line_id']}/categorise", json=body)
+    unknown = a.api.post("/remittance-lines/00000000-0000-7000-8000-000000000000/categorise", json=body)
+    assert foreign.status_code == unknown.status_code == 404
+    assert foreign.json()["error"]["code"] == unknown.json()["error"]["code"]
+    with admin_engine.connect() as conn:
+        n = conn.execute(
+            text("SELECT count(*) FROM remittance_lines WHERE id = :i AND category IS NOT NULL"),
+            {"i": b.s8["remittance_line_id"]},
+        ).scalar_one()
+    assert n == 0
 
 
 def test_s5_tracker_and_run_filters_never_show_the_other_tenant(sides: tuple[Side, Side]) -> None:
@@ -742,3 +773,30 @@ def test_s9_foreign_cases_and_notifications_are_unreachable(sides: tuple[Side, S
     assert b.api.get(f"/cases/{b.s9['case_id']}").json()["revision"] == 1
     assert b.api.get(f"/cases/{b.s9['case_id']}/events").json()["data"] == []
     assert [n["read_at"] for n in b.api.get("/notifications").json()["data"]] == [None]
+
+
+def test_s10_dashboard_drilldown_and_trace_never_show_the_other_tenant(
+    sides: tuple[Side, Side], app_engine: Engine
+) -> None:
+    """Each side has one unpaid case of 1.00 (no deadline): a leak would show 2.00 or the other's case id."""
+    a, b = sides
+    for side in (a, b):
+        with transaction(app_engine, uuid.UUID(side.tenant_id)) as db:
+            service.refresh(db, uuid.UUID(side.tenant_id))
+    for own, other in ((a, b), (b, a)):
+        body = own.api.get("/dashboard").json()
+        assert [body["figures"][m] for m in ("short_paid", "at_risk")] == ["1.0000", "1.0000"]
+        assert len(body["months"]) == 1
+        drill = own.api.get("/dashboard/drilldown", params={"metric": "short_paid"}).json()
+        assert [x["trace_id"] for x in drill["data"]] == [own.s9["case_id"]], "A sees exactly its own case"
+        assert drill["total"] == "1.0000" and drill["consistent"] is True
+        foreign = {"manufacturer_id": other.s3["manufacturer_id"]}
+        assert set(own.api.get("/dashboard", params=foreign).json()["figures"].values()) == {"0"}
+        assert (
+            own.api.get("/dashboard/drilldown", params={"metric": "short_paid", **foreign}).json()["data"]
+            == []
+        )
+        assert own.api.get(f"/trace/variance_case/{other.s9['case_id']}").status_code == 404
+        assert own.api.post(f"/reports/claim-batches/{other.s7['batch_id']}/audit-pack").status_code == 404
+        mine = own.api.get(f"/trace/variance_case/{own.s9['case_id']}").json()["chain"]
+        assert {n["id"] for n in mine if n["kind"] == "claim_line"} <= {own.s8["claim_line_id"]}

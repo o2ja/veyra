@@ -7,14 +7,14 @@ and writes the audit events in the same transaction. Claim data comes from the `
 import json
 from collections import defaultdict
 from collections.abc import Callable, Sequence
-from dataclasses import asdict, dataclass
+from dataclasses import asdict, dataclass, replace
 from datetime import date
 from decimal import Decimal
 from typing import Any
 from uuid import UUID
 from zoneinfo import ZoneInfo
 
-from sqlalchemy import delete, insert, select, update
+from sqlalchemy import delete, func, insert, select, text, update
 from sqlalchemy.orm import Session
 
 from rebate.core import clock
@@ -30,6 +30,7 @@ from rebate_matching.config import DEFAULT_CONFIG
 from rebate_matching.engine import (
     InvariantViolation,
     confirm_suggestion,
+    manual_adjustment_match,
     manual_match,
     reconcile,
     validate_matches,
@@ -59,6 +60,21 @@ ZERO = Decimal(0)
 
 class MatchInvariant(Conflict):
     code = "match_invariant"
+
+
+class UncategorisedLines(Conflict):
+    code = "uncategorised_lines"
+    message = "Match or categorise every remittance line before finalising."
+
+
+class LineHasMatch(Conflict):
+    code = "line_matched"
+    message = "A line with a confirmed match cannot be categorised."
+
+
+class LineCategorised(Conflict):
+    code = "line_categorised"
+    message = "A categorised line cannot be matched; the categorisation is final."
 
 
 class UnresolvedSuggestions(Conflict):
@@ -98,11 +114,26 @@ _HOOKS: list[Callable[[Session, Who, FinalisedRemittance], None]] = []
 
 
 def on_finalise(hook: Callable[[Session, Who, FinalisedRemittance], None]) -> None:
-    """Register a hook run inside the finalisation transaction (S9 creates its cases here)."""
+    """Register a hook run inside the finalisation transaction (S9 creates its cases here). Findings repeat: every
+    finalisation of a manufacturer's remittance reports ``unpaid`` again for each still-overdue unpaid claim line (and
+    nothing deduplicates them here), so a hook must skip a case that already exists (S9 does:
+    ``on_conflict_do_nothing`` on the open-case unique index)."""
     _HOOKS.append(hook)
 
 
 # ---- domain state -----------------------------------------------------------------------------------------------
+
+
+@dataclass(frozen=True)
+class AdjustmentItem:
+    """An approved adjustment carried by a submitted batch, reconciled as its own item (never added to the original
+    claim line, owner decision 2026-11-13). Interim, pending owner decision D-N11: it gets an allocation only when a
+    person confirms a manual match with it, and it produces no finding."""
+
+    id: str
+    claim_line_id: str
+    batch_id: UUID
+    amount: Decimal
 
 
 @dataclass
@@ -113,11 +144,26 @@ class State:
     claims: dict[str, ClaimLine]  # every submitted, unreleased claim line of the manufacturer
     submitted: dict[str, date | None]
     elsewhere: set[str]  # claim lines with a confirmed allocation from another remittance
-    adjustment_line: dict[str, str]  # adjustment id -> claim line id
+    adjustment_line: dict[str, str]  # adjustment id -> claim line id (every carried adjustment)
+    adjustments: dict[
+        str, AdjustmentItem
+    ]  # the adjustments carried by ANOTHER batch than their original line
     rows: list[ReconciliationMatch]
+    paid_elsewhere: dict[str, Decimal]  # claim line id -> Σ confirmed allocations from other remittances
+    categorised: set[str]  # remittance line ids a person categorised
+    tolerance: Decimal
 
     def pool(self) -> list[ClaimLine]:
         return [c for i, c in self.claims.items() if i not in self.elsewhere]
+
+    def topup(self) -> list[ClaimLine]:
+        """Lines a previous remittance paid in part and that are still short: offered to T1/T2 only. Their
+        same-batch adjustments were allocated by the first payment, so they are not split again."""
+        return [
+            replace(c, adjustments=())
+            for i, c in self.claims.items()
+            if i in self.elsewhere and c.amount - self.paid_elsewhere.get(i, ZERO) > self.tolerance
+        ]
 
 
 def _aliases(db: Session, tenant_id: UUID) -> dict[str, str]:
@@ -126,13 +172,20 @@ def _aliases(db: Session, tenant_id: UUID) -> dict[str, str]:
 
 def _claims(
     db: Session, doc: RemittanceDocument
-) -> tuple[dict[str, ClaimLine], dict[str, date | None], dict[str, str]]:
+) -> tuple[dict[str, ClaimLine], dict[str, date | None], dict[str, str], dict[str, AdjustmentItem]]:
     adj = claims.included_adjustments(db, doc.tenant_id, doc.manufacturer_id)
+    lines = claims.submitted_claim_lines(db, doc.tenant_id, doc.manufacturer_id)
+    batch_of = {str(r.id): r.batch_id for r in lines}
     by_line: dict[str, list[Adjustment]] = defaultdict(list)
+    separate: dict[str, AdjustmentItem] = {}
     for a in adj:
-        by_line[str(a.claim_line_id)].append(Adjustment(str(a.id), a.amount))
+        line_id = str(a.claim_line_id)
+        if batch_of.get(line_id) == a.batch_id:  # carried by its original line's batch: part of that line
+            by_line[line_id].append(Adjustment(str(a.id), a.amount))
+        else:
+            separate[str(a.id)] = AdjustmentItem(str(a.id), line_id, a.batch_id, a.amount)
     by_id, submitted = {}, {}
-    for r in claims.submitted_claim_lines(db, doc.tenant_id, doc.manufacturer_id):
+    for r in lines:
         cid = str(r.id)
         by_id[cid] = ClaimLine(
             id=cid,
@@ -147,7 +200,7 @@ def _claims(
             adjustments=tuple(by_line.get(cid, ())),
         )
         submitted[cid] = r.submitted_at
-    return by_id, submitted, {str(a.id): str(a.claim_line_id) for a in adj}
+    return by_id, submitted, {str(a.id): str(a.claim_line_id) for a in adj}, separate
 
 
 def _state(db: Session, doc: RemittanceDocument) -> State:
@@ -173,7 +226,7 @@ def _state(db: Session, doc: RemittanceDocument) -> State:
         )
         for r in lines
     }
-    claims, submitted, adj_line = _claims(db, doc)
+    claims, submitted, adj_line, separate = _claims(db, doc)
     rows = list(
         db.scalars(
             select(ReconciliationMatch)
@@ -186,8 +239,8 @@ def _state(db: Session, doc: RemittanceDocument) -> State:
             .order_by(ReconciliationMatch.id)
         )
     )
-    other = db.scalars(
-        select(ReconciliationMatch.claim_line_id)
+    other = db.execute(
+        select(ReconciliationMatch.claim_line_id, func.sum(ReconciliationMatch.allocated_amount))
         .join(
             RemittanceLine,
             (RemittanceLine.tenant_id == ReconciliationMatch.tenant_id)
@@ -199,10 +252,17 @@ def _state(db: Session, doc: RemittanceDocument) -> State:
             ReconciliationMatch.claim_line_id.is_not(None),
             RemittanceLine.remittance_document_id != doc.id,
         )
+        .group_by(ReconciliationMatch.claim_line_id)
     )
+    paid_elsewhere = {str(c): s for c, s in other}
+    try:
+        tolerance = masterdata.get_manufacturer_settings(db, t, doc.manufacturer_id).variance_tolerance
+    except NotFound:  # no settings row: the documented default
+        tolerance = Decimal("0.01")
     return State(
-        doc, remits, {i: UUID(i) for i in remits}, claims, submitted, {str(c) for c in other}, adj_line, rows
-    )
+        doc, remits, {i: UUID(i) for i in remits}, claims, submitted, set(paid_elsewhere), adj_line, separate,
+        rows, paid_elsewhere, {str(r.id) for r in lines if r.category}, tolerance,
+    )  # fmt: skip
 
 
 def _matches(
@@ -333,6 +393,7 @@ def run(
         existing=kept,
         config=DEFAULT_CONFIG,
         sku_aliases=_aliases(db, tenant_id),
+        topup_lines=st.topup(),
     )
     new = [
         m
@@ -367,15 +428,13 @@ def remittance_reconcile(db: Session, ctx: JobContext) -> None:
 # ---- decisions --------------------------------------------------------------------------------------------------
 
 
-def _group(db: Session, tenant_id: UUID, match_id: UUID) -> list[ReconciliationMatch]:
-    rows = list(
-        db.scalars(
-            select(ReconciliationMatch)
-            .where(ReconciliationMatch.tenant_id == tenant_id, ReconciliationMatch.match_id == match_id)
-            .order_by(ReconciliationMatch.id)
-            .with_for_update()
-        )
+def _group(db: Session, tenant_id: UUID, match_id: UUID, *, lock: bool = True) -> list[ReconciliationMatch]:
+    query = (
+        select(ReconciliationMatch)
+        .where(ReconciliationMatch.tenant_id == tenant_id, ReconciliationMatch.match_id == match_id)
+        .order_by(ReconciliationMatch.id)
     )
+    rows = list(db.scalars(query.with_for_update() if lock else query))
     if not rows:
         raise NotFound()
     return rows
@@ -404,7 +463,7 @@ def match_audit(rows: Sequence[ReconciliationMatch], status: str) -> dict[str, A
 def decide(db: Session, who: Who, match_id: UUID, revision: int, decision: str) -> list[ReconciliationMatch]:
     """``decision``: ``confirm`` or ``reject`` a suggested match (``If-Match`` revision)."""
     t = who.tenant_id
-    probe = _group(db, t, match_id)
+    probe = _group(db, t, match_id, lock=False)  # no row locks before the document lock (manual() order)
     doc = _locked(db, t, _doc_of_line(db, t, probe[0].remittance_line_id))
     rows = _group(db, t, match_id)  # re-read under the document lock
     if rows[0].status != "suggested":
@@ -414,6 +473,8 @@ def decide(db: Session, who: Who, match_id: UUID, revision: int, decision: str) 
     now = clock.now()
     if decision == "confirm":
         st = _state(db, doc)
+        if str(rows[0].remittance_line_id) in st.categorised:
+            raise LineCategorised()
         group = confirm_suggestion(_matches(rows, st.adjustment_line)[0])
         confirmed = [*_matches(st.rows, st.adjustment_line, "confirmed"), group]
         try:
@@ -439,26 +500,77 @@ def decide(db: Session, who: Who, match_id: UUID, revision: int, decision: str) 
     return done
 
 
+def _invalid(field: str, code: str, message: str) -> ValidationFailed:
+    return ValidationFailed(details=[{"field": field, "code": code, "message": message}])
+
+
 def manual(
-    db: Session, who: Who, remittance_line_id: UUID, claim_line_id: UUID, amount: Decimal
+    db: Session,
+    who: Who,
+    remittance_line_id: UUID,
+    claim_line_id: UUID | None,
+    amount: Decimal,
+    claim_adjustment_id: UUID | None = None,
 ) -> list[ReconciliationMatch]:
+    """A person's match of one remittance line to a claim line, or (interim, pending D-N11) to an adjustment item
+    carried by another batch. ``amount`` is 0.00 only on a line that was paid 0.00 (it makes the claim line
+    ``rejected``); on an adjustment item it carries the adjustment's sign."""
     t = who.tenant_id
+    if (claim_line_id is None) == (claim_adjustment_id is None):
+        raise _invalid("claim_line_id", "exactly_one", "Give either claim_line_id or claim_adjustment_id.")
     doc = _locked(db, t, _doc_of_line(db, t, remittance_line_id))
     st = _state(db, doc)
-    claim = st.claims.get(str(claim_line_id))
-    if claim is None:
-        raise ValidationFailed(
-            details=[
-                {
-                    "field": "claim_line_id",
-                    "code": "not_found",
-                    "message": "Not a submitted claim line of this manufacturer.",
-                }
-            ]
-        )
+    if str(remittance_line_id) in st.categorised:
+        raise LineCategorised()
     rem = st.remits[str(remittance_line_id)]
+    if claim_adjustment_id is None:
+        if amount < 0 or (amount == 0 and rem.amount_paid != 0):
+            raise _invalid(
+                "allocated_amount",
+                "invalid",
+                "A claim line gets a positive amount (0.00 only for a line paid 0.00).",
+            )
+    adjustment = st.adjustments.get(str(claim_adjustment_id)) if claim_adjustment_id else None
+    if claim_adjustment_id is not None:
+        if adjustment is None:
+            raise _invalid(
+                "claim_adjustment_id",
+                "not_found",
+                "Not an adjustment carried by another submitted batch of this manufacturer.",
+            )
+        if amount == 0 or (amount < 0) != (adjustment.amount < 0) or abs(amount) > abs(adjustment.amount):
+            raise _invalid(
+                "allocated_amount",
+                "invalid",
+                "The amount must have the adjustment's sign and not exceed its amount.",
+            )
+        db.execute(
+            text("SELECT pg_advisory_xact_lock(hashtextextended(:k, 0))"),
+            {"k": f"recon-adj:{claim_adjustment_id}"},
+        )
+        already = db.scalar(
+            select(func.coalesce(func.sum(ReconciliationMatch.allocated_amount), ZERO)).where(
+                ReconciliationMatch.tenant_id == t,
+                ReconciliationMatch.claim_adjustment_id == claim_adjustment_id,
+                ReconciliationMatch.status == "confirmed",
+            )
+        )
+        if abs((already or ZERO) + amount) > abs(adjustment.amount):
+            raise _invalid(
+                "allocated_amount",
+                "invalid",
+                "The adjustment is already allocated; the total cannot exceed its amount.",
+            )
+    claim = st.claims.get(adjustment.claim_line_id if adjustment else str(claim_line_id))
+    if claim is None:
+        raise _invalid("claim_line_id", "not_found", "Not a submitted claim line of this manufacturer.")
+    evidence: dict[str, object] = {"method": "manual", "entered_by": str(who.user_id)}
     try:
-        match = manual_match(rem, [(claim, amount)], {"method": "manual", "entered_by": str(who.user_id)})
+        match = (
+            manual_adjustment_match(rem, claim, adjustment.id, amount, evidence)
+            if adjustment
+            else manual_match(rem, [(claim, amount)], evidence)
+        )
         _delete_suggested(db, st, [remittance_line_id])
         db.flush()
         keep = [r for r in st.rows if r.status != "suggested" or r.remittance_line_id != remittance_line_id]
@@ -473,6 +585,42 @@ def manual(
         entity_id=group[0].match_id, meta=who.meta, after=match_audit(group, "confirmed") | {"remittance_id": doc.id},
     )  # fmt: skip
     return group
+
+
+def categorise(db: Session, who: Who, remittance_line_id: UUID, category: str) -> RemittanceLine:
+    """A person's decision that an unmatched line is an ``unmatched_payment`` (BUSINESS_LOGIC §10.3). Once; refused
+    (409) for a line with a confirmed match or one already categorised."""
+    t = who.tenant_id
+    doc = _locked(db, t, _doc_of_line(db, t, remittance_line_id))
+    line = db.scalar(
+        select(RemittanceLine)
+        .where(RemittanceLine.tenant_id == t, RemittanceLine.id == remittance_line_id)
+        .with_for_update()
+    )
+    if line is None:
+        raise NotFound()
+    if line.category is not None:
+        raise InvalidState("This line is already categorised.")
+    confirmed = db.scalar(
+        select(func.count())
+        .select_from(ReconciliationMatch)
+        .where(
+            ReconciliationMatch.tenant_id == t,
+            ReconciliationMatch.remittance_line_id == remittance_line_id,
+            ReconciliationMatch.status == "confirmed",
+        )
+    )
+    if confirmed:
+        raise LineHasMatch()
+    line.category, line.categorised_by, line.categorised_at = category, who.user_id, clock.now()
+    db.flush()
+    audit.record(
+        db, tenant_id=t, actor=Actor("user", who.user_id), action=Action.REMITTANCE_LINE_CATEGORISED,
+        entity_type="remittance_line", entity_id=line.id, meta=who.meta,
+        after={"remittance_id": doc.id, "line_number": line.line_number, "category": category,
+               "amount_paid": str(line.amount_paid)},
+    )  # fmt: skip
+    return line
 
 
 # ---- reads ------------------------------------------------------------------------------------------------------
@@ -592,6 +740,12 @@ def finalise(db: Session, who: Who, remittance_id: UUID) -> FinalisedRemittance:
         )
     matches, remits, mapping = _confirmed_everywhere(db, st)
     own = [m for m in matches if m.remittance_line_id in st.remits]
+    decided = {m.remittance_line_id for m in own} | st.categorised
+    open_lines = sorted(rid for rid in st.remits if rid not in decided)
+    if open_lines:
+        raise UncategorisedLines(
+            details=[{"field": "lines", "code": "uncategorised", "message": f"{len(open_lines)} lines"}]
+        )
     touched = {cid for m in own for cid in m.claim_line_ids}
     try:
         mset = masterdata.get_manufacturer_settings(db, t, doc.manufacturer_id)
@@ -620,13 +774,13 @@ def finalise(db: Session, who: Who, remittance_id: UUID) -> FinalisedRemittance:
                     case.reason_code,
                     UUID(cid),
                     UUID(via.remittance_line_id) if via else None,
-                    claim.net_amount,
+                    claim.amount,
                     paid_for(cid, matches),
                     ext,
                 )
             )
         for rid, line in st.remits.items():
-            case = classify_unmatched_payment(line, own)
+            case = classify_unmatched_payment(line, own, categorised=rid in st.categorised)
             if case is not None:
                 findings.append(
                     Finding(

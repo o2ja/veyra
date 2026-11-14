@@ -1143,6 +1143,57 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/dashboard": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Dashboard */
+        get: operations["dashboard_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/dashboard/drilldown": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Drilldown */
+        get: operations["dashboard_drilldown"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/dashboard/refresh": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Refresh Dashboard */
+        post: operations["dashboard_refresh"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/document-extractions": {
         parameters: {
             query?: never;
@@ -1857,6 +1908,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/remittance-lines/{line_id}/categorise": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Categorise Line */
+        post: operations["remittance_line_categorise"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/remittances": {
         parameters: {
             query?: never;
@@ -2011,6 +2079,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/reports/claim-batches/{batch_id}/audit-pack": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Audit Pack */
+        post: operations["claim_batch_audit_pack"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/sales-lines": {
         parameters: {
             query?: never;
@@ -2061,6 +2146,91 @@ export interface paths {
         head?: never;
         /** Patch Settings */
         patch: operations["settings_update"];
+        trace?: never;
+    };
+    "/api/v1/trace/calculation_result/{result_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Trace Calculation Result */
+        get: operations["trace_calculation_result"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/trace/claim_adjustment/{adjustment_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Trace Claim Adjustment */
+        get: operations["trace_claim_adjustment"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/trace/claim_line/{claim_line_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Trace Claim Line */
+        get: operations["trace_claim_line"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/trace/remittance_line/{remittance_line_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Trace Remittance Line */
+        get: operations["trace_remittance_line"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/trace/variance_case/{case_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Trace Variance Case */
+        get: operations["trace_variance_case"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
         trace?: never;
     };
     "/api/v1/unmapped-entities": {
@@ -2463,6 +2633,15 @@ export interface components {
             data: components["schemas"]["AuditEntry"][];
             page: components["schemas"]["Page"];
         };
+        /** AuditPackIn */
+        AuditPackIn: {
+            /**
+             * Format
+             * @default csv
+             * @enum {string}
+             */
+            format: "csv" | "xlsx";
+        };
         /** BatchExportIn */
         BatchExportIn: {
             /** Template Id */
@@ -2722,6 +2901,14 @@ export interface components {
             /** Owner User Id */
             owner_user_id: string | null;
         };
+        /** CategoriseIn */
+        CategoriseIn: {
+            /**
+             * Category
+             * @constant
+             */
+            category: "unmatched_payment";
+        };
         /** Change */
         Change: {
             /** After */
@@ -2909,6 +3096,16 @@ export interface components {
              * @enum {string}
              */
             mode: "all" | "listed";
+        };
+        /** DashboardOut */
+        DashboardOut: {
+            /** As Of */
+            as_of: string | null;
+            /** As Of Date */
+            as_of_date: string | null;
+            figures: components["schemas"]["Figures"];
+            /** Months */
+            months: components["schemas"]["MonthFigures"][];
         };
         /** DiffOut */
         DiffOut: {
@@ -3185,6 +3382,56 @@ export interface components {
             payload: {
                 [key: string]: unknown;
             };
+        };
+        /** DrillRow */
+        DrillRow: {
+            /** Amount */
+            amount: string;
+            /** Branch Id */
+            branch_id: string | null;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Label */
+            label: string;
+            /**
+             * Manufacturer Id
+             * Format: uuid
+             */
+            manufacturer_id: string;
+            /**
+             * Month
+             * Format: date
+             */
+            month: string;
+            /**
+             * Trace Id
+             * Format: uuid
+             */
+            trace_id: string;
+            /** Trace Kind */
+            trace_kind: ("claim_line" | "claim_adjustment" | "remittance_line" | "variance_case" | "calculation_result") | "remittance_line";
+        };
+        /** DrilldownOut */
+        DrilldownOut: {
+            /** As Of */
+            as_of: string | null;
+            /** Consistent */
+            consistent: boolean;
+            /** Data */
+            data: components["schemas"]["DrillRow"][];
+            /** Figure */
+            figure: string;
+            /**
+             * Metric
+             * @enum {string}
+             */
+            metric: "claimed" | "collected" | "short_paid" | "recovered" | "written_off" | "recovered_after_write_off" | "at_risk" | "expiring";
+            page: components["schemas"]["Page"];
+            /** Total */
+            total: string;
         };
         /** EmailChangeIn */
         EmailChangeIn: {
@@ -3547,6 +3794,25 @@ export interface components {
             name: string;
             /** Required */
             required: boolean;
+        };
+        /** Figures */
+        Figures: {
+            /** At Risk */
+            at_risk: string;
+            /** Claimed */
+            claimed: string;
+            /** Collected */
+            collected: string;
+            /** Expiring */
+            expiring: string;
+            /** Recovered */
+            recovered: string;
+            /** Recovered After Write Off */
+            recovered_after_write_off: string;
+            /** Short Paid */
+            short_paid: string;
+            /** Written Off */
+            written_off: string;
         };
         /** FileList */
         FileList: {
@@ -4147,11 +4413,10 @@ export interface components {
         ManualMatchIn: {
             /** Allocated Amount */
             allocated_amount: number | string;
-            /**
-             * Claim Line Id
-             * Format: uuid
-             */
-            claim_line_id: string;
+            /** Claim Adjustment Id */
+            claim_adjustment_id?: string | null;
+            /** Claim Line Id */
+            claim_line_id?: string | null;
             /**
              * Remittance Line Id
              * Format: uuid
@@ -4504,6 +4769,15 @@ export interface components {
             groups: components["schemas"]["SummaryGroup"][];
             lost_to_expiry: components["schemas"]["LostToExpiry"];
             totals: components["schemas"]["SummaryTotals"];
+        };
+        /** MonthFigures */
+        MonthFigures: {
+            figures: components["schemas"]["Figures"];
+            /**
+             * Month
+             * Format: date
+             */
+            month: string;
         };
         /** NoteIn */
         NoteIn: {
@@ -5015,6 +5289,11 @@ export interface components {
             /** Unresolved Skus */
             unresolved_skus: string[];
         };
+        /** RefreshAccepted */
+        RefreshAccepted: {
+            /** Job Id */
+            job_id: string | null;
+        };
         /** RegisterIn */
         RegisterIn: {
             /** Email */
@@ -5116,6 +5395,10 @@ export interface components {
             amount_claimed_stated: string | null;
             /** Amount Paid */
             amount_paid: string;
+            /** Categorised At */
+            categorised_at: string | null;
+            /** Category */
+            category: "unmatched_payment" | null;
             /** Claim Reference */
             claim_reference: string | null;
             /** Customer Ref */
@@ -5949,6 +6232,34 @@ export interface components {
         TokenIn: {
             /** Token */
             token: string;
+        };
+        /** TraceNode */
+        TraceNode: {
+            /** Fields */
+            fields: {
+                [key: string]: string | null;
+            };
+            /** Id */
+            id: string | null;
+            /** Kind */
+            kind: string;
+            /** Label */
+            label: string;
+        };
+        /** TraceOut */
+        TraceOut: {
+            /** Chain */
+            chain: components["schemas"]["TraceNode"][];
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /**
+             * Kind
+             * @enum {string}
+             */
+            kind: "claim_line" | "claim_adjustment" | "remittance_line" | "variance_case" | "calculation_result";
         };
         /** TrackerOut */
         TrackerOut: {
@@ -8902,6 +9213,95 @@ export interface operations {
             };
         };
     };
+    dashboard_get: {
+        parameters: {
+            query?: {
+                manufacturer_id?: string | null;
+                branch_id?: string | null;
+                month?: string | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DashboardOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    dashboard_drilldown: {
+        parameters: {
+            query: {
+                metric: "claimed" | "collected" | "short_paid" | "recovered" | "written_off" | "recovered_after_write_off" | "at_risk" | "expiring";
+                manufacturer_id?: string | null;
+                branch_id?: string | null;
+                month?: string | null;
+                limit?: number;
+                cursor?: string | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DrilldownOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    dashboard_refresh: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RefreshAccepted"];
+                };
+            };
+        };
+    };
     extraction_list: {
         parameters: {
             query?: {
@@ -10725,6 +11125,41 @@ export interface operations {
             };
         };
     };
+    remittance_line_categorise: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                line_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CategoriseIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RemittanceLineOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     remittance_list: {
         parameters: {
             query?: {
@@ -11054,6 +11489,41 @@ export interface operations {
             };
         };
     };
+    claim_batch_audit_pack: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                batch_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["AuditPackIn"] | null;
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     sales_line_list: {
         parameters: {
             query?: {
@@ -11176,6 +11646,161 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    trace_calculation_result: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                result_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TraceOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    trace_claim_adjustment: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                adjustment_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TraceOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    trace_claim_line: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                claim_line_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TraceOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    trace_remittance_line: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                remittance_line_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TraceOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    trace_variance_case: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                case_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TraceOut"];
+                };
             };
             /** @description Validation Error */
             422: {

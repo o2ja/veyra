@@ -7,7 +7,7 @@ variance.
 """
 
 import base64
-from datetime import date, datetime, timedelta
+from datetime import date, datetime
 from typing import Any
 from uuid import UUID
 
@@ -33,10 +33,10 @@ from rebate.modules.recovery import assessment
 from rebate.modules.recovery.domain import deadlines
 from rebate.modules.recovery.domain import states as st
 from rebate.modules.recovery.models import CaseAttachment, Notification, VarianceCase, VarianceCaseEvent
+from rebate.modules.recovery.reporting_reads import AT_RISK_DAYS, AT_RISK_WHERE, REMAINING
 
 LIVE = (st.CaseStatus.OPEN, st.CaseStatus.TO_RECLAIM, st.CaseStatus.SUBMITTED)
 RECLAIMABLE_TYPES = ("short_paid", "rejected", "unpaid")
-AT_RISK_DAYS = 14
 SWEEP_JOB = "recovery_sweep"
 
 
@@ -204,7 +204,7 @@ def _case_deadline(
         # an unpaid line has no remittance: its deadline counts from the claim submission (owner decision D-N2)
         basis = "submission_date"
     if basis == "remittance_date":
-        base = rem.document_date
+        base = rem.document_date if f.remittance_line_id is not None else None
     else:
         base = db.scalar(
             text(
@@ -384,11 +384,8 @@ def list_cases(
 
 
 def summary(db: Session, tenant_id: UUID) -> dict[str, Any]:
-    """Totals by status and reason; ``at_risk`` = open variance of live cases whose deadline is unknown or within
-    ``AT_RISK_DAYS`` days of the tenant's business date (overdue included)."""
-    horizon = business_today(db, tenant_id) + timedelta(days=AT_RISK_DAYS)
-    rem = VarianceCase.variance_amount - VarianceCase.recovered_amount
-    live = VarianceCase.status.in_([s.value for s in LIVE])
+    """Totals by status and reason; ``at_risk`` is the dashboard's figure (``AT_RISK_WHERE``: live reclaimable cases
+    whose deadline is unknown or within ``AT_RISK_DAYS`` days of the tenant's business date, overdue included)."""
 
     def group(col: Any) -> list[dict[str, Any]]:
         q = select(
@@ -406,11 +403,11 @@ def summary(db: Session, tenant_id: UUID) -> dict[str, Any]:
         ]
 
     at_risk = db.execute(
-        select(func.count(), func.coalesce(func.sum(rem), 0)).where(
-            VarianceCase.tenant_id == tenant_id,
-            live,
-            or_(VarianceCase.deadline_date.is_(None), VarianceCase.deadline_date <= horizon),
-        )
+        text(
+            f"SELECT count(*), COALESCE(sum({REMAINING}), 0) FROM variance_cases v "  # noqa: S608  (module constants)  # nosec B608 (module constants and fixed column names; every value is a bound parameter)
+            f"WHERE v.tenant_id = :t AND {AT_RISK_WHERE}"
+        ),
+        {"t": tenant_id, "as_of": business_today(db, tenant_id)},
     ).one()
     return {
         "by_status": group(VarianceCase.status),

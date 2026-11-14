@@ -208,3 +208,66 @@ def test_nwnd_sales_rebate_qualify_only() -> None:
     assert r.payout_volume == Decimal(case["payout_base"])
     assert r.tier_number == case["tier"]
     assert r.earned_cumulative == Decimal(case["earned_cumulative"])
+
+
+# ---- return before claim, re-run after the claim (owner decision 2026-11-13, D-N1) -------------------------------
+
+
+def _claimed_net_of_cn5002() -> dict[str, PriorClaim]:
+    """INV-10021/1 claimed AFTER CN-5002 (4 units) was netted: hand 20 - 4 = 16 units x 12.50 = 200.00 frozen."""
+    prior = _claimed_batch()
+    prior["INV-10021/1"] = replace(
+        prior["INV-10021/1"],
+        quantity=Decimal("16"),
+        claim_amount=Decimal("200.00"),
+        netted_returned_quantity=Decimal("4"),
+    )
+    return prior
+
+
+def _run_with(prior: dict[str, PriorClaim], extra_return_qty: Decimal | None = None) -> dict[str, LineResult]:
+    lines = list(td.sales_lines(SCENARIO_CSV, prior))
+    if extra_return_qty is not None:
+        # a second return of INV-10021/1 imported after the claim: CN-5002 (4) comes first in processing order
+        orig = next(ln for ln in lines if ln.line_id == "INV-10021/1")
+        cn = next(ln for ln in lines if ln.line_id == "CN-5002/1")
+        assert cn.return_original is not None
+        total = Decimal("4") + extra_return_qty
+        later = replace(
+            cn,
+            line_id="CN-5003/1",
+            document_number="CN-5003",
+            invoice_date=date(2026, 7, 3),
+            quantity=-extra_return_qty,
+            return_original=replace(
+                cn.return_original, returned_quantity=total, returned_before=Decimal("4")
+            ),
+        )
+        lines = [
+            replace(ln, returned_quantity=total) if ln is orig else ln for ln in lines if ln is not cn
+        ] + [replace(cn, return_original=replace(cn.return_original, returned_quantity=total)), later]
+    run = SpaRunInput(
+        run_date=RUN_DATE,
+        lines=tuple(lines),
+        versions=tuple(td.spa_version(n) for n in td.SPA_PAYLOADS),
+        manufacturers=td.manufacturers(),
+        conversions=td.conversions(),
+    )
+    return {r.line_id: r for r in calculate_spa(run)}
+
+
+def test_return_before_claim_rerun_after_claim_proposes_nothing() -> None:
+    res = _run_with(_claimed_net_of_cn5002())
+    # original re-evaluated on the netting basis of its claim: 16 x 12.50 = 200.00 = the frozen amount (no 250.00)
+    assert res["INV-10021/1"].claim_amount == Decimal("200.00")
+    assert propose_recalculation(Decimal("200.00"), res["INV-10021/1"]) is None
+    # the return is already netted into the claim: no adjustment, no amount
+    assert res["CN-5002/1"].status is Status.NETTED and res["CN-5002/1"].claim_amount == Decimal("0")
+
+
+def test_second_return_after_the_claim_is_reversed_at_the_frozen_unit_amount() -> None:
+    # hand: 3 units x frozen unit amount 12.50 = -37.50; CN-5002 (4 units) remains netted
+    res = _run_with(_claimed_net_of_cn5002(), extra_return_qty=Decimal("3"))
+    assert res["INV-10021/1"].claim_amount == Decimal("200.00")
+    assert res["CN-5002/1"].status is Status.NETTED
+    assert res["CN-5003/1"].status is Status.ADJUSTMENT and res["CN-5003/1"].claim_amount == Decimal("-37.50")

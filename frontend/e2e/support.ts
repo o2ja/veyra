@@ -83,6 +83,8 @@ export async function enrolMfa(page: Page): Promise<{ secret: string; codes: str
   await expect(list).toBeVisible();
   const codes = await list.locator("li").allInnerTexts();
   await page.getByRole("button", { name: "I saved them, continue" }).click();
+  // the button refreshes the session, then navigates to "/": a click before that lands is undone by it (e2e flake)
+  await page.waitForURL((url) => url.pathname === "/");
   return { secret, codes };
 }
 
