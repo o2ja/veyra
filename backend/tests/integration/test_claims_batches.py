@@ -417,6 +417,30 @@ def test_double_claim_is_refused_with_the_conflicting_lines_and_void_releases_th
     release(sc, second)
 
 
+def test_a_non_unique_integrity_error_on_the_line_flush_is_not_reported_as_already_claimed(
+    sc: Scenario, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Only the active-line unique indexes mean 'double claim'. A line the schema refuses for another reason
+    (here ck_claim_lines_*: a sales line without its sales line) must surface as the server error it is."""
+    from rebate.modules.claims import batches
+
+    api, k = sc.ws.api, POOL4[0]
+    real = batches._claim_line
+
+    def broken(*a: Any) -> Any:
+        line = real(*a)
+        line.sales_document_line_id = None
+        return line
+
+    monkeypatch.setattr(batches, "_claim_line", broken)
+    r = make(api, [k], sc.mfr[k])
+    assert r.status_code == 500, r.text
+    assert "already_claimed" not in r.text
+    monkeypatch.undo()
+    assert k in pool(api)  # nothing was claimed; the same line batches normally afterwards
+    release(sc, one(sc, k))
+
+
 def test_concurrent_creates_cannot_double_claim(sc: Scenario, env: Env, admin_engine: Engine) -> None:
     k = POOL4[1]
     rid = pool(sc.ws.api)[k]["id"]

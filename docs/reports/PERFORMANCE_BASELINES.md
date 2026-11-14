@@ -130,3 +130,14 @@ Finding: both keyset lists are index-bounded and flat in row count. Missed claim
 - RSS is the in-process test (API and worker in one process), not the separate `api` and `worker` containers of the real deployment; the per-process split is unmeasured.
 - The memory-growth location is from code reading, not a profiler.
 - Rebate-tier calculation and the claw-back path are not exercised by this volume file (SPA agreement only).
+
+## 2026-11-14: import validator memory, before/after (branch `fix/import-memory-security-minors`)
+
+Finding from S11.2: the import validator kept whole-file state per row (natural key as `str`, `(row, hex hash)` tuples, invoice-line key tuples, per-document header tuples), about 0.9 KB per row. `RowValidator` in `backend/src/rebate/modules/ingestion/validators.py` now keeps 16-byte BLAKE2b digests of the natural key, the invoice-line key and the document key, the row number as 6 big-endian bytes, the content hash as its first 16 bytes and the header as an 8-byte digest (all `bytes`). Validation results are unchanged: whole-file duplicate detection is still exact up to digest collisions (key digest 128 bits: about n^2/2^129, roughly 1e-27 at 1M rows; a wrong duplicate/conflict verdict needs a 128-bit content-hash-prefix collision on top of a key match; a wrong header-consistency verdict needs a 64-bit collision between two different headers of the same document). Credit-note originals keep their exact `(number, line)` tuples for the database lookup; only the "is it in this file" test uses digests.
+
+| Measurement (same laptop/Docker as above, one run each) | Before | After |
+|---|---|---|
+| Validator state only: 100,000 sales rows (10% credit notes) through `RowValidator.validate`, RSS delta | 85 MB (0.87 KB/row) | 46 MB (0.47 KB/row) |
+| `test_calculation_performance.py`, `PERF_ROWS=100000`, peak RSS during import (whole test process) | 386 MB (S11.2 run above) | 368 MB (370 MB `ru_maxrss`) |
+
+The end-to-end reduction is small (about 18 MB, 5%) because the validator's dictionaries are only part of the import's footprint; the rest of the 368 MB is the in-process API and worker, the master-data index, SQLAlchemy and per-chunk buffers, which this change does not touch. The before figure for the end-to-end line is the S11.2 measurement, not a re-run on the same day. Wall time is noisy (two after-runs: 173 s and 123 s import) and is not compared. Projection from the validator-only slope: roughly 40 MB less per 100k rows, about 0.4 GB less at 1M rows; not measured at 1M. Not done: releasing state per chunk (duplicates and credit-note originals are whole-file rules), and per-document header state still grows with the number of documents.

@@ -11,11 +11,12 @@ from dataclasses import dataclass
 from typing import IO, Any
 from uuid import UUID
 
-from sqlalchemy import select
+from sqlalchemy import and_, not_, or_, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from rebate.core import clock, jobs
+from rebate.core.access import PermissionDenied
 from rebate.core.errors import Conflict, InvalidState, NotFound
 from rebate.core.ids import new_id
 from rebate.core.request import Principal, RequestContext
@@ -135,6 +136,27 @@ def upload(c: RequestContext, principal: Principal, tenant_id: UUID, up: Upload)
     return row
 
 
+# Export files carry no column saying which export made them, so the producer's name pattern decides:
+# audit pack "audit-pack-*" -> audit_pack.export, missed-claims list "missed-claims-*" -> data.read,
+# anything else (claim batch exports, named by batch number) -> claim_batch.export.
+_EXPORT_PREFIXES = (("audit-pack-", "audit_pack.export"), ("missed-claims-", "data.read"))
+
+
+def export_permission(row: FileObject) -> str | None:
+    """The permission needed to read ``row``, beyond ``data.read``; None for non-export files."""
+    if row.kind != "export":
+        return None
+    return next(
+        (p for prefix, p in _EXPORT_PREFIXES if row.original_name.startswith(prefix)), "claim_batch.export"
+    )
+
+
+def check_readable(row: FileObject, principal: Principal) -> None:
+    needed = export_permission(row)
+    if needed is not None and needed not in principal.permissions:
+        raise PermissionDenied(needed)
+
+
 def get(db: Session, tenant_id: UUID, file_id: UUID) -> FileObject:
     row = db.scalar(select(FileObject).where(FileObject.tenant_id == tenant_id, FileObject.id == file_id))
     if row is None:
@@ -142,8 +164,20 @@ def get(db: Session, tenant_id: UUID, file_id: UUID) -> FileObject:
     return row
 
 
-def list_files(db: Session, tenant_id: UUID, limit: int, before: UUID | None) -> list[FileObject]:
+def list_files(
+    db: Session, principal: Principal, tenant_id: UUID, limit: int, before: UUID | None
+) -> list[FileObject]:
     stmt = select(FileObject).where(FileObject.tenant_id == tenant_id)
+    hidden = [  # export files whose permission the caller lacks (see export_permission)
+        and_(FileObject.kind == "export", FileObject.original_name.startswith(prefix))
+        for prefix, p in _EXPORT_PREFIXES
+        if p not in principal.permissions
+    ]
+    if "claim_batch.export" not in principal.permissions:
+        named = or_(*(FileObject.original_name.startswith(prefix) for prefix, _ in _EXPORT_PREFIXES))
+        hidden.append(and_(FileObject.kind == "export", not_(named)))
+    if hidden:
+        stmt = stmt.where(not_(or_(*hidden)))
     if before is not None:
         stmt = stmt.where(FileObject.id < before)
     return list(db.scalars(stmt.order_by(FileObject.id.desc()).limit(limit)))
@@ -151,6 +185,7 @@ def list_files(db: Session, tenant_id: UUID, limit: int, before: UUID | None) ->
 
 def download_url(c: RequestContext, principal: Principal, tenant_id: UUID, file_id: UUID) -> str:
     row = get(c.db, tenant_id, file_id)
+    check_readable(row, principal)
     if row.scan_status != "clean":
         raise InvalidState("Only files that passed the malware scan can be downloaded.")
     ext = row.original_name.rsplit(".", 1)[-1].lower()

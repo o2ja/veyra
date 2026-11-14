@@ -67,7 +67,7 @@ def list_files(
     limit: Annotated[int, Query(ge=1, le=200)] = 50,
     before: UUID | None = None,
 ) -> FileList:
-    rows = service.list_files(ctx(request).db, tenant_of(principal), limit, before)
+    rows = service.list_files(ctx(request).db, principal, tenant_of(principal), limit, before)
     return FileList(
         data=[FileOut.model_validate(r) for r in rows],
         next_before=rows[-1].id if len(rows) == limit else None,
@@ -78,7 +78,9 @@ def list_files(
 def get_file(
     request: Request, file_id: UUID, principal: Annotated[Principal, Depends(require("data.read"))]
 ) -> FileOut:
-    return FileOut.model_validate(service.get(ctx(request).db, tenant_of(principal), file_id))
+    row = service.get(ctx(request).db, tenant_of(principal), file_id)
+    service.check_readable(row, principal)
+    return FileOut.model_validate(row)
 
 
 @router.get("/files/{file_id}/download-url", operation_id="file_download_url")
