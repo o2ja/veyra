@@ -383,7 +383,7 @@ def test_finalising_opened_the_recovery_cases_of_the_ground_truth(story: Story) 
     """S9 hooks into the finalisation: expected_reconciliation.json gives 150.00 short-paid (E12), 2,080.00 rejected
     (E07), 75.00 unmatched and 660.00 unpaid; the dispute deadline is 2026-07-31 + 60 days = 2026-09-29; the unpaid
     line has no remittance, so it counts from the claim submission: 2026-07-05 + 60 = 2026-09-03 (D-N2).
-    Final S8 (interim rule D-N11, briefs/G2_S8_money_rule.md H1/H2): ADJ-2026-0001 (-50.00) rides in batch B2, so it cannot net CL-4;
+    Final S8 (D-N3; D-N11 only acts once B2 is paid, not in this story): ADJ-2026-0001 (-50.00) rides in batch B2, so it cannot net CL-4;
     remittance line 4 pays 200.00 = 250.00 claimed - 50.00 adjustment, hence CL-4 claimed 250.00 - paid 200.00 =
     short_paid 50.00, due 2026-07-31 + 60 = 2026-09-29 (the fifth case; findings 150/2080/50/75/660)."""
     got = story.ws.api.get("/cases", params={"limit": 50}).json()["data"]
@@ -481,7 +481,7 @@ def test_a_zero_paid_line_makes_its_claim_line_rejected_via_a_zero_manual_match(
 
 
 def test_an_adjustment_item_is_matched_only_by_a_person_and_yields_no_finding(story: Story) -> None:
-    """Interim rule pending owner decision D-N11. ADJ-2026-0001 (-50.00) rides in batch B2, not in CL-4's batch: it is a
+    """D-N11 manual path. ADJ-2026-0001 (-50.00) rides in batch B2, not in CL-4's batch: it is a
     separate item. Only a manual match with its id gives it an allocation; its original line's paid is untouched."""
     ws, volt = story.ws, story.mfr["VOLT"]
     adj = story.adjustment["id"]
@@ -509,7 +509,7 @@ def test_an_adjustment_item_is_matched_only_by_a_person_and_yields_no_finding(st
         Decimal("-20.00"),
     )
     assert view(ws, doc["id"])[1]["state"] == "matched"
-    # Hand: the line paid 100.00 and only an adjustment item is confirmed on it. Under the D-N11 interim that
+    # Hand: the line paid 100.00 and only an adjustment item is confirmed on it. That
     # allocation is not cash on a claim line, so claim parts = 0 and the whole line is the remainder: one
     # unmatched_payment of 100.00 (= amount_paid, never more, never 120.00 = 100.00 - (-20.00)). No categorisation is
     # needed (the line has a confirmed match) and the adjustment item itself yields no finding.
@@ -553,12 +553,12 @@ def _raw_confirmed(
     )
 
 
-def test_cross_batch_adjustment_allocation_never_frees_room_for_claim_lines_and_categorised_lines_stay_closed(
+def test_cross_batch_negative_adjustment_allocation_frees_room_for_claim_lines_and_categorised_lines_stay_closed(
     story: Story, admin_engine: Engine, app_engine: Engine
 ) -> None:
-    """Line 1 pays 200.00. A person gives 200.00 to INV-10010 and confirms -20.00 of the cross-batch ADJ on it. A further
-    20.00 to INV-10011 would make 200.00 + 20.00 = 220.00 > 200.00 (the -20.00 counts 0): refused (409 match_invariant),
-    although the signed sum 200.00 - 20.00 + 20.00 = 200.00 would fit. The database trigger refuses the same insert.
+    """D-N11 (was: the -20.00 counted 0). Line 1 pays 200.00. A person gives 200.00 to INV-10010 and confirms -20.00 of
+    the cross-batch ADJ on it: 200.00 - 20.00 = 180.00. A further 20.00 to INV-10011 makes 200.00 <= 200.00: accepted
+    (201). Another 0.01 would make 200.01 > 200.00: refused (409 match_invariant); the trigger refuses the same insert.
     The ADJ (-50.00) can be allocated up to its amount over all lines and no further (422; trigger as rebate_app).
     Line 3 (300.00, within 5% of the 312.50 carrier claim by invoice + SKU + quantity) is only suggested (T3); once a
     person categorises it, confirming the suggestion is refused (409 line_categorised), in the service and in the
@@ -588,7 +588,8 @@ def test_cross_batch_adjustment_allocation_never_frees_room_for_claim_lines_and_
 
     assert post(claim_line_id=a, allocated_amount="200.00").status_code == 201
     assert post(claim_adjustment_id=story.adjustment["id"], allocated_amount="-20.00").status_code == 201
-    refused = post(claim_line_id=b, allocated_amount="20.00")
+    assert post(claim_line_id=b, allocated_amount="20.00").status_code == 201
+    refused = post(claim_line_id=b, allocated_amount="0.01")
     assert refused.status_code == 409 and refused.json()["error"]["code"] == "match_invariant"
     # the ADJ's cap: allocate exactly the room left (whatever earlier tests spent), then one cent more is refused
     adj = story.adjustment["id"]
@@ -618,7 +619,9 @@ def test_cross_batch_adjustment_allocation_never_frees_room_for_claim_lines_and_
     with admin_engine.begin() as conn:
         _raw_confirmed(conn, ws, line1, a, "0.00")  # no effect on the sum
         sp = conn.begin_nested()
-        _raw_confirmed(conn, ws, line1, b, "20.00")
+        _raw_confirmed(
+            conn, ws, line1, b, "60.00"
+        )  # line 1 sums to at most 200.00 here, so +60.00 always exceeds
         with pytest.raises(Exception, match="exceed the amount paid"):
             conn.execute(text("SET CONSTRAINTS ALL IMMEDIATE"))
         sp.rollback()

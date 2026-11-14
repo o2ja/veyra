@@ -33,6 +33,9 @@ class Adjustment:
 
     ref: str
     amount: Decimal
+    claim_line_id: str | None = (
+        None  # a ``carried`` adjustment: the claim line it adjusts (its own line, D-N11)
+    )
 
     def __post_init__(self) -> None:
         _check_money("adjustment amount", self.amount)
@@ -54,13 +57,16 @@ class ClaimLine:
     quantity: Decimal | None = None
     date: date | None = None
     adjustments: tuple[Adjustment, ...] = ()
+    # negative adjustments of OTHER claim lines carried by this line's batch (owner decision D-N11, 2026-11-14): part
+    # of the batch total the manufacturer pays against this line, but allocated to the adjusted line's own item
+    carried: tuple[Adjustment, ...] = ()
 
     def __post_init__(self) -> None:
         _check_money("claim amount", self.amount)
 
     @property
     def net_amount(self) -> Decimal:
-        return self.amount + sum((a.amount for a in self.adjustments), Decimal(0))
+        return self.amount + sum((a.amount for a in (*self.adjustments, *self.carried)), Decimal(0))
 
 
 @dataclass(frozen=True)

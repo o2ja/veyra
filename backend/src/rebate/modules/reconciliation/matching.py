@@ -126,9 +126,11 @@ def on_finalise(hook: Callable[[Session, Who, FinalisedRemittance], None]) -> No
 
 @dataclass(frozen=True)
 class AdjustmentItem:
-    """An approved adjustment carried by a submitted batch, reconciled as its own item (never added to the original
-    claim line, owner decision 2026-11-13). Interim, pending owner decision D-N11: it gets an allocation only when a
-    person confirms a manual match with it, and it produces no finding."""
+    """An approved adjustment carried by a submitted batch other than its original line's, reconciled as its own item
+    (never added to the original claim line, owner decisions 2026-11-13 and D-N11 2026-11-14). A negative one is split
+    off the payment of the carrying batch's only claim line and allocated to this item (its own line, never the
+    carrying invoice's); otherwise it gets an allocation only when a person confirms a manual match. It produces no
+    finding."""
 
     id: str
     claim_line_id: str
@@ -158,9 +160,9 @@ class State:
 
     def topup(self) -> list[ClaimLine]:
         """Lines a previous remittance paid in part and that are still short: offered to T1/T2 only. Their
-        same-batch adjustments were allocated by the first payment, so they are not split again."""
+        same-batch and carried adjustments were allocated by the first payment, so they are not split again."""
         return [
-            replace(c, adjustments=())
+            replace(c, adjustments=(), carried=())
             for i, c in self.claims.items()
             if i in self.elsewhere and c.amount - self.paid_elsewhere.get(i, ZERO) > self.tolerance
         ]
@@ -178,12 +180,20 @@ def _claims(
     batch_of = {str(r.id): r.batch_id for r in lines}
     by_line: dict[str, list[Adjustment]] = defaultdict(list)
     separate: dict[str, AdjustmentItem] = {}
+    lines_of_batch: dict[UUID, list[str]] = defaultdict(list)
+    for r in lines:
+        lines_of_batch[r.batch_id].append(str(r.id))
+    carried: dict[str, list[Adjustment]] = defaultdict(list)
     for a in adj:
         line_id = str(a.claim_line_id)
         if batch_of.get(line_id) == a.batch_id:  # carried by its original line's batch: part of that line
             by_line[line_id].append(Adjustment(str(a.id), a.amount))
         else:
             separate[str(a.id)] = AdjustmentItem(str(a.id), line_id, a.batch_id, a.amount)
+            # D-N11: a negative one rides the payment of the carrying batch's single claim line (with several lines
+            # the manufacturer's split is unknowable: it stays a manual item)
+            if a.amount < 0 and len(lines_of_batch[a.batch_id]) == 1:
+                carried[lines_of_batch[a.batch_id][0]].append(Adjustment(str(a.id), a.amount, line_id))
     by_id, submitted = {}, {}
     for r in lines:
         cid = str(r.id)
@@ -198,6 +208,7 @@ def _claims(
             quantity=r.quantity,
             date=r.invoice_date,
             adjustments=tuple(by_line.get(cid, ())),
+            carried=tuple(carried.get(cid, ())),
         )
         submitted[cid] = r.submitted_at
     return by_id, submitted, {str(a.id): str(a.claim_line_id) for a in adj}, separate
@@ -515,8 +526,8 @@ def manual(
     amount: Decimal,
     claim_adjustment_id: UUID | None = None,
 ) -> list[ReconciliationMatch]:
-    """A person's match of one remittance line to a claim line, or (interim, pending D-N11) to an adjustment item
-    carried by another batch. ``amount`` is 0.00 only on a line that was paid 0.00 (it makes the claim line
+    """A person's match of one remittance line to a claim line, or to an adjustment item carried by
+    another batch. ``amount`` is 0.00 only on a line that was paid 0.00 (it makes the claim line
     ``rejected``); on an adjustment item it carries the adjustment's sign."""
     t = who.tenant_id
     if (claim_line_id is None) == (claim_adjustment_id is None):

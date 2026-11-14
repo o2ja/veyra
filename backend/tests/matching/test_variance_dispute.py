@@ -8,6 +8,7 @@ import pytest
 from rebate_matching.dispute import DisputeFacts, assess_dispute
 from rebate_matching.engine import (
     InvariantViolation,
+    allocate,
     confirm_suggestion,
     manual_adjustment_match,
     manual_match,
@@ -340,9 +341,10 @@ def test_a_positive_cross_batch_adjustment_allocation_consumes_the_payment() -> 
         )
 
 
-def test_a_negative_cross_batch_adjustment_allocation_never_frees_room() -> None:
-    """Line pays 200.00: 200.00 to a claim line, -50.00 to a cross-batch ADJ, +50.00 to another claim line. The signed
-    sum 200 - 50 + 50 = 200 would fit; by the rule the -50.00 counts 0, so 200 + 0 + 50 = 250 > 200: refused."""
+def test_a_negative_cross_batch_adjustment_allocation_frees_room() -> None:
+    """D-N11 (was: counted 0 and refused). Line pays 200.00: 200.00 to a claim line, -50.00 to a cross-batch ADJ,
+    +50.00 to another claim line. Signed sum 200 - 50 + 50 = 200 <= 200: accepted. 50.01 instead of 50.00 makes
+    200.01 > 200: refused."""
     c1 = ClaimLine("c1", "M", "CL-1", "I1", 1, D("200.00"))
     c2 = ClaimLine("c2", "M", "CL-2", "I2", 1, D("50.00"))
     r = RemittanceLine("r", "M", D("200.00"))
@@ -351,5 +353,19 @@ def test_a_negative_cross_batch_adjustment_allocation_never_frees_room() -> None
         manual_adjustment_match(r, c1, "adj", D("-50.00")),
         manual_match(r, [(c2, D("50.00"))]),
     ]
+    validate_matches(ms, {"r": r}, {"c1": c1, "c2": c2})
+    c3 = ClaimLine("c3", "M", "CL-3", "I3", 1, D("50.01"))
     with pytest.raises(InvariantViolation):
-        validate_matches(ms, {"r": r}, {"c1": c1, "c2": c2})
+        validate_matches([*ms[:2], manual_match(r, [(c3, D("50.01"))])], {"r": r}, {"c1": c1, "c3": c3})
+
+
+def test_a_carried_negative_adjustment_is_split_to_its_own_line() -> None:
+    """D-N11: INV-10020 line 312.50 carries ADJ -50.00 of CL-4. Paid 262.50 -> claim 262.50 - (-50.00) = 312.50,
+    adjustment -50.00 attributed to CL-4; sum 262.50. Paid 250.00 -> claim 300.00 (short 12.50 vs 312.50)."""
+    inv = ClaimLine(
+        "inv20", "M", "CL-5", "INV-10020", 1, D("312.50"), carried=(Adjustment("adj", D("-50.00"), "cl4"),)
+    )
+    assert inv.net_amount == D("262.50")
+    for paid, claim_part in (("262.50", "312.50"), ("250.00", "300.00")):
+        got = [(a.claim_line_id, a.adjustment_ref, a.amount) for a in allocate(inv, D(paid))]
+        assert got == [("inv20", None, D(claim_part)), ("cl4", "adj", D("-50.00"))]
