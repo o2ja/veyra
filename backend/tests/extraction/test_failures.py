@@ -231,10 +231,13 @@ def test_missing_provider_key_fails_visibly(migrated_db: DbUrls, replay: Replay)
         assert replay.calls == []
 
 
-def test_gateway_database_url_missing_dead_letters_the_job(migrated_db: DbUrls, replay: Replay) -> None:
+def test_gateway_database_url_missing_dead_letters_the_job(
+    migrated_db: DbUrls, replay: Replay, monkeypatch: pytest.MonkeyPatch
+) -> None:
     from tests.integration.conftest import new_workspace
     from tests.support import api_client
 
+    monkeypatch.delenv("DATABASE_URL_AI", raising=False)  # the dev stack sets it; this test needs it absent
     app = make_app(migrated_db.app)  # no DATABASE_URL_AI
     with api_client(app) as api:
         ws = new_workspace(app, api)
