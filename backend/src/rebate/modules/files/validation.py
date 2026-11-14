@@ -38,7 +38,9 @@ CONTENT_TYPE: dict[str, str] = {"csv": "text/csv", "xlsx": XLSX, "pdf": "applica
 
 # Zip-bomb guard for XLSX containers.
 MAX_ZIP_ENTRIES = 10_000
-MAX_UNCOMPRESSED = 300 * 1024 * 1024
+# 100 MB. Assumption, not measured: openpyxl holds shared strings as Python objects (several times the XML size),
+# so the former 300 MB cap could inflate past any sane worker memory limit. 100 MB is about 250k rows x 6 columns.
+MAX_UNCOMPRESSED = 100 * 1024 * 1024
 MAX_RATIO = 100
 
 
@@ -54,8 +56,8 @@ class FileTooLarge(DomainError):
     message = "The file is too large."
 
 
-def _reject(reason: str) -> UploadRejected:
-    return UploadRejected(details=[{"field": "file", "code": reason, "message": UploadRejected.message}])
+def _reject(reason: str, message: str = UploadRejected.message) -> UploadRejected:
+    return UploadRejected(details=[{"field": "file", "code": reason, "message": message}])
 
 
 _UNSAFE = re.compile(r'[\x00-\x1f\x7f"\\/:*?<>|]')
@@ -114,6 +116,8 @@ def check_content(ext: str, head: bytes, body: IO[bytes]) -> Checked:
             body.seek(0)
     if ext == "xlsx":
         _check_xlsx(body)
+    if ext == "pdf":
+        _check_pdf(body)
     return Checked(ext, detected, CONTENT_TYPE[ext])
 
 
@@ -165,6 +169,18 @@ def detect_text_encoding(data: bytes) -> str:
 ACTIVE_PARTS = ("xl/macrosheets/", "xl/embeddings/", "xl/activex/", "xl/externallinks/")
 
 
+def _check_pdf(body: IO[bytes]) -> None:
+    """A ZIP end-of-central-directory record in the tail makes a PDF/ZIP polyglot that other tools would open as
+    an archive. (Encrypted PDFs are caught by the ClamAV scan, SECURITY.md section 4, not here.)"""
+    body.seek(0)
+    try:
+        data = body.read()  # bounded by the size limit checked before
+    finally:
+        body.seek(0)
+    if b"PK\x05\x06" in data[-65557:]:
+        raise _reject("content_type_mismatch")
+
+
 def _check_xlsx(body: IO[bytes]) -> None:
     body.seek(0)
     try:
@@ -181,7 +197,10 @@ def _check_xlsx(body: IO[bytes]) -> None:
                     raise _reject("encrypted")
                 total += info.file_size
                 if total > MAX_UNCOMPRESSED:
-                    raise _reject("archive_too_large")
+                    raise _reject(
+                        "archive_too_large",
+                        "The workbook is too large (over 100 MB uncompressed). Save it as CSV instead.",
+                    )
                 if info.compress_size and info.file_size / info.compress_size > MAX_RATIO:
                     raise _reject("archive_ratio")
                 names.add(info.filename)
@@ -196,6 +215,12 @@ def _check_xlsx(body: IO[bytes]) -> None:
                 content_types = ct.read(65536).lower()
             if b"macroenabled" in content_types or b"macrosheet" in content_types:
                 raise _reject("macros")
+            for info in infos:  # OOXML never needs a DTD; refuse entity bombs / XXE before any parser runs
+                if info.filename.lower().endswith((".xml", ".rels")):
+                    with zf.open(info) as part:  # bounded read of the prolog, where a DOCTYPE must be
+                        prolog = part.read(65536).lower()
+                    if b"<!doctype" in prolog or b"<!entity" in prolog:
+                        raise _reject("xml_dtd")  # ponytail: a prolog padded past 64 KB is left to defusedxml
     except zipfile.BadZipFile:
         raise _reject("content_type_mismatch") from None
     finally:
