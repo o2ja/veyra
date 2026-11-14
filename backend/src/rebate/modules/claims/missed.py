@@ -7,8 +7,9 @@ with different scopes compose; superseded source-line versions (``is_current`` f
 Exceptions are reported separately by code; ``outside_claim_window`` results with a positive stored amount are
 "lost to expiry".
 
-ponytail: ``DISTINCT ON`` over all of a tenant's results on every call; if it measures slow in S11, keep a
-``latest_result`` projection maintained at run completion.
+Bounded reads (LIMIT, explicit result ids) use the anti-join ``LATEST`` and stop early; summary and unbounded reads use
+the sort-based ``LATEST_SCAN``. ponytail: both still touch every result when most lines are claimed or ineligible; if
+that measures slow, keep a ``latest_result`` projection maintained at run completion.
 """
 
 from datetime import date
@@ -19,7 +20,30 @@ from uuid import UUID
 from sqlalchemy import Row, text
 from sqlalchemy.orm import Session
 
+# "Newest" result per line, written as an anti-join instead of ``DISTINCT ON`` so the planner can walk results by id
+# and stop at ``LIMIT`` instead of sorting every result first. A result is the newest for its line when no other result
+# of a completed run ranks above it on ``(run completed_at, result id)``: the same order as the former
+# ``ORDER BY completed_at DESC, id DESC`` (completed_at is never NULL for a completed run: ck_calculation_runs_completed).
 LATEST = """
+latest AS (
+    SELECT
+        r.id, r.tenant_id, r.run_id, r.sales_document_line_id, r.document_number, r.line_number, r.invoice_date,
+        r.manufacturer_id, r.agreement_id, r.agreement_version_id, r.status, r.exception_code,
+        r.eligible_quantity, r.claim_uom, r.claim_unit_amount, r.claim_amount, r.flags
+    FROM calculation_results r
+    JOIN calculation_runs cr ON cr.tenant_id = r.tenant_id AND cr.id = r.run_id AND cr.status = 'completed'
+    JOIN sales_document_lines s ON s.tenant_id = r.tenant_id AND s.id = r.sales_document_line_id AND s.is_current
+    WHERE r.tenant_id = :t
+      AND NOT EXISTS (
+        SELECT 1 FROM calculation_results r2
+        JOIN calculation_runs cr2 ON cr2.tenant_id = r2.tenant_id AND cr2.id = r2.run_id AND cr2.status = 'completed'
+        WHERE r2.tenant_id = r.tenant_id AND r2.sales_document_line_id = r.sales_document_line_id
+          AND (cr2.completed_at, r2.id) > (cr.completed_at, r.id))
+)
+"""
+# Full-scan variant of LATEST (``DISTINCT ON``): measured faster than the anti-join when every line is read anyway
+# (summary, unbounded lists); same rows, proven equal by tests/integration/missed_reference.py.
+LATEST_SCAN = """
 latest AS (
     SELECT DISTINCT ON (r.sales_document_line_id)
         r.id, r.tenant_id, r.run_id, r.sales_document_line_id, r.document_number, r.line_number, r.invoice_date,
@@ -35,7 +59,10 @@ latest AS (
 # claimed = the line or any earlier version of it (a re-import supersedes the claimed version) is in an active claim
 # line: the new version must not be claimed a second time (BUSINESS_LOGIC.md §9.4); it gets an adjustment instead.
 UNCLAIMED = (
-    "NOT EXISTS (WITH RECURSIVE anc(id) AS (SELECT l.sales_document_line_id "
+    "NOT EXISTS (SELECT 1 FROM claim_lines c WHERE c.tenant_id = l.tenant_id "
+    "AND c.sales_document_line_id = l.sales_document_line_id AND c.released_at IS NULL) "
+    "AND NOT EXISTS (WITH RECURSIVE anc(id) AS (SELECT p.id FROM sales_document_lines p "
+    "WHERE p.tenant_id = l.tenant_id AND p.superseded_by_id = l.sales_document_line_id "
     "UNION SELECT p.id FROM sales_document_lines p JOIN anc ON p.superseded_by_id = anc.id "
     "AND p.tenant_id = l.tenant_id) "
     "SELECT 1 FROM claim_lines c WHERE c.tenant_id = l.tenant_id "
@@ -92,8 +119,12 @@ def missed(
         where.append("l.id = ANY(:ids)")
         params["ids"] = result_ids
     order = "l.invoice_date, l.document_number, l.line_number, l.id" if stable_order else "l.id DESC"
+    # the planner's cost estimate for the correlated NOT EXISTS is inflated, which triggers a ~1 s JIT compile
+    db.execute(text("SET LOCAL jit = off"))
+    # bounded reads (LIMIT, explicit ids) walk results by id and stop early; unbounded reads sort once instead
+    latest = LATEST if limit is not None or result_ids is not None else LATEST_SCAN
     sql = (
-        f"WITH {LATEST} SELECT {COLUMNS} FROM latest l WHERE l.status = 'eligible' AND {UNCLAIMED} "  # nosec B608 (module constants, bound values)
+        f"WITH {latest} SELECT {COLUMNS} FROM latest l WHERE l.status = 'eligible' AND {UNCLAIMED} "  # nosec B608 (module constants, bound values)
         + "".join(f"AND {w} " for w in where)
         + f"ORDER BY {order}"
     )
@@ -115,9 +146,10 @@ def summary(
     where, params = _filters(manufacturer_id, agreement_id, invoice_from, invoice_to)
     params["t"] = tenant_id
     extra = "".join(f"AND {w} " for w in where)
+    db.execute(text("SET LOCAL jit = off"))  # see missed()
     groups = db.execute(
         text(
-            f"WITH {LATEST} SELECT l.manufacturer_id, m.code AS manufacturer_code, m.name AS manufacturer_name, "  # nosec B608 (module constants, bound values)
+            f"WITH {LATEST_SCAN} SELECT l.manufacturer_id, m.code AS manufacturer_code, m.name AS manufacturer_name, "  # nosec B608 (module constants, bound values)
             "l.agreement_id, a.external_number AS agreement_number, count(*) AS lines, "
             "COALESCE(sum(l.claim_amount), 0) AS amount "
             "FROM latest l "
@@ -131,7 +163,7 @@ def summary(
     ).all()
     exceptions = db.execute(
         text(
-            f"WITH {LATEST} SELECT l.exception_code AS code, count(*) AS lines, "  # nosec B608 (module constants, bound values)
+            f"WITH {LATEST_SCAN} SELECT l.exception_code AS code, count(*) AS lines, "  # nosec B608 (module constants, bound values)
             "COALESCE(sum(l.claim_amount), 0) AS stored_amount FROM latest l "
             f"WHERE l.status = 'exception' AND {UNCLAIMED} {extra}GROUP BY l.exception_code ORDER BY l.exception_code"
         ),
@@ -139,7 +171,7 @@ def summary(
     ).all()
     lost = db.execute(
         text(
-            f"WITH {LATEST} SELECT count(*) AS lines, COALESCE(sum(l.claim_amount), 0) AS amount FROM latest l "  # nosec B608 (module constants, bound values)
+            f"WITH {LATEST_SCAN} SELECT count(*) AS lines, COALESCE(sum(l.claim_amount), 0) AS amount FROM latest l "  # nosec B608 (module constants, bound values)
             "WHERE l.status = 'exception' AND l.exception_code = 'outside_claim_window' AND l.claim_amount > 0 "
             f"AND {UNCLAIMED} {extra}"
         ),
