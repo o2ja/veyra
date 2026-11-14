@@ -1,16 +1,87 @@
+# Day log (2026-11-13, owner present)
+
+## SUMMARY (current, 2026-11-14)
+- Backend S7–S10 all reviewed; last fixes in (S10 79614c0). Waiting: #21 gate (main merge first) → owner merges; then the merge chain.
+- UI: ui/s7-adjustments fixed; ui/s8 review running/redo; ui/s9, ui/s10 to review. None Playwright-verified.
+- Owner: D-N11 decides a real double count (INV-10020 vs CL-4, 50.00) once B2 is paid; D-N4, D-N8, D-N9.
+- Preview app for the owner runs from ui/s10 on DB rebate_preview (http://localhost:5173).
+
+## Log
+- 2026-11-14: C: freed by owner. S10 verified after the S9 merge (single head, 17 pass). Full S10 review MERGEABLE WITH MINORS (no discrepancy; claimed 10,672.50, collected 7,470.00, short-paid 2,940.00) → fixed 79614c0 (audit pack POST). #21 gate 5/6: e2e flake root cause = enrolMfa returned before the post-MFA navigate("/") → wait added; full gate started then stopped for the docs push. ui/s8: final S8 merged in (e2761ac), opus review launched. ui/s8 + ui/s10 work committed for the external agents. Preview app started from ui/s10 on rebate_preview.
+- 2026-11-13 late: owner hired OpenCode (prompt 3, ui/s9); Antigravity did prompts 1, 2 and 4 (ui/s7-adjustments, ui/s8, ui/s10) — committed by me (their sandbox cannot run hooks). Plan with 2 Claude agents (sonnet builder + opus reviewer) → FINISH_PLAN.md.
+- ui/s7-adjustments review 1: NOT MERGEABLE (stub e2e spec, unreachable tabs + 13 more) → Claude UI fixer, dccc040.
+- Builder B1: S9 ← final S8 (8d8de1e, single head; fifth case CL-4 short_paid 50.00 by D-N3/D-N11 interim), S10 ← S9 (2 expectations corrected per D-N3: 6 collected rows, CL-4 paid 200.00; total 7,470.00 unchanged). S9 review MERGEABLE WITH MINORS → fixed 1983f5a; S10 merged it (7054beb), tests not re-run (C: full).
+- Docker Desktop crashed at ~23:20 (RAM 0.8 GB free with gate + 2 agents + external agents) → restarted services. #21 re-gate failed for that reason, then a later re-run was cut off by the session end.
+- Evening session: Docker Desktop was down → restarted, stack up. #21's earlier gate: 5/6, e2e failed (calculations.spec). Re-run: files.spec failed. Root cause: Vite reloaded the page when Playwright wrote junit-e2e.xml into frontend/; fix 4f95e43 (watch.ignored). Full gate 6/6 PASS at 4f95e43; comment posted; merge blocked by the auto-mode classifier → owner.
+- S8 third pass (fresh, the killed one void): NOT MERGEABLE, no financial discrepancy (all GT values re-derived). Serious: a positive cross-batch adjustment allocation (e.g. D-N10 +25.00) was uncounted cash, breaking §10.2; the §10.3 sentence saying so came from the builder, not the owner → treated as a code defect. Ruling: cross-batch allocation counts max(amount, 0). Rounds 3–5 (b6d17b1, 0051a13, b48546f) + my test tightening 40dc42f. Passes 4 and 5: no financial discrepancy; final MERGEABLE WITH MINORS, minors fixed and verified (reconciliation tests 20 pass, standalone pass).
+- UI: branches ui/s7-adjustments, ui/s8, ui/s9, ui/s10 created on their backend branches + ui/s7, briefs + Antigravity prompts committed. ui/qa-1 e2e not run: dev DB at #21's audit_seals head, branch lacks it → after #21 merges.
+- #23 merged (9a63f6d). #15 converted to draft (WIP).
+- F3 6dc4325: D-N1 fixed (claimed original evaluated on its frozen netting basis; no migration). Financial review 1 NOT MERGEABLE: S1 netted-return reduction ignored (→ owner D-N10), S2 cap clamp; minors engine version + trace, nits. Fix round running.
+
+---
+
 # Overnight log (2026-11-13, unattended)
 
 ## MORNING SUMMARY
-1. **Merged:** #18 S11 ops (c7d014b). ADR-017 + new `docs/PRODUCTION_PLAN.md`: managed S3-compatible storage in production (e5f0918).
-2. **In progress:** s7-adjustments (fix verification).
-3. **Needs your decision:** none yet.
-4. **Failures / findings / discrepancies:** none yet.
-5. **Antigravity prompts ready:** `antigravity-prompt-qa-1.md` (from 2026-11-12).
-6. **Resume:** `docs/reports/notes/resume-prompt.md`, step 2 (s7-adjustments).
+1. **Merged:** only #18 (S11 ops). Docs on main: ADR-017 + `docs/PRODUCTION_PLAN.md`. **No further merges: GitHub Actions has refused every job since ~02:19Z because of billing (D-N0).**
+2. **Ready to merge once CI runs (6/6 green), all reviewed:** PR #20 restore drill + guides; PR #21 S11.1 audit seal (2 reviews); PR #22 S11.3 security hardening. Re-chain migrations at merge if needed.
+   **Built but held by financial hard stops (your decision first):**
+   - `s7-adjustments` 17a70c9 → `s7-claims` → PR #15 (D-N1).
+   - `s8-reconciliation` edaa230 (D-N3).
+   - `s9-recovery` 0d8021b: reviews clean, full 2222 pass; stacked on S8.
+   - `s10-reporting` c9f971f: S10 core backend (D-N7); stacked on S9.
+   **Not done:** S11.2 perf (local Docker crashes, D-N9), S11.4 a11y (Antigravity), S11.5 deploy and S11.8 pilot review (owner/hosting). UI for S7–S10: briefs wait for the backends to merge. `ui/qa-1`: Playwright 8/18 fail, back to Antigravity.
+3. **Needs your decision:**
+   - **D-N0 GitHub Actions billing (blocks ALL merges):** since ~02:19Z every CI job is refused: "The job was not started because recent account payments have failed or your spending limit needs to be increased" (Billing & plans). Spending = yours. Until it runs, no PR can show 6/6 green, so I merged nothing after #18. Main's own CI runs on my doc commits also show failure for this reason only (no job started).
+   - **D-N1 FINANCIAL DISCREPANCY (HARD STOP, S7):** a return netted BEFORE the original line is claimed. Run 1 nets INV-10021 to 200.00 (CN-5002 netted) and the claim freezes at 200.00; run 2 reports 250.00 / −50.00, so propose emits +50.00 `agreement_change` AND −50.00 `return_reversal` on the same line. BUSINESS_LOGIC §7 read literally = 150.00; hand-correct = 200.00; with allow_negative_claims=false the −50.00 is held and the +50.00 approvable → 250.00 claimed for 16 net units. Ground truth (`claim_batches_fixture.json`) freezes 250.00 (return after claim) and does not cover this ordering. Code: rebate_engine/spa.py:320, claims/adjustments.py:398-436. Review: PR #15 comment 6841512829. **Blocked:** merge of s7-adjustments → s7-claims → #15, and therefore the S8/S9 merges to main (stacked). Recommendation (not applied): §7 states that adjustments compare against the *frozen* amount using the same netting view the claim was made with (a claim frozen net of a return proposes no return_reversal for that return).
+   - **D-N3 FINANCIAL DISCREPANCY (HARD STOP, S8):** BUSINESS_LOGIC §10.3 says claimed = claim amount "plus approved adjustments included in the **same batch**"; code (`claims/recon_reads.py:32-45`, `reconciliation/matching.py:130-148`) applies an adjustment to its original claim line whatever submitted batch carries it. Ground truth only has the same-batch case (all agree). Different-batch case: rule → CL-4 claimed 250.00 / paid 200.00 / short_paid 50.00; code → 200.00, no case; and if the later batch is paid 262.50 against INV-10020 the code reports a 50.00 short pay there too, so the −50.00 counts twice. Decide which batch an adjustment's amount belongs to. Recommendation: to the batch that carries it (the rule as written), with the original line reconciled at its frozen amount. Linked to D-N1. Review: `docs/reports/notes/s8-financial-review-1.md`. **S8 stopped**; other findings there (serious: finalise auto-categorises unmatched lines without the §10.3 explicit categorisation step; 5 minors) wait for the same decision.
+   - **D-N4 (S11.1 retention, not built):** the docs don't specify the deletion path. Five questions are in `k1-s11-audit-seal.md` on branch s11-audit-seal: (1) which tables and dates count as financial records, (2) the workspace deletion flow (request, approval, 30-day grace, who can cancel), (3) the deletion-certificate fields and where it lives outside tenant RLS, (4) which role may delete, plus object-store and backup purge, (5) how a purged audit range anchors the seal chain. Only the dry-run report is built.
+   - **D-N5 (S9, owner flag):** a reclaim from a submitted batch that is paid AFTER the case is written off is skipped (closed cases never change, per docs), so `written_off_amount` keeps the full amount and reports overstate the loss. Recommendation: keep closed cases immutable, but report post-write-off receipts as a separate "recovered after write-off" figure in S10.
+   - **D-N7 FINANCIAL DISCREPANCY (HARD STOP, S10):** dashboard `claimed`/`collected` exclude adjustments (claims/reporting_reads.py:24-30, reconciliation/reporting_reads.py:31). BUSINESS_LOGIC §10.3 and ground truth (CB-VOLT batch_total 10,360.00, net of ADJ-2026-0001 −50.00) include them: code claimed 10,410 vs 10,360; collected counts 250 on CL-4 (cash on matched lines 7,470 vs code 7,520). claimed − collected will not reconcile to short_paid. Tied to D-N1/D-N3. **S10 stopped.** Other findings on that branch (serious: claimed month bucketed in UTC not business time zone; two different at-risk numbers, dashboard vs /cases/summary; 8 minors) wait for the decision. Recommendation: claimed = batch total incl. its adjustments (matches ground truth), collected = cash on matched lines.
+   - **D-N6 (S10 figure definitions):** the docs name the dashboard figures but do not define them. M1's definitions are in `docs/reports/notes/m1-s10-reporting.md` (s10-reporting): e.g. claimed excludes adjustments; at_risk = live reclaimable cases only. Audit pack has no PDF (FR-RP-03 says PDF/XLSX). Confirm or correct.
+   - **D-N8 (S11.3, owner items):** ZAP baseline needs a staging environment (hosting OD-3/OD-4); the external pen test needs spending and a vendor (recommend booking once S7–S10 merge and staging exists). ESLint security plugin and Dependabot are new dependencies/services: approve or decline.
+   - **D-N9 (S11.2, local machine):** Docker Desktop's VM (7.65 GiB) died twice at the 1M import confirm step; no new perf numbers. Raise the Docker Desktop memory limit, or run perf on a bigger host. Branch `s11-perf` holds only an unexecuted clock fix for the eligible=0 caveat.
+   - **D-N2 (S9, M7):** with the `remittance_date` deadline basis (all seeded manufacturers) an *unpaid* case has deadline NULL, so it never gets a reminder. Ground truth is silent (gap, not contradiction). Decide what the unpaid-case deadline counts from. Recommendation: claim submission date + the manufacturer's dispute window.
+4. **Failures / findings / discrepancies:** three financial HARD STOPs (D-N1 S7, D-N3 S8, D-N7 S10), all around how adjustments net into claimed amounts. **Deciding the one rule "which claimed amount an adjustment belongs to" probably resolves all three.** Open review minors are listed per PR. ui/qa-1 Playwright failures. Docker Desktop crashed twice (restarted; the stack is up now).
+5. **Antigravity prompts ready:** `docs/reports/notes/antigravity-prompt-qa-1-fixes.md`.
+6. **Resume:** (a) fix GitHub billing → merge #20, #21, #22; (b) decide D-N1/D-N3/D-N7 → I align the code, then s7 → #15 → S8 → S9 → S10, one merge at a time with the full suite; (c) then UI briefs for S7–S10 and the remaining S11 items. Details: `docs/reports/notes/resume-prompt.md`. `RELEASE_1_REPORT.md` not written: Release 1 is not merged.
 
 ## Log
 - Merged PR #18 (6/6 checks green, third security pass MERGEABLE).
 - Owner storage decision recorded (ADR-017, PRODUCTION_PLAN.md, OD-3/OD-4 rows). PRODUCTION_PLAN.md did not exist; created it short.
+- Stack was down; started it (compose --profile s2 up -d, no rebuild).
+- Launched builders F2, I1, J1 (own test DBs; F2 owns negctl).
+- ui/qa-1: merged main in (ec83e66); lint/typecheck/vitest PASS; Playwright 18 specs in batches of 4: 10 pass, 8 fail (Antigravity had not run Playwright). Fix prompt eeea8e1.
+- F2 done (s7-adjustments 17a70c9): B1/S1/M1-M4 + mypy fixed; main merged in; full 1897 passed, isolation 360, negctl OK, ruff/mypy/lint-imports clean. bandit/pip-audit not run. Opus financial 2nd pass on fix diff launched.
+- Financial 2nd pass on F2 fix diff: **FAIL / HARD STOP** (D-N1). Minors: M4 file back to CRLF in 71279fc; S1 batch guard also refuses writes to submitted batches with total <= 0 (no current path). S7 work stopped. S8/S9 continue on branches; merges to main blocked.
+- K1 launched: S11.1 audit_seal + verify tool + retention (branch s11-audit-seal from main).
+- J1 done (s9-recovery a9eab7b, not re-merged with S8): jobs tests, isolation (4 tables + routes), write-off Idempotency-Key (spec 2.8 required it), audit snapshot key bug fixed. Full suite 2081 pass / 2 fail (audit bug, fixed + affected files re-run; reconciliation import-linter contract missing → sent to I1); test_end_to_end ignored (FixtureClaims, fixed on s7-adjustments). Opus security+DB+money review of the S9 diff running.
+- I1 done (S8 66bca00): PDF path, RA-5521/DN-310, isolation, perf 5,000 lines ingest 2.5 s / reconcile 1.0 s (8-line claim pool), OpenAPI additive, import-linter contract. Full 2004 pass (end_to_end ignored). I merged origin/s7-adjustments in + re-chained remittances after neg_claims_guard (edaa230, alembic heads = 1). S8 full suite re-running; opus financial review of S8 running.
+- S9 review 1: NOT MERGEABLE, 4 serious (cases never opened: on_finalise not wired; write-off leaves reclaim live; audit reason dropped; reminders to deactivated owners), 7 minor, no financial discrepancy. Sent to J1 with S8 re-merge.
+- S8 financial review 1: **FAIL / HARD STOP D-N3**. CM-7781, RA-5521 (120.00 unmatched_payment confirmed), DN-310 re-derived OK. S8 stopped. J1 told: S9 finalise hook must upsert/skip.
+- L1 done (s11-docs-drill 4342bb1): restore drill local — backup 8 s, restore 16 s into rebate_drill, 47 tables row counts equal, alembic head equal, 100/100 object sha256 OK; PITR not drilled. Guides: operator, user, onboarding, customer security overview. Review running.
+- K1 done (s11-audit-seal 86508de): audit_seals migration + RLS + append-only, seal job (hourly, chunked), verify CLI (exit 1 on break), retention dry-run, runbook. 12 new tests; full 1733 pass / 1 fail (ORM drift, fixed, db+isolation 356 re-run pass); negctl OK. Security+DB review running.
+- S8 branch after re-chain (edaa230, includes s7-adjustments + main): full suite 2023 passed, 0 failed (12.5 min); ruff, format, mypy clean (my lint-imports call missed its config; I1's run: 14 kept, 0 broken). negctl not re-run on this merge.
+- PR #20 (S11.6 drill + S11.7 guides; review MERGEABLE WITH MINORS, minors fixed): CI jobs not started — GitHub billing (D-N0). Not merged.
+- S11.1 review: NOT MERGEABLE (blocker: migration enqueues 0 seal jobs because tenants is FORCE RLS; serious: settle rule relies on a nonexistent timeout, head-hash anchor not checkable, tamper limitation understated). Sent back to K1.
+- M1 launched: S10 core backend (summary job, dashboard + drill-down, tier tracker, trace resolver, audit pack) on s10-reporting, stacked on s9-recovery 7fe11bb.
+- ~05:00–06:00Z: Claude 5-hour usage limit hit; M1, J1 and a reviewer stopped, all resumed after reset. CI re-run at 06:01Z still refused (billing, D-N0).
+- K1 S11.1 fixes done (c434023): all 8 findings; full 1740 pass, negctl OK. 2nd-pass review running.
+- J1 S9 fixes done (fd2123e): S1–S4, M1–M6; full suite 2217 pass / 0 fail (no ignores), 1 alembic head. 2nd-pass review running; negctl on s9 running.
+- S11.1 2nd pass: **MERGEABLE WITH MINORS** (3 minor: document role-visibility limit of the settle check; log on deferred run; hook test bypasses queue). Ready to merge once CI runs (D-N0).
+- negctl on s9 (fd2123e): 4 misclassified isolation cases (2 S8 tables, 1 S9 table pass with RLS off; 2 S8 D9 cases fail without RLS). Test-only fix sent to J1.
+- S9 2nd pass: NOT MERGEABLE: N1 serious (partly recovered case can never be written off once its reclaim batch is submitted), N2 minor, N3 nit; S1/S3-M6 fixed, CM-7781 cases re-derived OK. Note for owner: S9 `retire_recovery_reclaims` rejects S7 adjustments via reject() (behaviour touching S7, no money change). Sent to J1.
+- J1 N1–N3 + negctl fixed (bef6ba3): negctl OK (211 RLS-dependent), isolation 417. Review of that diff: MERGEABLE WITH MINORS (spec wording, a loose test assertion, half-even display rounding) → orchestrator fixes; D-N5 owner flag.
+- S9 full suite at bef6ba3: 2222 passed, 0 failed. I fixed the 3 review minors (0d8021b; 15 targeted tests pass, mypy/ruff clean).
+- Choice: no S8/S9 completion reports tonight; both stages are blocked by hard stops, so their state lives in this log. Completion reports are written once D-N1/D-N3 are decided.
+- M1 S10 core done (c9f971f): ground-truth figures claimed 10,722.50 / collected 7,520.00 / short-paid 2,890.00 / at-risk 660.00; Hypothesis Σ drill-down = figure; isolation extended. Full 2280 pass. Opus review (money+security+DB) running.
+- S10 review: NOT MERGEABLE: **HARD STOP D-N7** (claimed/collected exclude adjustments vs §10.3 + ground truth). Figures re-derived: 10,722.50 / 7,520 / 2,890 / 660 match the code but not the net-of-adjustment rule. S10 stopped.
+- S11.3 ASVS L2 review of main (`docs/reports/S11_3_ASVS_L2_REVIEW.md` on s11-security): 3 serious (DB params in error logs; no parse memory/CPU limits; headers untested), 7 minor, 2 nit; 697 security/api/route tests pass. Builder N1 fixing on s11-security.
+- N1 S11.3 fixes done (s11-security 8e74238): hide_parameters + type-only 500 logs, worker mem/cpu/pids limits in compose.prod, XLSX uncompressed cap 300→100 MB, header + Caddyfile tests, doc-transcribed permission matrix (matches; SECURITY.md §3 lacks manufacturer_settings.write), XML DTD + PDF/ZIP polyglot refusal, per-IP login limit 20/min. Full 1731 pass / 1 fail (encrypted-PDF, reverted by design; affected tests re-run pass); negctl OK. Review running.
+- S11.3 review of fixes: MERGEABLE WITH MINORS → fixed (a7f7f6a). Full suite 1732 pass. PR #22 opened; waits for CI (D-N0).
+- S11.2 (P1, s11-perf): Docker Desktop died ~3 min into the 1M import (host failure, WSL distro stopped). I restarted Docker Desktop (`docker desktop restart`) and the stack; dev DB intact. One retry allowed; no 5M run. Perf test now pins the clock to 2026-07-10 so eligible lines are counted (930,149 expected per ground truth).
+- S11.2 retry: Docker died again at the same step; stopped (no 5M). rebate_test_p1 dropped. Docker restarted, stack up.
+- Run ended: everything left needs an owner decision or CI.
 
 ---
 

@@ -24,6 +24,8 @@ PERMISSIONS: dict[str, frozenset[str]] = {
     "settings.read": _ALL,
     "data.read": _ALL,
     "report.read": _ALL,
+    "report.refresh": _WRITERS,
+    "audit_pack.export": frozenset({"admin", "approver", "viewer"}),  # API §2.9 (A P V)
     "audit.read": frozenset({"admin", "approver", "viewer"}),  # SECURITY.md §3/§7, API §2.9
     "file.upload": _WRITERS,
     "import.run": _WRITERS,

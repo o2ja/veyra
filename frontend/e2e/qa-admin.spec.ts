@@ -1,6 +1,6 @@
 import { expect } from "@playwright/test";
 
-import { PASSWORD, enrolMfa, noViolations, signIn, test, tokenFromMail, uniqueEmail } from "./support";
+import { PASSWORD, enrolMfa, expectNoA11yViolations as noViolations, signIn, test, tokenFromMail, uniqueEmail } from "./support";
 
 test.describe("QA Admin: users, invitations, settings, audit log, jobs, 403 checks, axe", () => {
   test("covers admin management, settings update, role 403, and axe compliance", async ({

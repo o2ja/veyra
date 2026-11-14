@@ -85,3 +85,16 @@ def draft_for_preview(db: Session, tenant_id: UUID, draft_id: UUID) -> Any | Non
         ),
         {"t": tenant_id, "id": draft_id},
     ).first()
+
+
+def version_rules(db: Session, tenant_id: UUID, version_ids: list[UUID]) -> dict[UUID, Any]:
+    """Stored rules of the given versions (any status): a claim keeps the terms it was calculated under."""
+    return {
+        r.id: r.rules
+        for r in db.execute(
+            text(
+                "SELECT id, rules FROM agreement_versions WHERE tenant_id = :t AND id = ANY(CAST(:ids AS uuid[]))"
+            ),
+            {"t": tenant_id, "ids": version_ids},
+        )
+    }

@@ -381,3 +381,28 @@ def test_rebate_deadline_is_period_end_plus_days() -> None:
     # hand derivation: 2026-12-31 + 60 days = 2027-03-01 (Jan 31 + Feb 28 = 59 -> 2027-03-01)
     assert rebate_deadline(date(2026, 12, 31), 60) == date(2027, 3, 1)
     assert rebate_deadline(date(2027, 12, 31), 60) == date(2028, 2, 29)  # Jan 31 + 29 = 60 -> leap Feb 29
+
+
+def test_claimed_line_consumption_ignores_a_shortfall_of_returns_below_the_netted_quantity() -> None:
+    # cap 20, u = 22.00. A (claimed at 16 = 20 - 4 netted; only 2 units are currently returned, e.g. a reduced credit
+    # note) consumes max(16 - max(2 - 4, 0), 0) = 16, not 16 + 2 = 18. B (q10) then has 20 - 16 = 4 left:
+    # eligible 4, 4 x 22.00 = 88.00, partially eligible (the unclamped figure would leave 2 -> 44.00).
+    from rebate_engine.models import PriorClaim
+    from tests.engine_golden.builders import HALF_UP_2
+
+    pc = PriorClaim(
+        agreement_id="A1",
+        agreement_version_id="V1",
+        claim_uom="EA",
+        quantity=D(16),
+        unit_amount=D("22.00"),
+        claim_amount=D("352.00"),
+        rounding=HALF_UP_2,
+        netted_returned_quantity=D(4),
+    )
+    v = version(items=(item(max_quantity=D(20)),))
+    a = line(line_id="A", document_number="INV-A", invoice_date=date(2026, 5, 1), quantity=D(20))
+    a = replace(a, returned_quantity=D(2), prior_claim=pc)
+    b = line(line_id="B", document_number="INV-B", quantity=D(10))
+    _, rb = calculate_spa(SpaRunInput(run_date=RUN, lines=(a, b), versions=(v,), manufacturers=(mfr(),)))
+    assert (rb.eligible_quantity, rb.claim_amount, rb.excess_quantity) == (D(4), D("88.00"), D(6))

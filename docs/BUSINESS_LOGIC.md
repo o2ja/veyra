@@ -261,18 +261,20 @@ The agreement states which applies; the extractor flags it if unclear.
 
 Credit-note lines carry negative quantity (normalised at import) and reference the original invoice line (`original_line_id`), resolved by `(original document number, original line number)` or by user-confirmed match. A return line without an original gets exception `return_original_missing` (needs manual link; no guessing).
 
-For each original line the adapter supplies the engine with: `returned_quantity = Σ |qty|` of linked, current return lines dated on or before `data_cutoff`, and `prior_claimed` = the original's active claim line amount and unit amount, if any.
+For each original line the adapter supplies the engine with: `returned_quantity = Σ |qty|` of linked, current return lines dated on or before `data_cutoff`, and `prior_claimed` = the original's active claim line amount and unit amount, if any, and `netted_returned_quantity` = the returned quantity its frozen claim was netted by (`netted_returned_quantity` in the `returns` trace step of the calculation result the claim was made from).
 
 | Situation | Original line result | Return line result |
 |---|---|---|
 | Original **not yet claimed** | Computed on `q − returned_quantity` (net). Trace shows netting. Fully returned (net ≤ 0) → `not_applicable` / `no_claim_due`, amount 0 | `netted`, amount 0 |
-| Original **claimed** (submitted) | Unchanged (frozen) | `adjustment`: amount `= −(prior_claimed unit amount × |returned qty|)`, rounded per line with the prior claim's `mode`/`scale` (§6); becomes a `return_reversal` adjustment proposal |
-| Original claimed but manufacturer `allow_negative_claims = false` | — | Adjustment is held as `proposed` and flagged "cannot be net-claimed; discuss with manufacturer" |
+| Original **claimed** (submitted) | Evaluated on the netting basis its frozen claim was made with (`q − min(N, current returned quantity)`, N = `netted_returned_quantity`; owner decision 2026-11-13, D-N10), so an unchanged agreement reproduces the frozen amount | A return already netted into the frozen claim stays `netted`, amount 0: no `return_reversal`, no `agreement_change`. Returns are taken in processing order (§1 item 5, stable ordering); only the part not netted into the claim is `adjustment`: amount `= −(prior_claimed unit amount × |returned qty not netted|)`, rounded per line with the prior claim's `mode`/`scale` (§6); becomes a `return_reversal` adjustment proposal. A reversal is undone (a `return_reversal` of the opposite sign) when its return is no longer an open return of that claim line. Proposals are complete only from a run covering both the original and its returns: an original outside the run window yields the unwind without the D-N10 `agreement_change` until a covering run |
+| Original claimed but manufacturer `allow_negative_claims = false` | — | Adjustment is held as `proposed` and flagged "cannot be net-claimed; discuss with manufacturer". It is never approved or auto-included (409 `cannot_net_claim`; the manufacturer's current setting decides). A claim batch whose total is ≤ 0 is refused (422 `batch_total_not_positive`) unless the manufacturer has `allow_negative_claims` (owner decision 2026-11-12) |
 | Return exceeds original quantity | — | Exception `return_exceeds_original` |
 
 **Example S8 (claimed, then returned).** Original q=100, claimed 2,200.00; 15 units returned 45 days later → adjustment `−15 × 22.00 = −330.00`. Quantity-cap consumption is reduced by 15.
 
 **Example S9 (returned before claiming).** Original q=100, 15 returned before claim → original eligible quantity 85 → `85 × 22.00 = 1,870.00`; return line `netted`.
+
+**Example S9a (returned before claiming, re-run after the claim; owner decision 2026-11-13).** Original q=20, `u = 12.50`; 4 units returned (CN-5002) before the claim → claim `16 × 12.50 = 200.00`, return `netted`. Re-run after the claim: the original is evaluated on the same basis (200.00, equal to the frozen amount), CN-5002 stays `netted`, nothing is proposed (not +50.00 and −50.00). A further return of 3 units after the claim → adjustment `−3 × 12.50 = −37.50`. (The ground-truth SC-09/SC-09r case, claimed at 250.00 *before* the return, still gives `−4 × 12.50 = −50.00`.) If CN-5002 is later reduced from 4 to 2 units (or voided), the original is evaluated on `q − min(N, current returns)` = 18 × 12.50 = 225.00 and the shortfall `+25.00` is proposed as an `agreement_change`; the frozen claim stays 200.00 (owner decision 2026-11-13, D-N10). Quantity-cap consumption of a claimed line is its claimed quantity less `max(current returns − N, 0)`.
 
 **Cancellations** (invoice voided in source) arrive as a changed document version (`import` row change) or full credit note; handled by the source-change rules in `DATABASE_SCHEMA.md` §5: if the line is unclaimed it simply no longer produces a claim; if claimed, a `source_changed` case and adjustment proposal result.
 
@@ -321,6 +323,8 @@ After activation, the user may start a **recalculation run** over the affected s
 
 Unclaimed lines simply get new results; the "current" result for a line is the one from the latest `completed` run covering it. **Old results are never edited or deleted**, and no frozen claim line changes.
 
+**Repeated recalculation (orchestrator decision, S7.4, pending owner confirmation).** The proposal for a claim line is the amount above *less the corrections already proposed, approved or included* for that line (rejected ones do not count), so a later run that finds the same difference proposes nothing and a run that finds a further difference proposes only the increment; the reason text states the amount due, the amount already corrected and the net proposed. The same netting applies to return reversals across re-imports of the return line (§7). Proposals are accepted only from the latest completed run covering each line (409 `invalid_state` otherwise), so an older run can never reverse an approved correction. Quantity caps count every claim line that is not released, whether its batch is draft, approved or submitted (§4.2).
+
 **Example A1.** v1 pays 22.00/unit; amendment from Jul 1 reduces to 20.00. Lines invoiced Jul 1–Jul 31 already claimed at 22.00 (q=500) → recalculation proposes adjustment `500 × (20.00 − 22.00) = −1,000.00`. Lines before Jul 1 remain 22.00 under `v1a`.
 
 ### 9.4 Duplicate claims
@@ -352,20 +356,22 @@ Allocations: one remittance line may be split across several claim lines (and vi
 
 ### 10.3 Variance classification (deterministic)
 
-After a remittance document is finalised (no `suggested` matches left unresolved, all unmatched lines explicitly categorised), for each claim line touched or overdue:
+After a remittance document is finalised (no `suggested` matches left unresolved, all unmatched lines explicitly categorised: every line has a confirmed match or a person's categorisation `unmatched_payment`, else finalisation is refused 409 `uncategorised_lines`), for each claim line touched or overdue:
 
-`paid = Σ confirmed allocations`, `claimed = claim_amount (plus approved adjustments included in the same batch)`, `diff = claimed − paid`, `tol = manufacturer variance_tolerance` (default 0.01).
+`paid = Σ confirmed allocations to the claim line itself` (an allocation to an adjustment item belongs to that item), `claimed = the line's frozen claim_amount` (owner decision 2026-11-13: an approved adjustment belongs to the batch that carries it and is reconciled there as its own item; it is never added to its original claim line, and a batch's claimed total = its lines at their frozen amounts + the approved adjustments it carries), `diff = claimed − paid`, `tol = manufacturer variance_tolerance` (default 0.01).
 
 | Condition | `case_type` |
 |---|---|
 | `|diff| ≤ tol` | no case |
-| `paid = 0` and the remittance line carries a rejection code | `rejected` |
+| `paid = 0` and the remittance line carries a rejection code that maps to a `rejected_*` reason (or is unmapped, `unknown`) | `rejected` (a code mapped to any other reason is a `short_paid` with that reason) |
 | `0 < paid < claimed − tol` | `short_paid` |
 | `paid = 0` and no rejection code on the remittance line (owner decision 2026-11-12) | `short_paid` (full `diff`, reason `short_paid_unexplained`) |
 | `paid > claimed + tol` | `overpaid` |
-| Remittance line with no accepted match | `unmatched_payment` |
+| Remittance line with no accepted match, and a person categorised it; or the part of a line's `amount_paid` that its confirmed claim-line allocations do not cover (V2-style remainder; a negative allocation to an adjustment item never reduces the remainder, a positive one reduces it; never above `amount_paid`). Per remittance line, claim-line allocations plus same-batch adjustment allocations never exceed `amount_paid`; a cross-batch adjustment-item allocation counts as max(amount, 0): a negative one never frees room for claim lines, a positive one consumes room (service and database trigger) | `unmatched_payment` (never 0.00) |
 | Submitted claim line, no remittance after `submitted_at + payment_lag_days_expected` (if configured) | `unpaid` |
 | Source row changed after claim | `source_changed` |
+
+A paid-0.00 line that no tier matched is tied to its claim line by a manual match with `allocated_amount = 0` (allowed only when the line's `amount_paid = 0`), so the claim line classifies as `rejected`/`short_paid`. An adjustment item (an approved adjustment carried by a batch other than its original line's) is a separate reconcilable item: it gets an allocation only when a person confirms a manual match naming it, it is never auto-allocated and it yields no finding. **Pending owner decision D-N11** (how a payment against the carrying batch is reconciled); no further rule is implemented. Top-up payments: a claim line that an earlier remittance paid in part and that is still short stays open to the exact tiers T1/T2 of later remittances; T3-T5 skip it.
 
 Reason code: the remittance line's external code mapped via `reason_code_mappings`; unmapped → `unknown` (never guessed). Without any external reason: `short_paid_unexplained`.
 
@@ -404,6 +410,7 @@ The assessment lists the checks run with their inputs. An LLM **may** draft a pr
 |---|---|
 | Claim deadline | `claim_window_basis` date + `claim_window_days` (calendar days). SPA lines: `invoice_date` / `ship_date` = that date of the line; `month_end` = the last calendar day of the month containing the line's claim date (the date-validity date of §4.3: invoice date, or ship date with invoice-date fallback). The trace records the basis and the month end. `period_end` applies to **rebates only**: deadline = measurement period end + `claim_window_days` (stored on the accrual entry); a manufacturer whose basis is `period_end` cannot run SPA lines (the run is refused with `engine_rejected`). `agreement_end` is not a basis (rejected). One `claim_window_basis` / `claim_window_days` per manufacturer serves SPA lines; rebates always use period end + the same `claim_window_days` (owner decision D3, 2026-11-12; a separate rebate window setting is a Release 2 candidate) |
 | Dispute/re-claim deadline | `remittance document date` (or `submission_date` per setting) + `dispute_window_days` |
+| Unpaid case | claim submission date + `dispute_window_days`, whatever `dispute_window_basis` says (an unpaid line has no remittance; owner decision 2026-11-13, D-N2); `deadline_basis = submission_date` |
 
 - Pure calendar-day addition; **no weekend or holiday rolling** (conservative: the earlier date is shown).
 - "Today" for countdowns is the date in the tenant's business time zone.
@@ -434,11 +441,25 @@ stateDiagram-v2
 
 Every transition writes a `variance_case_events` row and an audit entry. `recovered_amount` is recorded as payments are matched to the resulting adjustment; partial recovery leaves the case `submitted` until fully recovered or closed.
 
+### 12.2 Dashboard figure definitions (owner decision 2026-11-13, D-N6; D-N5)
+
+All figures are per manufacturer, branch (the invoice branch of the claim line; none if there is none) and month. Months are business months: a business date (`submitted_at`, `payment_date`, `document_date`) is truncated as it is, a timestamp is first converted to the tenant's business time zone. One definition each, shared by the dashboard, the drill-down and (for at-risk) `GET /cases/summary`.
+
+- **claimed**: claim lines of submitted batches (not released) plus adjustments included in a submitted batch (`recovery_reclaim` too), at their amounts; an adjustment belongs to the batch that carries it. Month = that batch's submission date.
+- **collected**: cash on matched lines = confirmed allocations of accepted/reconciled remittances to claim lines and to adjustments; an unallocated remainder is not collected. Month = payment date (else document date).
+- **short_paid**: variance of cases of type `short_paid`, `rejected`, `unpaid` (money claimed and not paid); overpaid, unmatched payments and source changes are not owed to us. Month = case creation.
+- **recovered**, **written_off**: the cases' `recovered_amount` / `written_off_amount`. Month = case creation.
+- **recovered_after_write_off** (D-N5): confirmed allocations to the `recovery_reclaim` adjustment of a case that is `written_off`, from a remittance that recorded no recovery for it. Closed cases stay immutable, so this money is reported here and never changes the case. Month = payment date.
+- **at_risk**: variance minus recovered of live cases (`open`, `to_reclaim`, `submitted`) of the reclaimable types above whose deadline is unknown or at most 14 days after the as-of date (overdue included).
+- **expiring**: the part of at-risk with a known deadline from the as-of date to 14 days after it.
+
+At-risk and expiring are bucketed by the month of the case's creation (the same month as short_paid), not by the deadline month.
+
 ## 13. Trace format
 
 ```json
 {
-  "engine_version": "1.0.0",
+  "engine_version": "1.1.0",
   "rules_schema_version": 1,
   "line": {"id": "…", "document_number": "INV-1001", "line_number": 3, "invoice_date": "2026-06-28"},
   "steps": [

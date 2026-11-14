@@ -6,9 +6,12 @@ in id order, and each tier accepts a pair only if it is unambiguous from BOTH si
 Rules (documented decisions):
 * ``auto_confirm`` is True only for exact tiers: T1, T2, and T3 with exactly equal amounts. T4/T5 never.
 * Ambiguity (two candidates for one line, or two lines for one claim) never matches in that tier.
-* 1:1 matches allocate ``amount_paid`` (so overpayment stays visible to §10.3); a claim line's adjustments
-  are allocated at face value and the remainder goes to the claim itself (CL 250 / ADJ -50 / paid 200).
-* A claim line with any confirmed allocation is consumed and not offered to automatic tiers again.
+* 1:1 matches allocate ``amount_paid`` (so overpayment stays visible to §10.3); the adjustments a claim line carries
+  IN ITS OWN BATCH are allocated at face value and the remainder goes to the claim itself (ground truth: CL 250 /
+  ADJ -50 / paid 200). ``ClaimLine.net_amount`` is the payment expected for matching only; §10.3 ``claimed`` is
+  ``ClaimLine.amount``. An adjustment carried by another batch is not on the line and is never allocated here.
+* A claim line with any confirmed allocation is consumed and not offered to automatic tiers again, except a
+  ``topup`` line (partly paid by an earlier remittance), which T1/T2 (exact identifiers) may still pick.
 """
 
 from collections import defaultdict
@@ -73,7 +76,10 @@ def tolerance_wide(claim: ClaimLine, cfg: MatchConfig) -> Decimal:
 def validate_matches(
     matches: Sequence[Match], remits: Mapping[str, RemittanceLine], claims: Mapping[str, ClaimLine]
 ) -> None:
-    """§10.2 invariants: Σ allocations per remittance line <= amount_paid (for non-negative payments); same manufacturer."""
+    """§10.2 invariants: same manufacturer; per remittance line, Σ allocations <= amount_paid, where an allocation to an
+    adjustment item carried by ANOTHER batch (one the claim line does not carry in ``adjustments``) counts as
+    max(amount, 0): a negative one never frees room for claim lines, a positive one consumes room (owner decision
+    2026-11-13; interim, D-N11)."""
     totals: dict[str, Decimal] = defaultdict(Decimal)
     for m in matches:
         rem = remits[m.remittance_line_id]
@@ -82,7 +88,12 @@ def validate_matches(
                 raise InvariantViolation(
                     f"match {m.remittance_line_id} references another manufacturer's claim line"
                 )
-        totals[rem.id] += m.allocated
+        for a in m.allocations:
+            claim = claims[a.claim_line_id]
+            if a.adjustment_ref is None or any(adj.ref == a.adjustment_ref for adj in claim.adjustments):
+                totals[rem.id] += a.amount
+            else:
+                totals[rem.id] += max(a.amount, Decimal(0))
     for rid, total in totals.items():
         if total > remits[rid].amount_paid:
             raise InvariantViolation(
@@ -110,6 +121,23 @@ def manual_match(
     return Match(rem.id, Method.MANUAL, Status.CONFIRMED, tuple(out), dict(evidence or {}), False)
 
 
+def manual_adjustment_match(
+    rem: RemittanceLine,
+    claim: ClaimLine,
+    adjustment_ref: str,
+    amount: Decimal,
+    evidence: dict[str, object] | None = None,
+) -> Match:
+    """A user's confirmation that ``amount`` of a remittance line pays an adjustment item (never automatic: an
+    adjustment is reconciled as its own item, pending owner decision D-N11). ``claim`` is the adjusted line."""
+    if claim.manufacturer != rem.manufacturer:
+        raise InvariantViolation("manual match across manufacturers")
+    if amount > rem.amount_paid:
+        raise InvariantViolation(f"allocations {amount} exceed amount_paid {rem.amount_paid}")
+    alloc = Allocation(claim.id, amount, adjustment_ref)
+    return Match(rem.id, Method.MANUAL, Status.CONFIRMED, (alloc,), dict(evidence or {}), False)
+
+
 def confirm_suggestion(match: Match) -> Match:
     """A user accepts a suggested match: same method and allocations, status ``confirmed``, not auto."""
     return Match(
@@ -124,33 +152,40 @@ def reconcile(
     existing: Sequence[Match] = (),
     config: MatchConfig = DEFAULT_CONFIG,
     sku_aliases: Mapping[str, str] | None = None,
+    topup_lines: Sequence[ClaimLine] = (),
 ) -> MatchResult:
     """Run T1..T5 over one remittance document's lines and the manufacturer's claim lines.
+
+    ``topup_lines``: claim lines already partly paid by another remittance and still short; only T1 and T2 (exact
+    identifiers) may match them, so a top-up payment finds its line without ever guessing (T3-T5 skip them).
 
     ``existing``: matches from a previous run. Confirmed ones are kept untouched and their lines/claims are
     excluded from matching; suggested ones are discarded and recomputed.
     """
     aliases = dict(sku_aliases or {})
     remits = {r.id: r for r in sorted(remittance_lines, key=lambda r: r.id)}
-    claims = {c.id: c for c in sorted(claim_lines, key=lambda c: c.id)}
+    top = {c.id: c for c in sorted(topup_lines, key=lambda c: c.id)}
+    claims = {c.id: c for c in sorted([*claim_lines, *top.values()], key=lambda c: c.id)}
     kept = [m for m in existing if m.status is Status.CONFIRMED]
     done_rem = {m.remittance_line_id for m in kept}
     done_claim = {cid for m in kept for cid in m.claim_line_ids}
     pend_rem = [r for r in remits.values() if r.id not in done_rem]
-    pend_claim = [c for c in claims.values() if c.id not in done_claim]
+    pend_claim = [c for c in claims.values() if c.id not in done_claim and c.id not in top]
+    pend_top = [c for c in top.values() if c.id not in done_claim]
     new: list[Match] = []
     notes: list[Note] = []
 
     def take(matches: list[Match]) -> None:
-        nonlocal pend_rem, pend_claim
+        nonlocal pend_rem, pend_claim, pend_top
         r_ids = {m.remittance_line_id for m in matches}
         c_ids = {cid for m in matches for cid in m.claim_line_ids}
         new.extend(matches)
         pend_rem = [r for r in pend_rem if r.id not in r_ids]
         pend_claim = [c for c in pend_claim if c.id not in c_ids]
+        pend_top = [c for c in pend_top if c.id not in c_ids]
 
-    take(_tier_exact_reference(pend_rem, pend_claim))
-    take(_tier_invoice_line(pend_rem, pend_claim))
+    take(_tier_exact_reference(pend_rem, sorted([*pend_claim, *pend_top], key=lambda c: c.id)))
+    take(_tier_invoice_line(pend_rem, sorted([*pend_claim, *pend_top], key=lambda c: c.id)))
     take(_tier_composite(pend_rem, pend_claim, config, aliases))
     take(_tier_fuzzy(pend_rem, pend_claim, config, aliases, notes))
     take(_tier_subset_sum(pend_rem, pend_claim, config, notes))

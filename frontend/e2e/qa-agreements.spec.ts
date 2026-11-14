@@ -4,7 +4,7 @@ import {
   PASSWORD,
   clientIpHeader,
   enrolMfa,
-  noViolations,
+  expectNoA11yViolations as noViolations,
   signIn,
   test,
   tokenFromMail,

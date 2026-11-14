@@ -1,6 +1,6 @@
 import { expect } from "@playwright/test";
 
-import { PASSWORD, enrolMfa, noViolations, signIn, test, tokenFromMail, uniqueEmail } from "./support";
+import { PASSWORD, enrolMfa, expectNoA11yViolations as noViolations, signIn, test, tokenFromMail, uniqueEmail } from "./support";
 
 test.describe("QA Calculations: runs, run details, rebate tracker, accruals, error/empty states, axe", () => {
   test("covers calculations list empty/populated states, rebates tracker, not-found error, and axe", async ({

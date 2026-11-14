@@ -28,7 +28,8 @@ def _check_money(name: str, value: Decimal) -> None:
 
 @dataclass(frozen=True)
 class Adjustment:
-    """An approved adjustment included in the claim batch (e.g. return reversal, negative amount)."""
+    """An approved adjustment carried by the SAME batch as the claim line it adjusts (e.g. a return reversal, negative
+    amount). An adjustment carried by another batch is a separate item and never sits on the original line."""
 
     ref: str
     amount: Decimal
@@ -39,7 +40,9 @@ class Adjustment:
 
 @dataclass(frozen=True)
 class ClaimLine:
-    """A submitted claim line. ``amount`` excludes adjustments; ``net_amount`` includes them (§10.3 ``claimed``)."""
+    """A submitted claim line. ``amount`` is the frozen claim amount (§10.3 ``claimed``). ``net_amount`` adds the
+    same-batch ``adjustments`` and is only the payment the manufacturer is expected to make, used by the matching tiers
+    (T3 amount comparison, T5 sums), never as ``claimed``."""
 
     id: str
     manufacturer: str
@@ -101,7 +104,8 @@ class Match:
 
     @property
     def claim_line_ids(self) -> frozenset[str]:
-        return frozenset(a.claim_line_id for a in self.allocations)
+        """Claim lines paid by this match. An allocation to an adjustment item does not pay its original line."""
+        return frozenset(a.claim_line_id for a in self.allocations if a.adjustment_ref is None)
 
     @property
     def allocated(self) -> Decimal:

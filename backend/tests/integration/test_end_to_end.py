@@ -3,23 +3,20 @@ manual-payload agreements approved through the agreements service, calculation r
 expected value comes from ``testdata/generated/ground_truth`` (``expected_calculation.json``, ``expected_rebates.json``,
 ``expected_rebates_nwnd.json``); a mismatch is a financial discrepancy, never a reason to edit this file."""
 
-import uuid
 from collections.abc import Iterator
 from contextlib import ExitStack
 from decimal import Decimal
 from typing import Any
 
 import pytest
-from sqlalchemy import Engine
 
-from rebate.modules.claims import frozen
 from tests.conftest import DbUrls
 from tests.integration.calc_support import (
-    FixtureClaims,
     activate_all,
     all_settings,
+    claim_and_submit,
     import_sales,
-    line_ids,
+    import_sales_part,
     open_workspace,
     results,
     run,
@@ -51,18 +48,10 @@ def env(migrated_db: DbUrls) -> Iterator[Env]:
 
 
 @pytest.fixture(scope="module")
-def spa_884(ws: Workspace) -> dict[str, Any]:
-    return ws_versions[ws.tenant_id]["SPA-VOLT-2026-884"]
-
-
-ws_versions: dict[str, dict[str, dict[str, Any]]] = {}
-
-
-@pytest.fixture(scope="module")
 def ws(env: Env) -> Workspace:
     w = open_workspace(env.app, env.stack)  # master data (customers, products, UoM) imported by the pipeline
     all_settings(w)
-    ws_versions[w.tenant_id] = activate_all(w, AGREEMENTS)
+    activate_all(w, AGREEMENTS)
     import_sales(w)
     import_sales(w, NWND["file"])
     done = import_file(w, "purchases/purchases_VOLT_2026.csv", "purchases")
@@ -105,19 +94,25 @@ def test_nwnd_sales_rebate_qualify_only(ws: Workspace) -> None:
     assert Decimal(e["cumulative_earned"]) == Decimal(case["earned_cumulative"])
 
 
-def test_every_spa_scenario_matches_ground_truth(
-    ws: Workspace, spa_884: dict[str, Any], admin_engine: Engine, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    monkeypatch.setattr(
-        frozen,
-        "source",
-        FixtureClaims(
-            line_ids(admin_engine, ws.tenant_id),
-            agreement_id=spa_884["agreement_id"],
-            version_id=spa_884["id"],
-            manufacturer_id=uuid.UUID(ws.manufacturers["VOLT"]),
-        ),
+def test_every_spa_scenario_matches_ground_truth(env: Env) -> None:
+    """The seven lines of CB-VOLT-2026-06 are claimed and submitted through the real batch flow first (the ground
+    truth's prior claims); the run that follows is the one checked against ``expected_calculation.json``. The
+    ground truth's order of events is kept: the credit note CN-5002 arrives AFTER INV-10021/1 was claimed at 250.00
+    (a return imported before the claim nets into it, 200.00: owner decision 2026-11-13, BUSINESS_LOGIC §7)."""
+    ws = open_workspace(env.app, env.stack)
+    all_settings(ws)
+    activate_all(ws, AGREEMENTS)
+    import_sales_part(ws, late=False)
+    fixture = truth("claim_batches_fixture.json")["lines"]
+    batch = claim_and_submit(
+        ws, results(ws, run(ws, **WINDOW)["id"]), [f"{x['invoice_no']}/{x['line_no']}" for x in fixture]
     )
+    # pins the order of events: every line frozen at the fixture amount (INV-10021/1 at 250.00, no CN-5002 yet)
+    frozen = ws.api.get(f"/claim-batches/{batch['id']}/lines", params={"limit": 200}).json()["data"]
+    assert {x["document_number"]: Decimal(x["claim_amount"]) for x in frozen} == {
+        x["invoice_no"]: Decimal(x["claim_amount"]) for x in fixture
+    }
+    import_sales_part(ws, late=True)
     r = run(ws, **WINDOW)
     assert r["status"] == "completed", r
     res = results(ws, r["id"])

@@ -1572,6 +1572,7 @@ dependencies = [
     { name = "defusedxml" },
     { name = "fastapi" },
     { name = "gunicorn" },
+    { name = "httpx" },
     { name = "openpyxl" },
     { name = "pdfplumber" },
     { name = "psycopg", extra = ["binary"] },
@@ -1593,7 +1594,6 @@ dependencies = [
 dev = [
     { name = "bandit" },
     { name = "boto3-stubs", extra = ["s3"] },
-    { name = "httpx" },
     { name = "hypothesis" },
     { name = "import-linter" },
     { name = "mypy" },
@@ -1615,6 +1615,7 @@ requires-dist = [
     { name = "defusedxml", specifier = ">=0.7.1" },
     { name = "fastapi", specifier = "==0.162.2" },
     { name = "gunicorn", specifier = "==26.2.0" },
+    { name = "httpx", specifier = "==0.28.1" },
     { name = "openpyxl", specifier = "==3.1.5" },
     { name = "pdfplumber", specifier = "==0.11.10" },
     { name = "psycopg", extras = ["binary"], specifier = "==3.3.8" },
@@ -1636,7 +1637,6 @@ requires-dist = [
 dev = [
     { name = "bandit", specifier = "==1.9.4" },
     { name = "boto3-stubs", extras = ["s3"], specifier = "==1.43.126" },
-    { name = "httpx", specifier = "==0.28.1" },
     { name = "hypothesis", specifier = "==6.170.15" },
     { name = "import-linter", specifier = "==2.16" },
     { name = "mypy", specifier = "==2.4.1" },

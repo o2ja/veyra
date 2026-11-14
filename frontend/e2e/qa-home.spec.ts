@@ -1,6 +1,6 @@
 import { expect } from "@playwright/test";
 
-import { PASSWORD, enrolMfa, noViolations, signIn, test, tokenFromMail, uniqueEmail } from "./support";
+import { PASSWORD, enrolMfa, expectNoA11yViolations as noViolations, signIn, test, tokenFromMail, uniqueEmail } from "./support";
 
 test.describe("QA Home: dashboard, workspace info, session details, axe", () => {
   test("displays workspace and role details for signed-in user and passes axe", async ({ page }) => {

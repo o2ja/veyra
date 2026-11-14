@@ -10,7 +10,7 @@ from decimal import Decimal
 
 from rebate_engine.models import Json
 
-ENGINE_VERSION = "1.0.0"
+ENGINE_VERSION = "1.1.0"
 
 type Value = Decimal | date | str | int | bool | list[Value] | tuple[Value, ...] | dict[str, Value] | None
 

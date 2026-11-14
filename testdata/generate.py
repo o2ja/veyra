@@ -48,7 +48,8 @@ def wjson(path, obj):
 # --------------------------------------------------------------------------- master data
 MANUFACTURERS = [
     {"code": "VOLT", "name": "Voltara Electric (SYNTHETIC)", "claim_window_days": 60, "claim_window_basis": "invoice_date",
-     "dispute_window_days": 60, "dispute_window_basis": "remittance_date", "variance_tolerance": "0.01", "conflict_policy": "flag"},
+     "dispute_window_days": 60, "dispute_window_basis": "remittance_date", "variance_tolerance": "0.01", "conflict_policy": "flag",
+     "allow_negative_claims": True},  # SC-09r / ADJ-2026-0001 is netted in the VOLT batch (BUSINESS_LOGIC §7)
     {"code": "BRIT", "name": "Brightline Lighting (SYNTHETIC)", "claim_window_days": 90, "claim_window_basis": "ship_date",
      "dispute_window_days": 45, "dispute_window_basis": "remittance_date", "variance_tolerance": "0.01", "conflict_policy": "flag"},
     {"code": "COPR", "name": "Coppermark Wire & Cable (SYNTHETIC)", "claim_window_days": 60, "claim_window_basis": "invoice_date",

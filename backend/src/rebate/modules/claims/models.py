@@ -169,25 +169,53 @@ class ClaimAdjustment(Base):
         _fk("claim_adjustments", "manufacturer_id", "manufacturers"),
         _fk("claim_adjustments", "calculation_result_id", "calculation_results"),
         _fk("claim_adjustments", "run_id", "calculation_runs"),
+        _fk("claim_adjustments", "claim_line_id", "claim_lines"),
+        _fk("claim_adjustments", "rebate_accrual_entry_id", "rebate_accrual_entries"),
+        _fk("claim_adjustments", "variance_case_id", "variance_cases"),
+        Index(
+            "uq_claim_adjustments_live_reclaim",
+            "tenant_id",
+            "variance_case_id",
+            unique=True,
+            postgresql_where=text(
+                "adjustment_type = 'recovery_reclaim' AND status IN ('proposed', 'approved')"
+            ),
+        ),
         Index(
             "uq_claim_adjustments_proposal",
             "tenant_id",
             "claim_line_id",
             "adjustment_type",
             "run_id",
+            "calculation_result_id",
             unique=True,
             postgresql_where=text("claim_line_id IS NOT NULL"),
         ),
+        Index(
+            "uq_claim_adjustments_clawback",
+            "tenant_id",
+            "rebate_accrual_entry_id",
+            unique=True,
+            postgresql_where=text("rebate_accrual_entry_id IS NOT NULL"),
+        ),
+        Index(
+            "ix_claim_adjustments_tenant_id_included_in_batch_id",
+            "tenant_id",
+            "included_in_batch_id",
+            postgresql_where=text("included_in_batch_id IS NOT NULL"),
+        ),
         Index("ix_claim_adjustments_tenant_id_status", "tenant_id", "status", "id"),
+        _fk("claim_adjustments", "included_in_batch_id", "claim_batches"),
     )
 
     tenant_id: Mapped[UUID] = mapped_column(_tenant_fk("claim_adjustments"))
     id: Mapped[UUID] = mapped_column(primary_key=True)
     manufacturer_id: Mapped[UUID] = mapped_column()
     adjustment_type: Mapped[str] = mapped_column(Text)
-    claim_line_id: Mapped[UUID | None] = mapped_column()  # FK to claim_lines arrives with S7
+    claim_line_id: Mapped[UUID | None] = mapped_column()
+    rebate_accrual_entry_id: Mapped[UUID | None] = mapped_column()
     calculation_result_id: Mapped[UUID | None] = mapped_column()
-    variance_case_id: Mapped[UUID | None] = mapped_column()  # FK to variance_cases arrives with S9
+    variance_case_id: Mapped[UUID | None] = mapped_column()
     run_id: Mapped[UUID | None] = mapped_column()
     amount: Mapped[Decimal] = mapped_column(Numeric(18, 4))
     reason: Mapped[str] = mapped_column(Text)
@@ -200,4 +228,118 @@ class ClaimAdjustment(Base):
         ForeignKey("users.id", name="fk_claim_adjustments_users_approved")
     )
     approved_at: Mapped[datetime | None] = mapped_column(TS)
+    created_at: Mapped[datetime] = mapped_column(TS, server_default="now()")
+
+
+class ClaimExportTemplate(Base):
+    __tablename__ = "claim_export_templates"
+    __table_args__ = (
+        UniqueConstraint("tenant_id", "id", name="uq_claim_export_templates_tenant_id_id"),
+        UniqueConstraint("tenant_id", "manufacturer_id", "name", name="uq_claim_export_templates_name"),
+        _fk("claim_export_templates", "manufacturer_id", "manufacturers"),
+        Index("ix_claim_export_templates_tenant_id_manufacturer_id", "tenant_id", "manufacturer_id"),
+    )
+
+    tenant_id: Mapped[UUID] = mapped_column(_tenant_fk("claim_export_templates"))
+    id: Mapped[UUID] = mapped_column(primary_key=True)
+    manufacturer_id: Mapped[UUID] = mapped_column()
+    name: Mapped[str] = mapped_column(Text)
+    format: Mapped[str] = mapped_column(Text)
+    columns: Mapped[list[dict[str, Any]]] = mapped_column(JSONB)
+    options: Mapped[dict[str, Any]] = mapped_column(JSONB, server_default=text("'{}'"))
+    active: Mapped[bool] = mapped_column(server_default="true")
+    revision: Mapped[int] = mapped_column(Integer, server_default="1")
+    created_by: Mapped[UUID] = mapped_column(ForeignKey("users.id", name="fk_claim_export_templates_users"))
+    created_at: Mapped[datetime] = mapped_column(TS, server_default="now()")
+    updated_at: Mapped[datetime] = mapped_column(TS, server_default="now()")
+
+
+class ClaimBatch(Base):
+    __tablename__ = "claim_batches"
+    __table_args__ = (
+        UniqueConstraint("tenant_id", "id", name="uq_claim_batches_tenant_id_id"),
+        UniqueConstraint("tenant_id", "batch_number", name="uq_claim_batches_batch_number"),
+        _fk("claim_batches", "manufacturer_id", "manufacturers"),
+        ForeignKeyConstraint(
+            ["tenant_id", "export_template_id"],
+            ["claim_export_templates.tenant_id", "claim_export_templates.id"],
+            name="fk_claim_batches_claim_export_templates",
+        ),
+        ForeignKeyConstraint(
+            ["tenant_id", "exported_file_id"],
+            ["file_objects.tenant_id", "file_objects.id"],
+            name="fk_claim_batches_file_objects",
+        ),
+        Index("ix_claim_batches_tenant_id_status_id", "tenant_id", "status", "id"),
+        Index("ix_claim_batches_tenant_id_manufacturer_id", "tenant_id", "manufacturer_id", "id"),
+    )
+
+    tenant_id: Mapped[UUID] = mapped_column(_tenant_fk("claim_batches"))
+    id: Mapped[UUID] = mapped_column(primary_key=True)
+    manufacturer_id: Mapped[UUID] = mapped_column()
+    batch_number: Mapped[str] = mapped_column(Text)
+    status: Mapped[str] = mapped_column(Text, server_default="draft")
+    period_from: Mapped[date | None] = mapped_column(Date)
+    period_to: Mapped[date | None] = mapped_column(Date)
+    line_count: Mapped[int] = mapped_column(Integer)
+    total_amount: Mapped[Decimal] = mapped_column(Numeric(18, 4))
+    export_template_id: Mapped[UUID | None] = mapped_column()
+    exported_file_id: Mapped[UUID | None] = mapped_column()
+    submitted_at: Mapped[date | None] = mapped_column(Date)
+    submitted_by: Mapped[UUID | None] = mapped_column(
+        ForeignKey("users.id", name="fk_claim_batches_users_submitted")
+    )
+    external_reference: Mapped[str | None] = mapped_column(Text)
+    created_by: Mapped[UUID] = mapped_column(ForeignKey("users.id", name="fk_claim_batches_users_created"))
+    created_at: Mapped[datetime] = mapped_column(TS, server_default="now()")
+    approved_by: Mapped[UUID | None] = mapped_column(
+        ForeignKey("users.id", name="fk_claim_batches_users_approved")
+    )
+    approved_at: Mapped[datetime | None] = mapped_column(TS)
+    void_reason: Mapped[str | None] = mapped_column(Text)
+    voided_at: Mapped[datetime | None] = mapped_column(TS)
+
+
+class ClaimLine(Base):
+    __tablename__ = "claim_lines"
+    __table_args__ = (
+        UniqueConstraint("tenant_id", "id", name="uq_claim_lines_tenant_id_id"),
+        UniqueConstraint("tenant_id", "claim_reference", name="uq_claim_lines_claim_reference"),
+        _fk("claim_lines", "batch_id", "claim_batches"),
+        _fk("claim_lines", "sales_document_line_id", "sales_document_lines"),
+        _fk("claim_lines", "rebate_accrual_entry_id", "rebate_accrual_entries"),
+        _fk("claim_lines", "calculation_result_id", "calculation_results"),
+        _fk("claim_lines", "agreement_version_id", "agreement_versions"),
+        Index(
+            "uq_claim_lines_active_sales_line",
+            "tenant_id",
+            "sales_document_line_id",
+            unique=True,
+            postgresql_where=text("released_at IS NULL AND sales_document_line_id IS NOT NULL"),
+        ),
+        Index(
+            "uq_claim_lines_active_accrual_entry",
+            "tenant_id",
+            "rebate_accrual_entry_id",
+            unique=True,
+            postgresql_where=text("released_at IS NULL AND rebate_accrual_entry_id IS NOT NULL"),
+        ),
+        Index("ix_claim_lines_tenant_id_batch_id", "tenant_id", "batch_id", "id"),
+        Index("ix_claim_lines_tenant_id_calculation_result_id", "tenant_id", "calculation_result_id"),
+    )
+
+    tenant_id: Mapped[UUID] = mapped_column(_tenant_fk("claim_lines"))
+    id: Mapped[UUID] = mapped_column(primary_key=True)
+    batch_id: Mapped[UUID] = mapped_column()
+    claim_reference: Mapped[str] = mapped_column(Text)
+    source_kind: Mapped[str] = mapped_column(Text)
+    sales_document_line_id: Mapped[UUID | None] = mapped_column()
+    rebate_accrual_entry_id: Mapped[UUID | None] = mapped_column()
+    calculation_result_id: Mapped[UUID | None] = mapped_column()  # NULL only for rebate_accrual lines
+    agreement_version_id: Mapped[UUID] = mapped_column()
+    quantity: Mapped[Decimal | None] = mapped_column(Numeric(18, 6))
+    unit_amount: Mapped[Decimal | None] = mapped_column(Numeric(18, 6))
+    claim_amount: Mapped[Decimal] = mapped_column(Numeric(18, 4))
+    frozen_at: Mapped[datetime | None] = mapped_column(TS)
+    released_at: Mapped[datetime | None] = mapped_column(TS)
     created_at: Mapped[datetime] = mapped_column(TS, server_default="now()")

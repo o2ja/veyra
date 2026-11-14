@@ -1,6 +1,6 @@
 import { expect } from "@playwright/test";
 
-import { PASSWORD, enrolMfa, noViolations, signIn, test, tokenFromMail, uniqueEmail } from "./support";
+import { PASSWORD, enrolMfa, expectNoA11yViolations as noViolations, signIn, test, tokenFromMail, uniqueEmail } from "./support";
 
 test.describe("QA Files: uploads, file list, scan status polling, detail view, empty/error states, axe", () => {
   test("covers files upload, empty state, details, and axe accessibility", async ({ page }) => {

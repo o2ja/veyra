@@ -162,8 +162,8 @@ def test_claimed_line_change_is_flagged_through_the_hook(
     assert len(seen[-1]) == 2  # both superseded lines were asked about
 
 
-def test_hook_reports_no_claims_before_s7() -> None:
-    assert claims_hook.claimed_line_ids(None, uuid.uuid4(), [uuid.uuid4()]) == frozenset()  # type: ignore[arg-type]
+def test_hook_asks_nothing_of_the_database_for_no_lines() -> None:
+    assert claims_hook.claimed_line_ids(None, uuid.uuid4(), []) == frozenset()  # type: ignore[arg-type]
 
 
 def test_error_file_partial_import_and_unmapped_queue(ws: Workspace, admin_engine: Engine) -> None:
@@ -416,3 +416,16 @@ def test_unreadable_file_fails_the_batch_visibly(ws: Workspace) -> None:
     assert batch["status"] == "failed" and "malformed" in batch["error_summary"]
     errs = ws.api.get(f"/imports/{batch['id']}/errors").json()["data"]
     assert errs[0]["code"] == "malformed_csv" and errs[0]["row_number"] is None
+
+
+def test_error_csv_export_neutralises_formulas() -> None:
+    # The export currently carries no raw cell values (message/column are system text), so the guard is
+    # defence in depth: prove it on the real formatter, for every trigger character in SECURITY.md section 4.
+    from rebate.modules.ingestion.router import _csv_lines
+
+    triggers = ["=cmd|' /C calc'!A0", "+1+1", "-2+3", "@SUM(1)", "\t=1", "\r=1"]
+    out = "".join(_csv_lines([(i, v, "error", "x", v) for i, v in enumerate(triggers)]))
+    cells = [c for row in csv.reader(io.StringIO(out, newline="")) for c in row]
+    for v in triggers:
+        assert "'" + v in cells and v not in cells
+    assert next(csv.reader(io.StringIO(out, newline="")))[1] == "column"  # header row is untouched
