@@ -27,6 +27,7 @@ TENANT_TABLES: dict[str, str] = {
     "memberships": "tenant_id",
     "invitations": "tenant_id",
     "audit_log": "tenant_id",
+    "audit_seals": "tenant_id",
     "idempotency_keys": "tenant_id",
     "file_objects": "tenant_id",
     # S3 master data and import pipeline
@@ -173,6 +174,14 @@ def _tenant(conn: Connection, name: str, admin_email: str) -> TenantData:
             "entity_type, entity_id) VALUES (:t, now(), 'user', :u, 'tenant.created', 'tenant', :t)"
         ),
         {"t": tid, "u": admin},
+    )
+    conn.execute(
+        text(
+            "INSERT INTO audit_seals (tenant_id, from_audit_id, to_audit_id, seal_hash) "
+            "SELECT tenant_id, min(id), max(id), repeat('a', 64) FROM audit_log WHERE tenant_id = :t "
+            "GROUP BY tenant_id"
+        ),
+        {"t": tid},
     )
     conn.execute(
         text(

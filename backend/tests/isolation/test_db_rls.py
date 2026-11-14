@@ -173,6 +173,9 @@ def test_d8_unknown_tenant_sees_nothing(app_engine: Engine, world: World) -> Non
         "UPDATE audit_log SET action = 'x.y'",
         "DELETE FROM audit_log",
         "TRUNCATE audit_log",
+        "UPDATE audit_seals SET seal_hash = repeat('b', 64)",
+        "DELETE FROM audit_seals",
+        "TRUNCATE audit_seals",
     ],
 )
 def test_d9_app_role_cannot_bypass_rls(app_engine: Engine, world: World, statement: str) -> None:
@@ -410,6 +413,7 @@ def test_every_tenant_isolated_table_is_in_the_isolation_suite(admin_engine: Eng
         "memberships",
         "invitations",
         "audit_log",
+        "audit_seals",
         "idempotency_keys",
         "file_objects",
     }
