@@ -84,7 +84,7 @@ Not approved: MySQL, MongoDB or any document store for financial data, SQLite (e
 | `decimal.js` | Display-side decimal handling. The frontend **never computes financial results**; it displays server-computed strings |
 | Vitest + Testing Library | Unit/component tests |
 | Playwright | End-to-end tests |
-| ESLint + Prettier | Lint/format |
+| ESLint + Prettier (+ `eslint-plugin-security`, owner D-N8 2026-11-13) | Lint/format; security lint rules (object-injection off: noise on typed index access) |
 
 Rules: SPA only, no SSR, no Next.js API routes, no second backend. Money crosses the API as **decimal strings** (`"2200.00"`), never JSON numbers.
 
