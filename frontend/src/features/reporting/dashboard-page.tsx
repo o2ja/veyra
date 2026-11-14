@@ -249,7 +249,6 @@ export function DashboardPage() {
                 <div key={key} className="flex flex-col">
                   <Link
                     to={to}
-                    aria-label={`${label}: ${formatted}, view details`}
                     className="group flex flex-col justify-between rounded-lg border border-line bg-panel p-5 transition hover:border-ink/50 hover:shadow-sm"
                   >
                     <div>
@@ -270,7 +269,6 @@ export function DashboardPage() {
                   {key === "written_off" && hasRecoveredAfterWriteOff && (
                     <Link
                       to={drilldownUrl("recovered_after_write_off")}
-                      aria-label={`${METRIC_LABELS.recovered_after_write_off}: ${formatDecimal(d.figures.recovered_after_write_off)}, view details`}
                       className="group mt-4 flex flex-col justify-between rounded-lg border border-line bg-panel p-5 transition hover:border-ink/50 hover:shadow-sm"
                     >
                       <div>

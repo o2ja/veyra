@@ -112,6 +112,7 @@ test("S10 reporting: dashboard figures, drill-down, trace, audit pack, analyst d
   await approverPage.getByLabel("Your name").fill("Claims Approver");
   await approverPage.getByLabel("Password").fill(PASSWORD);
   await approverPage.getByRole("button", { name: "Accept invitation" }).click();
+  await expect(approverPage).toHaveURL(/\/login\?reason=invited/);
   await signIn(approverPage, approver);
   await enrolMfa(approverPage);
 
@@ -127,6 +128,7 @@ test("S10 reporting: dashboard figures, drill-down, trace, audit pack, analyst d
   await analystPage.getByLabel("Your name").fill("Reporting Analyst");
   await analystPage.getByLabel("Password").fill(PASSWORD);
   await analystPage.getByRole("button", { name: "Accept invitation" }).click();
+  await expect(analystPage).toHaveURL(/\/login\?reason=invited/);
   await signIn(analystPage, analyst);
   await enrolMfa(analystPage);
 
@@ -137,7 +139,7 @@ test("S10 reporting: dashboard figures, drill-down, trace, audit pack, analyst d
   const spaDraftId = page.url().split("/").pop() ?? "";
 
   await page.getByLabel("Agreement type").selectOption("spa");
-  await page.getByLabel("External number").fill("SPA-VOLT-2026-CLAIM");
+  await page.getByLabel("External number").fill("SPA-VOLT-2026-884");
   await page.getByLabel("Manufacturer code").fill("VOLT");
   await page.getByLabel("Name", { exact: true }).fill("Voltara contractor SPA (SYNTHETIC)");
   await page.getByLabel("Valid from").fill("2026-01-01");
@@ -152,13 +154,14 @@ test("S10 reporting: dashboard figures, drill-down, trace, audit pack, analyst d
   for (const [i, it] of [
     { sku: "BRK-3P-100A", ref: "100.00", dev: "78.00", sell: "88.00" },
     { sku: "BRK-3P-60A", ref: "64.50", dev: "52.00", sell: "58.00" },
-    { sku: "PNL-200A", ref: "412.00", dev: "360.00", sell: "389.00" },
+    { sku: "PNL-200A", ref: "412.00", dev: "360.00", sell: "389.00", cap: "100" },
   ].entries()) {
     await page.getByRole("button", { name: "Add item" }).click();
     await page.getByLabel(`Item ${i + 1} SKU`).fill(it.sku);
     await page.getByLabel(`Item ${i + 1} reference cost`).fill(it.ref);
     await page.getByLabel(`Item ${i + 1} deviated cost`).fill(it.dev);
     await page.getByLabel(`Item ${i + 1} sell price`).fill(it.sell);
+    if (it.cap) await page.getByLabel(`Item ${i + 1} max quantity`).fill(it.cap);
   }
 
   await page.getByRole("button", { name: "Save draft" }).click();
@@ -184,7 +187,7 @@ test("S10 reporting: dashboard figures, drill-down, trace, audit pack, analyst d
 
   // Claim batch: create, approve (second person), submit
   await page.goto("/claims/missed");
-  await page.getByLabel("Manufacturer").selectOption({ index: 1 });
+  await page.getByLabel("Manufacturer").selectOption({ label: "Voltara Electric (SYNTHETIC) (VOLT)" });
   await page.getByRole("button", { name: "Apply filters" }).click();
   const linesTable = page.getByRole("table", { name: "Missed claim lines" });
   await linesTable.locator("tbody tr input[type='checkbox']").first().check();
@@ -193,9 +196,10 @@ test("S10 reporting: dashboard figures, drill-down, trace, audit pack, analyst d
   await expect(page).toHaveURL(/\/claims\/batches\/[0-9a-f-]+$/, { timeout: 30_000 });
   const batchId = page.url().split("/").pop() ?? "";
   const batchTotal = (
-    await page.locator("dt", { hasText: "Total amount" }).locator("xpath=following-sibling::dd").innerText()
+    await page.locator("dt", { hasText: "Batch total" }).locator("xpath=following-sibling::dd").innerText()
   ).trim();
-  expect(batchTotal).toMatch(/^\d[\d,]*\.\d{2}$/);
+  // Ground truth SC-22 (INV-10060 line 1, expected_calculation.json): 30 x 22.00 = 660.00; the API shows 4 decimals.
+  expect(batchTotal).toBe("660.0000");
 
   await approverPage.goto(`/claims/batches/${batchId}`);
   await approverPage.getByRole("button", { name: "Approve batch" }).click();
@@ -222,10 +226,8 @@ test("S10 reporting: dashboard figures, drill-down, trace, audit pack, analyst d
   await noViolations(page, "Dashboard populated");
 
   // The claimed figure is the server's string for the single submitted batch, and links to its drill-down
-  const claimedCard = figures.getByRole("link", { name: /^Claimed: / });
-  await expect(claimedCard).toHaveAttribute("aria-label", `Claimed: ${batchTotal}, view details`, {
-    timeout: 120_000,
-  });
+  const claimedCard = figures.getByRole("link", { name: /^Claimed/ });
+  await expect(claimedCard.locator("p").first()).toHaveText(batchTotal, { timeout: 120_000 });
   // every monthly figure also links to a drill-down; the month comes from the server
   const monthly = page.getByRole("table", { name: "Monthly breakdown table" });
   await expect(monthly.locator("tbody tr")).not.toHaveCount(0);
@@ -249,6 +251,14 @@ test("S10 reporting: dashboard figures, drill-down, trace, audit pack, analyst d
   );
   const items = page.getByRole("table", { name: "Claimed drill-down items" });
   await expect(items.locator("tbody tr")).not.toHaveCount(0);
+  // acceptance criterion: the figure equals the sum of the rows (amounts have 4 decimals: sum in ten-thousandths)
+  const amountTexts = await items.locator("tbody tr td:nth-child(5)").allInnerTexts();
+  const toUnits = (t: string) => {
+    const [i = "0", f = ""] = t.replaceAll(",", "").trim().split(".");
+    return BigInt(i + f.padEnd(4, "0").slice(0, 4));
+  };
+  const sumUnits = amountTexts.reduce((acc, t) => acc + toUnits(t), 0n);
+  expect(sumUnits).toBe(toUnits(batchTotal));
   await noViolations(page, "Drill-down claimed");
 
   // Trace chain
@@ -265,7 +275,7 @@ test("S10 reporting: dashboard figures, drill-down, trace, audit pack, analyst d
   // Audit pack: POST, poll the job to succeeded, download offered only then
   await page.goto("/reports/audit-pack");
   await noViolations(page, "Audit pack page");
-  await page.getByLabel("Manufacturer").selectOption({ index: 1 });
+  await page.getByLabel("Manufacturer").selectOption({ label: "Voltara Electric (SYNTHETIC) (VOLT)" });
   const batchSelect = page.getByLabel("Submitted claim batch");
   await expect(batchSelect.locator("option")).toHaveCount(2);
   await batchSelect.selectOption({ index: 1 });
