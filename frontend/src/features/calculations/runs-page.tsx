@@ -69,7 +69,7 @@ export function RunsPage() {
   });
 
   const polledRun = useQuery({
-    queryKey: ["calculation-runs", "poll", activeRunId],
+    queryKey: ["calculation-run-poll", activeRunId],
     enabled: Boolean(activeRunId),
     queryFn: async () => {
       const run = await unwrap(

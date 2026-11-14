@@ -1,7 +1,7 @@
 import * as Dialog from "@radix-ui/react-dialog";
 import { useMutation } from "@tanstack/react-query";
 import type { ReactNode } from "react";
-import { NavLink } from "react-router-dom";
+import { Link, NavLink } from "react-router-dom";
 
 import { Alert, Button, ErrorAlert } from "../../components/ui";
 import { api } from "../../lib/api/client";
@@ -12,7 +12,8 @@ import { useManufacturers } from "../masterdata/common";
 
 const SECTIONS = [
   { to: "/claims/missed", label: "Missed claims", permission: "data.read" },
-  { to: "/claims/batches", label: "Batches", permission: "data.read" },
+  { to: "/claims/batches", label: "Claim batches", permission: "data.read" },
+  { to: "/claims/adjustments", label: "Adjustments", permission: "data.read" },
   { to: "/claims/templates", label: "Export templates", permission: "claim_batch.create" },
 ] as const;
 
@@ -43,12 +44,29 @@ export function ValidationDetailsAlert({ error }: { error: ApiError | null | und
       {error.details.length > 0 && (
         <Alert>
           <ul className="list-disc pl-5 text-xs">
-            {error.details.map((d, idx) => (
-              <li key={`${d.field}-${d.code}-${idx}`}>
-                {d.field ? `${d.field}: ` : ""}
-                {d.message}
-              </li>
-            ))}
+            {error.details.map((d, idx) => {
+              const extra = d as unknown as { batch_id?: string; entry_id?: string; adjustment_id?: string };
+              const subject = extra.adjustment_id ?? extra.entry_id;
+              return (
+                <li key={`${d.field}-${d.code}-${idx}`}>
+                  {d.field ? `${d.field}: ` : ""}
+                  {subject && <span className="font-mono">{subject}: </span>}
+                  {d.message}
+                  {extra.batch_id && (
+                    <>
+                      {" "}
+                      —{" "}
+                      <Link
+                        to={`/claims/batches/${extra.batch_id}`}
+                        className="font-medium text-brand underline"
+                      >
+                        View batch
+                      </Link>
+                    </>
+                  )}
+                </li>
+              );
+            })}
           </ul>
         </Alert>
       )}

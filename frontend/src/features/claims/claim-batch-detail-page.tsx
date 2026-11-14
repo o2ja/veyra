@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 
 import { Alert, Button, Card, ErrorAlert, Field, Loading, PermissionDenied } from "../../components/ui";
@@ -15,11 +15,15 @@ import {
   useManufacturerMap,
 } from "./common";
 import {
+  ADJUSTMENT_TYPE_LABELS,
   BATCH_STATUS_LABELS,
   canApproveBatch,
   formatDecimal,
+  getJobRefetchInterval,
+  type AdjustmentOut,
   type ExportAccepted,
   type ExportTemplateOut,
+  type JobOut,
   type LineOut,
 } from "./logic";
 
@@ -28,17 +32,28 @@ export function ClaimBatchDetailPage() {
   const { can, me } = useSession();
   const client = useQueryClient();
   const pager = usePager();
+  const adjPager = usePager();
   const manufacturers = useManufacturerMap();
 
   const [approveOpen, setApproveOpen] = useState(false);
   const [voidOpen, setVoidOpen] = useState(false);
   const [voidReason, setVoidReason] = useState("");
   const [submitOpen, setSubmitOpen] = useState(false);
-  const [submittedAt, setSubmittedAt] = useState(() => new Date().toISOString().slice(0, 10));
+  // The server rejects a submission date later than today in the tenant business timezone, so default to that
+  // day (not the UTC or browser day, which can already be tomorrow).
+  const settings = useQuery({ queryKey: ["settings"], queryFn: () => unwrap(api.GET("/api/v1/settings")) });
+  const [submittedAtEdit, setSubmittedAt] = useState("");
+  const submittedAt =
+    submittedAtEdit ||
+    (settings.data
+      ? new Intl.DateTimeFormat("en-CA", { timeZone: settings.data.business_timezone }).format(new Date())
+      : "");
   const [externalReference, setExternalReference] = useState("");
   const [exportOpen, setExportOpen] = useState(false);
   const [selectedTemplateId, setSelectedTemplateId] = useState("");
   const [exportAccepted, setExportAccepted] = useState<ExportAccepted | null>(null);
+  const [pollingJobId, setPollingJobId] = useState<string | null>(null);
+  const [jobResult, setJobResult] = useState<JobOut | null>(null);
 
   const [submitIdemKey, setSubmitIdemKey] = useState<string>(() => crypto.randomUUID());
 
@@ -65,6 +80,22 @@ export function ClaimBatchDetailPage() {
       ),
   });
 
+  const adjustments = useQuery({
+    queryKey: ["claim-adjustments", "batch", batchId, adjPager.cursor],
+    queryFn: () =>
+      unwrap(
+        api.GET("/api/v1/claim-adjustments", {
+          params: {
+            query: {
+              included_in_batch_id: batchId,
+              limit: 50,
+              cursor: adjPager.cursor,
+            },
+          },
+        }),
+      ),
+  });
+
   const templates = useQuery({
     queryKey: ["claim-export-templates", batch.data?.manufacturer_id],
     enabled: Boolean(batch.data?.manufacturer_id) && exportOpen,
@@ -86,22 +117,37 @@ export function ClaimBatchDetailPage() {
   });
 
   const jobQuery = useQuery({
-    queryKey: ["jobs", exportAccepted?.job.id],
-    enabled: Boolean(exportAccepted?.job.id),
+    queryKey: ["jobs", pollingJobId],
+    enabled: Boolean(pollingJobId),
     queryFn: () => {
-      const jid = exportAccepted?.job.id;
-      if (!jid) throw new Error("Missing job id");
+      if (!pollingJobId) throw new Error("Missing job id");
       return unwrap(
         api.GET("/api/v1/jobs/{job_id}", {
-          params: { path: { job_id: jid } },
+          params: { path: { job_id: pollingJobId } },
         }),
       );
     },
     refetchInterval: (query) => {
       const st = query.state.data?.status;
-      return st === "running" || st === "queued" || st === "pending" ? 2000 : false;
+      return getJobRefetchInterval(st);
     },
   });
+
+  useEffect(() => {
+    const job = jobQuery.data;
+    if (!job || !pollingJobId) return;
+
+    if (job.status === "succeeded") {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
+      setJobResult(job);
+      setPollingJobId(null);
+      void client.invalidateQueries({ queryKey: ["claim-batches", batchId] });
+      void client.invalidateQueries({ queryKey: ["claim-batches"] });
+    } else if (job.status === "failed") {
+      setJobResult(job);
+      setPollingJobId(null);
+    }
+  }, [jobQuery.data, pollingJobId, client, batchId]);
 
   const approve = useMutation({
     mutationFn: () =>
@@ -130,6 +176,8 @@ export function ClaimBatchDetailPage() {
       setVoidReason("");
       void client.invalidateQueries({ queryKey: ["claim-batches", batchId] });
       void client.invalidateQueries({ queryKey: ["claim-batches"] });
+      void client.invalidateQueries({ queryKey: ["claim-adjustments"] });
+      void client.invalidateQueries({ queryKey: ["claim-adjustments", "batch", batchId] });
     },
   });
 
@@ -168,12 +216,15 @@ export function ClaimBatchDetailPage() {
     },
     onSuccess: (data) => {
       setExportAccepted(data);
+      setPollingJobId(data.job.id);
+      setJobResult(null);
       setExportOpen(false);
     },
   });
 
   const batchErr = batch.error as ApiError | null;
   const linesErr = lines.error as ApiError | null;
+  const adjustmentsErr = adjustments.error as ApiError | null;
   const approveErr = approve.error as ApiError | null;
   const voidErr = voidBatch.error as ApiError | null;
   const submitErr = submitBatch.error as ApiError | null;
@@ -211,8 +262,11 @@ export function ClaimBatchDetailPage() {
   const canExport = b && b.status === "approved" && can("claim_batch.create");
   const canSubmit = b && b.status === "approved" && can("claim_batch.submit");
 
-  const jobStatus = jobQuery.data?.status;
-  const isJobDone = jobStatus === "completed" || jobStatus === "finished";
+  const currentJob = jobResult ?? jobQuery.data;
+  const jobStatus = currentJob?.status ?? (pollingJobId ? "queued" : undefined);
+  const isJobSucceeded = jobStatus === "succeeded";
+  const isJobFailed = jobStatus === "failed";
+  const jobError = currentJob?.last_error ?? (currentJob as { error?: string } | undefined)?.error;
 
   return (
     <>
@@ -278,7 +332,7 @@ export function ClaimBatchDetailPage() {
                   <dd className="font-medium">{m ? `${m.name} (${m.code})` : b.manufacturer_id}</dd>
                 </div>
                 <div>
-                  <dt className="text-muted">Total amount</dt>
+                  <dt className="text-muted">Batch total (lines + carried adjustments, from server)</dt>
                   <dd className="font-mono text-lg font-semibold text-ok">{formatDecimal(b.total_amount)}</dd>
                 </div>
                 <div>
@@ -324,8 +378,17 @@ export function ClaimBatchDetailPage() {
               {exportAccepted && (
                 <div className="rounded-md border border-line bg-surface/50 p-4 text-sm">
                   <h2 className="font-semibold">Batch export</h2>
-                  <p className="mt-1">Job status: {jobStatus ? jobStatus : "Queued"}</p>
-                  {isJobDone && (
+                  <p className="mt-1">
+                    Job status: <span className="font-medium capitalize">{jobStatus ?? "Queued"}</span>
+                  </p>
+                  {isJobFailed && (
+                    <div role="alert" className="mt-2">
+                      <Alert tone="danger">
+                        Export failed: {jobError || "The export job encountered an error."}
+                      </Alert>
+                    </div>
+                  )}
+                  {isJobSucceeded && (
                     <div className="mt-2">
                       <FileDownloadButton fileId={exportAccepted.file_id} label="Download generated export" />
                     </div>
@@ -395,7 +458,11 @@ export function ClaimBatchDetailPage() {
               },
               {
                 header: "Source",
-                cell: (l) =>
+                cell: (l: LineOut) => (l.source_kind === "rebate_accrual" ? "Rebate accrual" : "Sales line"),
+              },
+              {
+                header: "Lineage",
+                cell: (l: LineOut) =>
                   l.calculation_result_id ? (
                     <Link
                       to={`/calculations/results/${l.calculation_result_id}`}
@@ -417,6 +484,39 @@ export function ClaimBatchDetailPage() {
             ]}
           />
           <PagerControls pager={pager} page={lines.data?.page} />
+        </Card>
+
+        <Card title="Carried adjustments">
+          <DataTable
+            caption="Carried adjustments"
+            loading={adjustments.isPending}
+            error={adjustmentsErr}
+            rows={adjustments.data?.data}
+            empty="No adjustments carried in this batch."
+            columns={[
+              {
+                header: "Type",
+                cell: (a: AdjustmentOut) => ADJUSTMENT_TYPE_LABELS[a.adjustment_type] ?? a.adjustment_type,
+              },
+              {
+                header: "Reference",
+                cell: (a: AdjustmentOut) => (
+                  <span className="font-mono text-xs font-medium">{a.claim_reference ?? "—"}</span>
+                ),
+              },
+              {
+                header: "Signed amount",
+                cell: (a: AdjustmentOut) => (
+                  <span className="block text-right font-mono font-medium">{formatDecimal(a.amount)}</span>
+                ),
+              },
+              {
+                header: "Reason",
+                cell: (a: AdjustmentOut) => a.reason,
+              },
+            ]}
+          />
+          <PagerControls pager={adjPager} page={adjustments.data?.page} />
         </Card>
 
         <div>

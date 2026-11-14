@@ -137,7 +137,11 @@ services:
       SMTP_PASSWORD: ${SMTP_PASSWORD:-}
       MAIL_FROM: ${MAIL_FROM:?set in env file}
     read_only: true
-    tmpfs: ["/tmp:size=2g"]  # OCR / spreadsheet scratch space
+    tmpfs: ["/tmp:size=512m"]  # counts toward mem_limit; OCR / spreadsheet scratch space
+    # parsers run here (SECURITY.md section 4): a hostile spreadsheet must not take down the host (DEPLOYMENT.md 3)
+    mem_limit: ${WORKER_MEM_LIMIT:-3g}
+    cpus: ${WORKER_CPUS:-2}
+    pids_limit: 256
     depends_on:
       postgres: {condition: service_healthy}
       seaweedfs: {condition: service_healthy}

@@ -109,6 +109,8 @@ flowchart LR
 - Network: only Caddy exposes 80/443; Postgres/ClamAV/object storage are not exposed publicly; host firewall default-deny; SSH key-only, no root login, fail2ban; automatic security updates.
 - Scale-up path: bigger instance → move worker to its own host → managed/dedicated Postgres with a read replica for reporting → multiple API replicas behind Caddy/load balancer. Kubernetes only with an ADR and a measured need.
 
+**Worker resource limits (S11.3):** the `worker` service (where spreadsheets and PDFs are parsed) has `mem_limit` (`WORKER_MEM_LIMIT`, default 3g; the `/tmp` tmpfs is 512 MB and counts toward it, leaving about 2.5 GB for processes; a 1M-row import peaked at 1.18 GB RSS), `cpus` (`WORKER_CPUS`, default 2) and `pids_limit: 256` in `compose.prod.yml`. Size them to the host (the 4 vCPU / 8 GB starting point leaves room for Postgres, ClamAV and the API). XLSX uploads are also capped at 100 MB uncompressed (`files/validation.py`).
+
 **Implemented (S11):** `infra/docker/compose.prod.yml` + `.env.prod.example` (single host behind Cloudflare; internal-only network, read-only filesystems, healthchecks, `restart: unless-stopped`, owner credentials only in the one-off `migrate` service under profile `ops`). Validated in CI with `docker compose config`; never run against a real host in S11. Runbooks: `infra/runbooks/`.
 
 ### 3.1 Reverse proxy and SSL (Caddy)

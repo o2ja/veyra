@@ -8,8 +8,18 @@ from fastapi import FastAPI
 from sqlalchemy import Engine, text
 
 from rebate.core.clientip import client_ip
+from tests.conftest import DbUrls
 from tests.security.flows import full_admin, register_and_verify
-from tests.support import ORIGIN, STRONG_PASSWORD, Api, FakeClock, api_client, totp_now, unique_email
+from tests.support import (
+    ORIGIN,
+    STRONG_PASSWORD,
+    Api,
+    FakeClock,
+    api_client,
+    make_app,
+    totp_now,
+    unique_email,
+)
 
 
 def _login(api: Api, email: str, password: str) -> tuple[int, dict[str, Any]]:
@@ -230,3 +240,15 @@ def test_failure_counter_expires_identically_for_real_and_unknown(
     clk.advance(25 * 3600)
     outcome = [_codes(_fresh_ip_logins(app, e, "wrong password number 5", 1)) for e in (real, ghost)]
     assert outcome == [[(401, "unauthenticated")]] * 2
+
+
+def test_login_rate_limit_per_ip_across_accounts(migrated_db: DbUrls) -> None:
+    app = make_app(migrated_db.app, login_ip_limit_per_minute=3)  # password spraying: a new email each time
+    with api_client(app) as spray, api_client(app) as other:
+        codes = [
+            spray.post("/auth/login", json={"email": unique_email("spray"), "password": "x" * 12}).status_code
+            for _ in range(5)
+        ]
+        elsewhere = other.post("/auth/login", json={"email": unique_email("spray"), "password": "x" * 12})
+    assert codes[:3] == [401, 401, 401] and codes[3:] == [429, 429]
+    assert elsewhere.status_code == 401  # another IP is unaffected
