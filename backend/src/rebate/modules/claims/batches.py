@@ -31,6 +31,7 @@ from rebate.modules.claims.models import ClaimBatch, ClaimExportTemplate, ClaimL
 from rebate.modules.masterdata import Who, keyset
 
 MAX_LINES = 20_000
+_ACTIVE_LINE_INDEXES = frozenset({"uq_claim_lines_active_sales_line", "uq_claim_lines_active_accrual_entry"})
 
 
 class AlreadyClaimed(Conflict):
@@ -423,8 +424,15 @@ def create(db: Session, who: Who, body: s.BatchIn) -> ClaimBatch:
     try:
         with db.begin_nested():
             db.flush()
-    except IntegrityError:  # the unique index caught a double claim the pre-check could not see
-        raise AlreadyClaimed() from None
+    except IntegrityError as exc:
+        orig = exc.orig
+        # only the active-line unique indexes mean "double claim"; a trigger refusal keeps its own error
+        if (
+            getattr(orig, "sqlstate", None) == "23505"
+            and getattr(getattr(orig, "diag", None), "constraint_name", None) in _ACTIVE_LINE_INDEXES
+        ):
+            raise AlreadyClaimed() from None
+        raise
     adjustments.include(db, who, included, batch.id)
     after = _view(batch)
     if included:

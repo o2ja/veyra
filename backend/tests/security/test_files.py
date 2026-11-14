@@ -4,6 +4,7 @@ SeaweedFS and ClamAV (FR-FI-01..04, SECURITY.md §4, ADR-017 conditions, S2 acce
 import time
 import urllib.error
 import urllib.request
+import uuid
 from collections.abc import Iterator
 from typing import Any
 
@@ -198,3 +199,55 @@ def test_filenames_are_sanitised(admin: Api) -> None:
     assert r.status_code == 201
     name = r.json()["original_name"]
     assert name.endswith(".csv") and not any(c in name for c in '"\\/<>\r\n')
+
+
+def test_export_files_need_the_permission_of_the_export_that_made_them(
+    app: FastAPI, admin: Api, admin_engine: Engine
+) -> None:
+    """Export files: batch export -> claim_batch.export (A P N), audit pack -> audit_pack.export (A P V),
+    missed-claims list -> data.read (all). Viewer/analyst get 403 on download-url and metadata, and the list
+    leaves the file out. Other kinds stay readable by every data.read role."""
+    from contextlib import ExitStack
+
+    from tests.integration.agreements_support import member
+
+    up = upload(admin, "plain.csv", samples.CSV + b"exp,1\n", "text/csv").json()
+    drain(app)
+    ids: dict[str, str] = {}
+    with admin_engine.begin() as conn:
+        for label, name in (
+            ("batch", "CB-2026-000001.csv"),
+            ("pack", "audit-pack-CB-2026-000001.csv"),
+            ("missed", "missed-claims-2026-07-10.csv"),
+        ):
+            fid = str(uuid.uuid4())
+            conn.execute(
+                text(
+                    "INSERT INTO file_objects (tenant_id, id, kind, original_name, storage_key, size_bytes, "
+                    "sha256, detected_mime, scan_status, uploaded_by, scanned_at) "
+                    "SELECT tenant_id, CAST(:i AS uuid), 'export', :n, 'tenants/' || tenant_id || '/exports/x/' || CAST(:i AS text), 10, :h, "
+                    "'text/csv', 'clean', uploaded_by, now() FROM file_objects WHERE id = :f"
+                ),
+                {"i": fid, "n": name, "h": label.encode().hex().ljust(64, "0"), "f": up["id"]},
+            )
+            ids[label] = fid
+    with ExitStack() as stack:
+        viewer = member(stack, app, admin, "viewer")
+        analyst = member(stack, app, admin, "analyst")
+        allowed = {  # who may read which (download-url would be 409/200, never 403)
+            "batch": {"admin": True, "viewer": False, "analyst": True},
+            "pack": {"admin": True, "viewer": True, "analyst": False},
+            "missed": {"admin": True, "viewer": True, "analyst": True},
+        }
+        for who, api in (("admin", admin), ("viewer", viewer), ("analyst", analyst)):
+            listed = {f["id"] for f in api.get("/files", params={"limit": 200}).json()["data"]}
+            assert up["id"] in listed
+            for label, fid in ids.items():
+                ok = allowed[label][who]
+                assert (fid in listed) is ok, (who, label)
+                url = api.get(f"/files/{fid}/download-url")
+                meta = api.get(f"/files/{fid}")
+                if ok:
+                    assert url.status_code != 403 and meta.status_code == 200, (who, label, url.text)
+                else:
+                    assert url.status_code == 403 and meta.status_code == 403, (who, label, url.text)

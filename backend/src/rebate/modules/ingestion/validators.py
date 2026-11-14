@@ -272,6 +272,22 @@ def row_hash(values: dict[str, Any]) -> str:
     return hashlib.sha256(canonical_json(values).encode()).hexdigest()
 
 
+_ROW_BYTES = 6
+_HASH_BYTES = (
+    16  # content hash kept as its first 128 bits; a wrong duplicate/conflict verdict needs a 2^-128 collision
+)
+
+
+def _short_digest(text: str, size: int = 16) -> bytes:
+    """16-byte BLAKE2b of a natural key. Keys are compared by digest to keep per-row memory small;
+    a false duplicate needs a 128-bit collision (about n^2 / 2^129, ~1e-27 at 1M rows)."""
+    return hashlib.blake2b(text.encode(), digest_size=size).digest()
+
+
+def _orig_digest(key: tuple[str, int]) -> bytes:
+    return _short_digest(f"{key[0]}{key[1]}")
+
+
 # Fields excluded from the row hash: resolved ids depend on master data, not on the source row.
 _ID_FIELDS = ("customer_id", "product_id", "manufacturer_id", "branch_id", "parent_customer_id")
 
@@ -291,13 +307,20 @@ class RowValidator:
         self.date_order = options.get("date_order", "MDY")
         self.number = n.NumberFormat(options.get("decimal_separator", "."))
         self.lookups = lookups
-        self.seen: dict[str, tuple[int, str]] = {}  # natural key -> (row, hash)
-        self.headers: dict[tuple[str, str], tuple[int, tuple[Any, ...]]] = {}
-        self.file_keys: set[tuple[str, int]] = set()  # invoice (number, line) keys in this file
+        # natural-key digest -> 6-byte row number + 16-byte content-hash prefix.
+        self.seen: dict[bytes, bytes] = {}
+        self.headers: dict[bytes, bytes] = {}  # document key digest -> row (6 bytes) + header digest (8)
+        self.file_keys: set[bytes] = set()  # digests of invoice (number, line) keys in this file
         self.originals: dict[int, tuple[str, int]] = {}  # credit-note row -> original key
         self.parents: dict[int, str] = {}  # customer row -> parent code
         self.file_codes: dict[str, tuple[int, bool]] = {}  # customer code -> (row, has a parent)
         self.unmapped: dict[tuple[str, str], Unmapped] = {}
+
+    def _header_conflict(self, doc_key: tuple[str, str], row: int, header: tuple[Any, ...]) -> int | None:
+        """Register the first row of a document; the first row's number if ``header`` differs from its header."""
+        key, digest = _short_digest(repr(doc_key)), _short_digest(repr(header), 8)
+        stored = self.headers.setdefault(key, row.to_bytes(_ROW_BYTES, "big") + digest)
+        return None if stored[_ROW_BYTES:] == digest else int.from_bytes(stored[:_ROW_BYTES], "big")
 
     # -- one row ----------------------------------------------------------------------------------
     def _cell(self, raw: dict[str, str], f: Field) -> str:
@@ -368,15 +391,17 @@ class RowValidator:
         digest = row_hash(hashed)
         key = self._natural_key(normalized)
         phase = self._phase(normalized)
-        if key in self.seen:
-            first_row, first_hash = self.seen[key]
-            if first_hash == digest:
+        key_digest = _short_digest(key)
+        stored = self.seen.get(key_digest)
+        if stored is not None:
+            first_row = int.from_bytes(stored[:_ROW_BYTES], "big")
+            if stored[_ROW_BYTES:] == bytes.fromhex(digest)[:_HASH_BYTES]:
                 return Validated(row_number, "duplicate", normalized, key, digest, phase, issues)
             issues.append(
                 Issue(None, "duplicate_key_conflict", f"Same key as row {first_row} but different values.")
             )
             return Validated(row_number, "error", None, None, None, 1, issues)
-        self.seen[key] = (row_number, digest)
+        self.seen[key_digest] = row_number.to_bytes(_ROW_BYTES, "big") + bytes.fromhex(digest)[:_HASH_BYTES]
         return Validated(row_number, "valid", normalized, key, digest, phase, issues)
 
     def _natural_key(self, v: dict[str, Any]) -> str:
@@ -480,18 +505,18 @@ class RowValidator:
             return
         header = (v["doc_type"], v["invoice_date"], v["customer_code"], v["branch_code"], v["currency_code"])
         doc_key = (v["doc_type"], v["document_number"])
-        first = self.headers.setdefault(doc_key, (row, header))
-        if first[1] != header:
+        first_row = self._header_conflict(doc_key, row, header)
+        if first_row is not None:
             issues.append(
                 Issue(
                     None,
                     "inconsistent_document_header",
-                    f"Date, customer, branch or currency differ from row {first[0]} of the same document.",
+                    f"Date, customer, branch or currency differ from row {first_row} of the same document.",
                 )
             )
             return
         if v["doc_type"] == "invoice":
-            self.file_keys.add((v["document_number"], v["line_number"]))
+            self.file_keys.add(_short_digest(f"{v['document_number']}{v['line_number']}"))
         elif has_orig:
             self.originals[row] = (v["original_document_number"], v["original_line_number"])
 
@@ -531,13 +556,13 @@ class RowValidator:
             v["po_number"],
             v["currency_code"],
         )
-        first = self.headers.setdefault((v["doc_type"], v["document_number"]), (row, header))
-        if first[1] != header:
+        first_row = self._header_conflict((v["doc_type"], v["document_number"]), row, header)
+        if first_row is not None:
             issues.append(
                 Issue(
                     None,
                     "inconsistent_document_header",
-                    f"Header fields differ from row {first[0]} of the same document.",
+                    f"Header fields differ from row {first_row} of the same document.",
                 )
             )
 
@@ -590,10 +615,10 @@ class RowValidator:
         without a link and the engine reports ``return_original_missing``) and unknown parents."""
         out: dict[int, list[Issue]] = {}
         if self.originals:
-            missing = {k for k in self.originals.values() if k not in self.file_keys}
+            missing = {k for k in self.originals.values() if _orig_digest(k) not in self.file_keys}
             in_db = self.lookups.sales_line_exists(sorted(missing)) if missing else set()
             for row, key in self.originals.items():
-                if key not in self.file_keys and key not in in_db:
+                if _orig_digest(key) not in self.file_keys and key not in in_db:
                     out.setdefault(row, []).append(
                         Issue("original_document_number", "original_line_not_found",
                               f"Original invoice line {key[0]}/{key[1]} was not found; loaded without a link.", "warning")

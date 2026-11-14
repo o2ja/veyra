@@ -509,6 +509,8 @@ def test_write_off_needs_an_approver_and_a_second_person(cases: Cases) -> None:
     )
     assert out["written_off_by"] == approver and out["write_off_proposed_by"] == str(cases.story.user)
     assert out["closed_at"] and out["written_off_at"]
+    # the approver signs off the proposal: their own body reason ("Agreed") is ignored
+    assert out["write_off_reason"] == body["reason"] and events(api, cid)[-1]["note"] == body["reason"]
     acts = audit_actions(api, cid)
     assert "variance_case.write_off_proposed" in acts and "variance_case.written_off" in acts
     last = events(api, cid)[-1]
