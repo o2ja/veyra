@@ -43,11 +43,10 @@ class InvariantViolation(Exception):
 def allocate(claim: ClaimLine, paid: Decimal) -> tuple[Allocation, ...]:
     """Split ``paid`` over a claim line: adjustments at face value, remainder on the claim itself. A carried adjustment
     belongs to its own claim line (D-N11), so the claim line is never reduced by it."""
-    carried = claim.carried
-    if paid < -sum(
-        (a.amount for a in carried), Decimal(0)
-    ):  # a payment below the credit cannot be said to net it
-        carried = ()
+    # Same rule as a same-batch adjustment (always split at face value), except that nothing is split off a payment
+    # of 0.00 or less: no money moved, so there is nothing a credit could have been netted from (open point, see
+    # docs/reports/notes/dn11-open-points.md).
+    carried = claim.carried if paid > 0 else ()
     adj = tuple(Allocation(claim.id, a.amount, a.ref) for a in claim.adjustments)
     adj += tuple(Allocation(a.claim_line_id or claim.id, a.amount, a.ref) for a in carried)
     rest = paid - sum((a.amount for a in (*claim.adjustments, *carried)), Decimal(0))
@@ -92,15 +91,21 @@ def validate_matches(
     an adjustment item carried by ANOTHER batch counts max(amount, 0) (a positive one consumes room), except a NEGATIVE
     one on a line that also pays a claim line of the carrying batch (``carriers``: adjustment ref -> claim line ids of
     its carrying batch; the claims' ``carried`` add to it): there it counts signed and frees room (owner decision D-N11,
-    2026-11-14). A negative one on any other line never frees room for other claim lines. An allocation to an
-    adjustment item needs no adjusted claim line in ``claims`` (it may be paid in full or released)."""
+    2026-11-14), but never more than that line's allocations to the carrying batch's claim lines (such a payment is
+    refused: the credit is netted from what the carrying line received, never from other money). A negative one on a
+    line that pays no claim line of the carrying batch never frees room. An allocation to an adjustment item needs no
+    adjusted claim line in ``claims`` (it may be paid in full or released)."""
     carrier = {k: set(v) for k, v in (carriers or {}).items()}
     for c in claims.values():
         for adj in c.carried:
             carrier.setdefault(adj.ref, set()).add(c.id)
-    paid_lines: dict[str, set[str]] = defaultdict(set)  # remittance line -> claim lines it pays
+    paid_to: dict[str, dict[str, Decimal]] = defaultdict(
+        lambda: defaultdict(Decimal)
+    )  # line -> claim line -> Σ
     for m in matches:
-        paid_lines[m.remittance_line_id] |= m.claim_line_ids
+        for a in m.allocations:
+            if a.adjustment_ref is None:
+                paid_to[m.remittance_line_id][a.claim_line_id] += a.amount
     totals: dict[str, Decimal] = defaultdict(Decimal)
     for m in matches:
         rem = remits[m.remittance_line_id]
@@ -116,7 +121,20 @@ def validate_matches(
                 claim is not None and any(adj.ref == a.adjustment_ref for adj in claim.adjustments)
             ):
                 totals[rem.id] += a.amount  # a claim line, or a same-batch adjustment (face value)
-            elif a.amount < 0 and carrier.get(a.adjustment_ref, set()) & paid_lines[rem.id]:
+            elif (
+                a.amount < 0
+                and (
+                    netted := sum(
+                        (paid_to[rem.id].get(cid, Decimal(0)) for cid in carrier.get(a.adjustment_ref, ())),
+                        Decimal(0),
+                    )
+                )
+                > 0
+            ):
+                if -a.amount > netted:
+                    raise InvariantViolation(
+                        f"adjustment allocation {a.amount} exceeds the {netted} paid to its carrying batch on {rem.id}"
+                    )
                 totals[rem.id] += a.amount  # D-N11: the credit netted inside its carrying batch's payment
             else:
                 totals[rem.id] += max(a.amount, Decimal(0))
@@ -183,6 +201,7 @@ def reconcile(
     config: MatchConfig = DEFAULT_CONFIG,
     sku_aliases: Mapping[str, str] | None = None,
     topup_lines: Sequence[ClaimLine] = (),
+    carriers: Mapping[str, frozenset[str]] | None = None,
 ) -> MatchResult:
     """Run T1..T5 over one remittance document's lines and the manufacturer's claim lines.
 
@@ -222,7 +241,7 @@ def reconcile(
 
     order = {m: i for i, m in enumerate(Method)}
     matches = tuple(sorted([*kept, *new], key=lambda m: (m.remittance_line_id, order[m.method])))
-    validate_matches(matches, remits, claims)
+    validate_matches(matches, remits, claims, carriers)
     return MatchResult(
         matches,
         tuple(r.id for r in pend_rem),

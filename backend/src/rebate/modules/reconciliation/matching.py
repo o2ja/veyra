@@ -427,6 +427,7 @@ def run(
         config=DEFAULT_CONFIG,
         sku_aliases=_aliases(db, tenant_id),
         topup_lines=st.topup(),
+        carriers=st.carriers,
     )
     new = [
         m
