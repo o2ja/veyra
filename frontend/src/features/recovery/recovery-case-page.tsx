@@ -18,17 +18,20 @@ import { useSession } from "../../lib/session";
 import { uploadWithProgress } from "../files/files-page";
 import { ActionDialog, AttachmentDownloadButton, GenericTree, RecoveryNav } from "./common";
 import {
+  CONTROL_CHAR_REGEX,
   DEADLINE_BASIS_LABELS,
   TRANSITION_STATUSES,
   amountText,
   batchIdFromDetails,
   caseTypeLabel,
+  isValidWriteOffReason,
   newestFirst,
   ownerText,
   reasonLabel,
   statusLabel,
   usDate,
   usDateTime,
+  writeOffProposalLabel,
   type AttachmentOut,
   type CaseOut,
   type EventOut,
@@ -82,7 +85,7 @@ export function RecoveryCasePage() {
   const members = useQuery({
     queryKey: ["recovery", "members"],
     queryFn: () => unwrap(api.GET("/api/v1/users")),
-    enabled: can("user.manage") && dialog === "assign",
+    enabled: can("user.manage") && (dialog === "assign" || dialog === "writeoff"),
   });
 
   const detailError = detail.error as ApiError | null;
@@ -232,10 +235,15 @@ export function RecoveryCasePage() {
 
   const writeOff = useMutation({
     mutationFn: () => {
-      const revision = detail.data?.revision ?? 0;
+      const currentItem = detail.data;
+      const revision = currentItem?.revision ?? 0;
       if (!writeOffKey.current || writeOffKey.current.revision !== revision) {
         writeOffKey.current = { revision, key: crypto.randomUUID() };
       }
+      const isApproving = Boolean(
+        currentItem?.write_off_reason && currentItem.write_off_proposed_by !== me?.user.id,
+      );
+      const reasonToSend = isApproving ? (currentItem?.write_off_reason ?? "") : writeOffReason.trim();
       return unwrap(
         api.POST("/api/v1/cases/{case_id}/write-off", {
           params: {
@@ -245,7 +253,7 @@ export function RecoveryCasePage() {
               "idempotency-key": writeOffKey.current.key,
             },
           },
-          body: { reason: writeOffReason.trim() },
+          body: { reason: reasonToSend },
         }),
       );
     },
@@ -300,6 +308,16 @@ export function RecoveryCasePage() {
     : proposalOther
       ? "Approve write-off"
       : "Write off";
+  const isApproving = Boolean(item?.write_off_reason && !proposalMine);
+  const proposerMember = (members.data?.data ?? []).find(
+    (member) => member.user_id === item?.write_off_proposed_by,
+  );
+  const proposerDisplay =
+    proposerMember?.full_name ||
+    proposerMember?.email ||
+    (item?.write_off_proposed_by === me?.user.id ? me?.user.email : null) ||
+    item?.write_off_proposed_by;
+  const approvalLabel = writeOffProposalLabel(proposerDisplay, item?.write_off_proposed_at);
   const reclaimError = reclaim.error as ApiError | null;
   const includedBatchId = reclaimError ? batchIdFromDetails(reclaimError.details) : null;
   const eventRows: EventOut[] = events.data?.data ?? [];
@@ -774,21 +792,41 @@ export function RecoveryCasePage() {
             }
             confirmLabel={writeOffLabel}
             confirmVariant="danger"
-            confirmDisabled={proposalMine || writeOffReason.trim() === ""}
+            confirmDisabled={
+              proposalMine ||
+              (isApproving
+                ? !item.write_off_reason || item.write_off_reason.trim() === ""
+                : !isValidWriteOffReason(writeOffReason))
+            }
             busy={writeOff.isPending}
             onConfirm={() => writeOff.mutate()}
           >
             <div className="flex flex-col gap-3">
               <label htmlFor="writeoff-reason" className="text-sm font-medium">
-                Reason
+                {isApproving ? approvalLabel : "Reason"}
               </label>
               <textarea
                 id="writeoff-reason"
-                required
-                className="min-h-24 rounded-md border border-line bg-panel px-3 py-2 text-sm"
-                value={writeOffReason}
-                onChange={(event) => setWriteOffReason(event.target.value)}
+                readOnly={isApproving}
+                required={!isApproving}
+                maxLength={isApproving ? undefined : 1000}
+                className={`min-h-24 rounded-md border border-line px-3 py-2 text-sm ${
+                  isApproving ? "bg-surface/50 text-ink/90 cursor-default" : "bg-panel"
+                }`}
+                value={isApproving ? (item.write_off_reason ?? "") : writeOffReason}
+                onChange={isApproving ? undefined : (event) => setWriteOffReason(event.target.value)}
               />
+              {!isApproving && writeOffReason.length > 0 && !isValidWriteOffReason(writeOffReason) && (
+                <p className="text-xs text-danger">
+                  {CONTROL_CHAR_REGEX.test(writeOffReason)
+                    ? "Reason cannot contain control characters."
+                    : writeOffReason.trim().length === 0
+                      ? "Reason is required."
+                      : writeOffReason.length > 1000
+                        ? "Reason cannot exceed 1000 characters."
+                        : null}
+                </p>
+              )}
               {proposalMine && (
                 <Alert tone="info">
                   You proposed this write-off. A different approver must complete it.

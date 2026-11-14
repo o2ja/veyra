@@ -4,6 +4,7 @@ import {
   TRANSITION_STATUSES,
   amountText,
   batchIdFromDetails,
+  isValidWriteOffReason,
   newestFirst,
   notificationCaseLink,
   ownerText,
@@ -11,6 +12,7 @@ import {
   statusLabel,
   usDate,
   usDateTime,
+  writeOffProposalLabel,
   type EventOut,
   type NotificationOut,
 } from "./logic";
@@ -83,5 +85,41 @@ describe("recovery display helpers", () => {
     const uuid = "3f0a6f4e-2b7b-4c02-9f5d-4f6a1b2c3d4e";
     expect(batchIdFromDetails([{ field: "claim_batch_id", message: `batch ${uuid}` }])).toBe(uuid);
     expect(batchIdFromDetails([{ field: "reason", message: "included" }])).toBeNull();
+  });
+
+  it("validates write-off reasons with 1000 max length and no control characters", () => {
+    expect(isValidWriteOffReason("Valid reason for write-off")).toBe(true);
+    expect(isValidWriteOffReason("Multiline reason\nLine 2\r\nLine 3\twith tab")).toBe(true);
+    expect(isValidWriteOffReason("a".repeat(1000))).toBe(true);
+    expect(isValidWriteOffReason("a".repeat(1001))).toBe(false);
+    expect(isValidWriteOffReason("")).toBe(false);
+    expect(isValidWriteOffReason("   \n\t  ")).toBe(false);
+    expect(isValidWriteOffReason("Invalid\x00NUL character")).toBe(false);
+    expect(isValidWriteOffReason("Invalid\x07BEL character")).toBe(false);
+    expect(isValidWriteOffReason("Invalid\x1bESC character")).toBe(false);
+    expect(isValidWriteOffReason("Invalid\x7fDEL character")).toBe(false);
+  });
+
+  it("formats the write-off proposal label with available proposer info and date", () => {
+    expect(
+      writeOffProposalLabel(
+        { full_name: "Jane Approver", email: "jane@example.com" },
+        "2026-11-14T07:30:00Z",
+      ),
+    ).toBe("Reason proposed by Jane Approver on 11/14/2026");
+
+    expect(writeOffProposalLabel({ full_name: "", email: "jane@example.com" }, "2026-11-14T07:30:00Z")).toBe(
+      "Reason proposed by jane@example.com on 11/14/2026",
+    );
+
+    expect(writeOffProposalLabel("user-uuid-1234", "2026-11-14T07:30:00Z")).toBe(
+      "Reason proposed by user-uuid-1234 on 11/14/2026",
+    );
+
+    expect(writeOffProposalLabel(null, "2026-11-14T07:30:00Z")).toBe("Reason proposed on 11/14/2026");
+
+    expect(writeOffProposalLabel({ full_name: "Jane Approver" }, null)).toBe(
+      "Reason proposed by Jane Approver on —",
+    );
   });
 });
