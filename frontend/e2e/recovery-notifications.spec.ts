@@ -1,6 +1,6 @@
 import { expect } from "@playwright/test";
 
-import { bootstrapRecovery, expectNoA11yViolations, test } from "./support";
+import { apiJson, bootstrapRecovery, expectNoA11yViolations, test } from "./support";
 
 test("S9 notifications: unread/all list, mark read, axe on queue, case and notifications", async ({
   page,
@@ -27,30 +27,28 @@ test("S9 notifications: unread/all list, mark read, axe on queue, case and notif
     await expect(card).toBeVisible();
     await expectNoA11yViolations(page, "/notifications");
 
+    // The server decides whether reminders exist (daily sweep); the UI must show exactly that.
+    const unread = await apiJson<{ data: { title: string }[] }>(
+      page,
+      "GET",
+      "/api/v1/notifications?unread=true&limit=50",
+    );
     const items = card.getByRole("listitem");
-    const unreadCount = await items.count();
-    if (unreadCount > 0) {
-      const heading = items.first().getByRole("heading", { level: 2 });
-      const firstTitle = await heading.innerText();
-      const sameTitle = card.getByRole("heading", { name: firstTitle, exact: true });
-      const before = await sameTitle.count();
+    await expect(items).toHaveCount(unread.data.length);
+    if (unread.data.length === 0) {
+      await expect(card.getByText("No unread notifications.")).toBeVisible();
+    } else {
       await items
         .first()
         .getByRole("button", { name: /Mark read/ })
         .click();
-      await expect(sameTitle).toHaveCount(before - 1);
-    } else {
-      // Reminders only exist after the server's daily sweep; no reminder means the empty state.
-      await expect(card.getByText("No unread notifications.")).toBeVisible();
+      await expect(items).toHaveCount(unread.data.length - 1);
     }
 
     await page.getByLabel("Unread only").uncheck();
-    const allCount = await card.getByRole("listitem").count();
-    if (allCount === 0) {
-      await expect(card.getByText("No notifications yet.")).toBeVisible();
-    } else {
-      await expect(card.getByRole("listitem")).toHaveCount(allCount);
-    }
+    const all = await apiJson<{ data: unknown[] }>(page, "GET", "/api/v1/notifications?unread=false&limit=50");
+    await expect(card.getByRole("listitem")).toHaveCount(all.data.length);
+    if (all.data.length === 0) await expect(card.getByText("No notifications yet.")).toBeVisible();
     await expectNoA11yViolations(page, "/notifications (all)");
   } finally {
     for (const context of fixture.contexts) await context.close();

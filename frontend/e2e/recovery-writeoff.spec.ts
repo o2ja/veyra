@@ -37,6 +37,9 @@ test("S9 write-off: propose, same user disabled, second approver completes, anal
     const completeButton = fixture.approverA.getByRole("button", { name: "Complete write-off" });
     await expect(completeButton).toBeVisible();
     await expect(completeButton).toBeDisabled();
+    await expect(
+      fixture.approverA.getByRole("status").filter({ hasText: "A different approver must complete it" }),
+    ).toBeVisible();
 
     // A different approver completes the four-eyes flow.
     await approverB.goto(`/recovery/${caseId}`);
@@ -54,7 +57,9 @@ test("S9 write-off: propose, same user disabled, second approver completes, anal
       `/api/v1/cases/${caseId}`,
     );
     expect(written.status).toBe("written_off");
-    await expect(approverB.getByLabel("Written off amount")).toHaveText(written.written_off_amount);
+    // 150.00 is the short-paid variance in testdata ground_truth/expected_reconciliation.json (GL-V1).
+    expect(written.written_off_amount).toBe("150.00");
+    await expect(approverB.getByLabel("Written off amount")).toHaveText("150.00");
 
     // An analyst gets no write-off action in the UI and a 403 from the API.
     await analyst.page.goto(`/recovery/${caseId}`);

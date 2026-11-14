@@ -218,6 +218,23 @@ async function poll<T>(
   }
 }
 
+/** Polls a job until it succeeds; a failed job throws with the server's last_error instead of timing out. */
+async function pollJob(page: Page, jobId: string, label: string): Promise<void> {
+  await poll(
+    async () => {
+      const job = await apiJson<{ status: string; last_error: string | null }>(
+        page,
+        "GET",
+        `/api/v1/jobs/${jobId}`,
+      );
+      if (job.status === "failed") throw new Error(`${label} failed: ${job.last_error ?? "no error given"}`);
+      return job;
+    },
+    (job) => job.status === "succeeded",
+    label,
+  );
+}
+
 interface RecoveryCase {
   id: string;
   case_type: string;
@@ -539,11 +556,7 @@ export async function bootstrapRecovery(
     { "Idempotency-Key": crypto.randomUUID() },
   );
 
-  await poll(
-    () => apiJson<{ status: string }>(page, "GET", `/api/v1/jobs/${created.job.id}`),
-    (job) => job.status === "succeeded",
-    "CM-7781 extraction job",
-  );
+  await pollJob(page, created.job.id, "CM-7781 extraction job");
   await poll(
     () =>
       apiJson<{ lines: unknown[] }>(page, "GET", `/api/v1/remittances/${created.remittance.id}/extraction`),
@@ -562,11 +575,7 @@ export async function bootstrapRecovery(
     "POST",
     `/api/v1/remittances/${created.remittance.id}/reconcile`,
   );
-  await poll(
-    () => apiJson<{ status: string }>(page, "GET", `/api/v1/jobs/${reconciled.job.id}`),
-    (job) => job.status === "succeeded",
-    "CM-7781 reconciliation job",
-  );
+  await pollJob(page, reconciled.job.id, "CM-7781 reconciliation job");
 
   // The unique subset match is a suggestion: a person must confirm it before finalising.
   const lines = await apiJson<{ data: { matches: MatchRow[] }[] }>(
@@ -592,6 +601,19 @@ export async function bootstrapRecovery(
     (result) => result.data.length >= 4,
     "four recovery cases",
   );
+
+  // Expected money comes from the ground truth, never from what the UI or API returned.
+  const truth = JSON.parse(readFileSync(generated("ground_truth/expected_reconciliation.json"), "utf8")) as {
+    expected: { variance?: { amount: string; case_type: string; reason_code: string } | null }[];
+  };
+  const expectedCases = truth.expected
+    .flatMap((line) => (line.variance ? [line.variance] : []))
+    .map((v) => `${v.case_type}|${v.reason_code}|${v.amount}`)
+    .sort();
+  const actualCases = cases.data
+    .map((c) => `${c.case_type}|${c.reason_code}|${c.variance_amount}`)
+    .sort();
+  expect(actualCases).toEqual(expectedCases);
 
   return {
     manufacturerId: voltara.id,

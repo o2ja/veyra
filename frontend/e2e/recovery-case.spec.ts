@@ -57,9 +57,7 @@ test("S9 recovery case: assign, note, attachment, transition, reclaim, stale 412
     await reclaimDialog.getByRole("button", { name: "Reclaim" }).click();
     await expect(page.getByText("Reclaim adjustment created.")).toBeVisible();
     await expect(page.getByLabel("Case status")).toHaveText("To reclaim");
-    const adjustmentLink = page.getByRole("link", { name: "View adjustment" });
-    await expect(adjustmentLink).toBeVisible();
-    await expect(adjustmentLink).toHaveAttribute("href", "/claims/adjustments?status=proposed");
+    await expect(page.getByRole("status").filter({ hasText: /Adjustment [0-9a-f-]{36}/ })).toBeVisible();
 
     // The second tab still holds the pre-mutation revision: the server answers 412.
     await secondTab.getByRole("button", { name: "Change status" }).click();

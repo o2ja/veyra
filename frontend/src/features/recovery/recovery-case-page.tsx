@@ -381,15 +381,18 @@ export function RecoveryCasePage() {
               </Alert>
             </div>
           )}
+          {proposalMine && item?.status !== "written_off" && (
+            <div className="mb-4">
+              <Alert tone="info">
+                You proposed this write-off. A different approver must complete it.
+              </Alert>
+            </div>
+          )}
           {actionMsg && (
             <div className="mb-4">
               <Alert tone="ok">
                 {actionMsg}{" "}
-                {adjustmentId && (
-                  <Link to="/claims/adjustments?status=proposed" className="font-medium underline">
-                    View adjustment
-                  </Link>
-                )}
+                {adjustmentId && <span className="font-mono text-xs">Adjustment {adjustmentId}</span>}
               </Alert>
             </div>
           )}
@@ -729,7 +732,7 @@ export function RecoveryCasePage() {
             open={dialog === "reclaim"}
             onOpenChange={(open) => setDialog(open ? "reclaim" : null)}
             title="Reclaim this variance"
-            description="The server creates a claim adjustment from the case and links it to the S7 adjustments queue."
+            description="The server creates a claim adjustment from this case."
             confirmLabel="Reclaim"
             busy={reclaim.isPending}
             onConfirm={() => reclaim.mutate()}

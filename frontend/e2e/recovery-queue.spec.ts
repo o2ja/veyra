@@ -28,7 +28,7 @@ test("S9 recovery queue: server order, unknown deadline first, reason filter, su
     const unknownFirst = fixture.cases[0];
     expect(unknownFirst?.deadline_unknown).toBe(true);
 
-    await page.getByRole("link", { name: "Recovery" }).click();
+    await page.getByRole("link", { name: "Recovery", exact: true }).click();
     await expect(page).toHaveURL("/recovery");
 
     const summary = page.getByRole("region", { name: "Recovery summary" });
