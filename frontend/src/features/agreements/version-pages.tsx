@@ -1,7 +1,7 @@
 import { useQuery } from "@tanstack/react-query";
 import { Link, useParams } from "react-router-dom";
 
-import { Alert, Card, Empty, ErrorAlert, Loading } from "../../components/ui";
+import { Alert, Card, Empty, ErrorAlert, Loading, PermissionDenied } from "../../components/ui";
 import { api } from "../../lib/api/client";
 import { ApiError, unwrap } from "../../lib/api/errors";
 import { DataTable, PagerControls, usePager, utc } from "../masterdata/common";
@@ -34,6 +34,15 @@ export function VersionDetailPage() {
 
   const v = version.data;
   const err = version.error as ApiError | null;
+
+  if (err?.status === 403 || err?.code === "forbidden") {
+    return (
+      <>
+        <AgreementsNav />
+        <PermissionDenied />
+      </>
+    );
+  }
 
   return (
     <>

@@ -2,9 +2,9 @@ import { useQuery } from "@tanstack/react-query";
 import { useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 
-import { Button, Card } from "../../components/ui";
+import { Button, Card, PermissionDenied } from "../../components/ui";
 import { api } from "../../lib/api/client";
-import { unwrap } from "../../lib/api/errors";
+import { ApiError, unwrap } from "../../lib/api/errors";
 import { useSession } from "../../lib/session";
 import { DataTable, ManufacturerSelect, PagerControls, SelectField, usePager } from "../masterdata/common";
 import { AgreementsNav, useManufacturerMap } from "./common";
@@ -34,6 +34,15 @@ export function AgreementsPage() {
         }),
       ),
   });
+
+  if ((list.error as ApiError)?.status === 403) {
+    return (
+      <>
+        <AgreementsNav />
+        <PermissionDenied />
+      </>
+    );
+  }
 
   return (
     <>

@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
-import { Card, Empty, ErrorAlert, Loading } from "../../components/ui";
+import { Card, Empty, ErrorAlert, Loading, PermissionDenied } from "../../components/ui";
 import { api } from "../../lib/api/client";
 import { ApiError, unwrap } from "../../lib/api/errors";
 
@@ -29,6 +29,8 @@ export function JobsPage() {
       void client.invalidateQueries({ queryKey: ["files"] });
     },
   });
+
+  if ((failed.error as ApiError)?.status === 403) return <PermissionDenied />;
 
   return (
     <Card title="Failed background jobs">

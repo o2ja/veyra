@@ -1,7 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
 import { useStepUp } from "../../components/step-up";
-import { Card, Empty, ErrorAlert, Loading } from "../../components/ui";
+import { Card, Empty, ErrorAlert, Loading, PermissionDenied } from "../../components/ui";
 import { api } from "../../lib/api/client";
 import { ApiError, unwrap } from "../../lib/api/errors";
 import { useSession } from "../../lib/session";
@@ -26,6 +26,8 @@ export function UsersPage() {
       ),
     onSettled: () => client.invalidateQueries({ queryKey: ["users"] }),
   });
+
+  if ((users.error as ApiError)?.status === 403) return <PermissionDenied />;
 
   return (
     <Card title="Users">

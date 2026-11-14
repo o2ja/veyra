@@ -2,7 +2,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 
 import type { components } from "../../api/schema";
-import { Alert, Button, Card, ErrorAlert, Field, Loading } from "../../components/ui";
+import { Alert, Button, Card, ErrorAlert, Field, Loading, PermissionDenied } from "../../components/ui";
 import { api } from "../../lib/api/client";
 import { ApiError, unwrap } from "../../lib/api/errors";
 import { useSession } from "../../lib/session";
@@ -11,8 +11,21 @@ type Settings = components["schemas"]["SettingsOut"];
 
 export function SettingsPage() {
   const query = useQuery({ queryKey: ["settings"], queryFn: () => unwrap(api.GET("/api/v1/settings")) });
-  if (query.isPending) return <Loading />;
-  if (!query.data) return <ErrorAlert error={query.error as ApiError | null} />;
+  if (query.isPending) {
+    return (
+      <Card title="Workspace settings">
+        <Loading />
+      </Card>
+    );
+  }
+  if (!query.data) {
+    if ((query.error as ApiError)?.status === 403) return <PermissionDenied />;
+    return (
+      <Card title="Workspace settings">
+        <ErrorAlert error={query.error as ApiError | null} />
+      </Card>
+    );
+  }
   return <SettingsForm initial={query.data} refetch={async () => (await query.refetch()).data} />;
 }
 

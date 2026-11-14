@@ -1,7 +1,7 @@
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
 
-import { Button, Card, ErrorAlert } from "../../components/ui";
+import { Button, Card, ErrorAlert, PermissionDenied } from "../../components/ui";
 import { api } from "../../lib/api/client";
 import { ApiError, unwrap } from "../../lib/api/errors";
 import { useSession } from "../../lib/session";
@@ -57,6 +57,15 @@ export function DraftsPage() {
       navigate(`/agreement-drafts/${draft.id}`);
     },
   });
+
+  if ((list.error as ApiError)?.status === 403) {
+    return (
+      <>
+        <AgreementsNav />
+        <PermissionDenied />
+      </>
+    );
+  }
 
   return (
     <>

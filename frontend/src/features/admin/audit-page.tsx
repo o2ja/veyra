@@ -1,7 +1,7 @@
 import { useInfiniteQuery } from "@tanstack/react-query";
 import { useState } from "react";
 
-import { Button, Card, Empty, ErrorAlert, Field, Loading } from "../../components/ui";
+import { Button, Card, Empty, ErrorAlert, Field, Loading, PermissionDenied } from "../../components/ui";
 import { api } from "../../lib/api/client";
 import { ApiError, unwrap } from "../../lib/api/errors";
 
@@ -41,6 +41,8 @@ export function AuditPage() {
     getNextPageParam: (last) => last.page.next_cursor,
   });
   const rows = query.data?.pages.flatMap((p) => p.data) ?? [];
+
+  if ((query.error as ApiError)?.status === 403) return <PermissionDenied />;
 
   return (
     <Card title="Audit log">

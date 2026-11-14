@@ -2,7 +2,17 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 
 import { useStepUp } from "../../components/step-up";
-import { Alert, Button, Card, Empty, ErrorAlert, Field, Loading, fieldError } from "../../components/ui";
+import {
+  Alert,
+  Button,
+  Card,
+  Empty,
+  ErrorAlert,
+  Field,
+  Loading,
+  PermissionDenied,
+  fieldError,
+} from "../../components/ui";
 import { api } from "../../lib/api/client";
 import { ApiError, unwrap } from "../../lib/api/errors";
 
@@ -35,6 +45,8 @@ export function InvitationsPage() {
     onSettled: () => client.invalidateQueries({ queryKey: ["invitations"] }),
   });
   const createError = create.error as ApiError | null;
+
+  if ((list.error as ApiError)?.status === 403) return <PermissionDenied />;
 
   return (
     <div className="flex flex-col gap-6">

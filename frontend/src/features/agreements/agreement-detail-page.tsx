@@ -3,7 +3,16 @@ import { useEffect, useRef, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 
 import type { components } from "../../api/schema";
-import { Alert, Button, Card, ErrorAlert, Field, Loading, fieldError } from "../../components/ui";
+import {
+  Alert,
+  Button,
+  Card,
+  ErrorAlert,
+  Field,
+  Loading,
+  PermissionDenied,
+  fieldError,
+} from "../../components/ui";
 import { api } from "../../lib/api/client";
 import { ApiError, unwrap } from "../../lib/api/errors";
 import { useSession } from "../../lib/session";
@@ -121,6 +130,15 @@ export function AgreementDetailPage() {
 
   const resolvedFrom = compareFrom || versionRows[1]?.id || versionRows[0]?.id || "";
   const resolvedTo = compareTo || versionRows[0]?.id || "";
+
+  if (agreementErr?.status === 403 || agreementErr?.code === "forbidden") {
+    return (
+      <>
+        <AgreementsNav />
+        <PermissionDenied />
+      </>
+    );
+  }
 
   return (
     <>
