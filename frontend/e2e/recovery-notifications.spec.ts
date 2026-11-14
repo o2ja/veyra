@@ -46,7 +46,11 @@ test("S9 notifications: unread/all list, mark read, axe on queue, case and notif
     }
 
     await page.getByLabel("Unread only").uncheck();
-    const all = await apiJson<{ data: unknown[] }>(page, "GET", "/api/v1/notifications?unread=false&limit=50");
+    const all = await apiJson<{ data: unknown[] }>(
+      page,
+      "GET",
+      "/api/v1/notifications?unread=false&limit=50",
+    );
     await expect(card.getByRole("listitem")).toHaveCount(all.data.length);
     if (all.data.length === 0) await expect(card.getByText("No notifications yet.")).toBeVisible();
     await expectNoA11yViolations(page, "/notifications (all)");

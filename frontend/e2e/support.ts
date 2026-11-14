@@ -610,9 +610,7 @@ export async function bootstrapRecovery(
     .flatMap((line) => (line.variance ? [line.variance] : []))
     .map((v) => `${v.case_type}|${v.reason_code}|${v.amount}`)
     .sort();
-  const actualCases = cases.data
-    .map((c) => `${c.case_type}|${c.reason_code}|${c.variance_amount}`)
-    .sort();
+  const actualCases = cases.data.map((c) => `${c.case_type}|${c.reason_code}|${c.variance_amount}`).sort();
   expect(actualCases).toEqual(expectedCases);
 
   return {

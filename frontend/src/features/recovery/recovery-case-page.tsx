@@ -383,9 +383,7 @@ export function RecoveryCasePage() {
           )}
           {proposalMine && item?.status !== "written_off" && (
             <div className="mb-4">
-              <Alert tone="info">
-                You proposed this write-off. A different approver must complete it.
-              </Alert>
+              <Alert tone="info">You proposed this write-off. A different approver must complete it.</Alert>
             </div>
           )}
           {actionMsg && (
