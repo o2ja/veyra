@@ -23,6 +23,7 @@ from contextlib import ExitStack
 from datetime import UTC, datetime
 from decimal import Decimal
 from pathlib import Path
+from typing import Any
 
 import pytest
 from fastapi import FastAPI
@@ -62,7 +63,7 @@ class _RssSampler:
         self.peak = max(self.peak, _rss_now_mb())
 
 
-def _explain(admin: Engine, label: str, statements: list[tuple[str, object]]) -> None:
+def _explain(admin: Engine, label: str, statements: list[tuple[str, Any]]) -> None:
     seen: set[str] = set()
     for sql, params in statements:
         if sql in seen or not sql.lstrip().upper().startswith(("SELECT", "WITH")):
