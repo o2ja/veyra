@@ -1,5 +1,9 @@
 import type { components } from "../../api/schema";
 
+export type AccrualList = components["schemas"]["AccrualList"];
+export type AccrualOut = components["schemas"]["AccrualOut"];
+export type AdjustmentList = components["schemas"]["AdjustmentList"];
+export type AdjustmentOut = components["schemas"]["AdjustmentOut"];
 export type BatchExportIn = components["schemas"]["BatchExportIn"];
 export type BatchFilter = components["schemas"]["BatchFilter"];
 export type BatchIn = components["schemas"]["BatchIn"];
@@ -23,11 +27,57 @@ export type OptionsIn = components["schemas"]["OptionsIn"];
 
 export const BATCH_STATUSES = ["draft", "approved", "submitted", "void"] as const;
 
+export const JOB_STATUSES = ["queued", "running", "succeeded", "failed"] as const;
+export type JobStatus = (typeof JOB_STATUSES)[number];
+
+export function isJobActive(status: string | null | undefined): boolean {
+  return status === "queued" || status === "running" || status === "pending";
+}
+
+export function isJobTerminal(status: string | null | undefined): boolean {
+  return status === "succeeded" || status === "failed";
+}
+
+export function getJobRefetchInterval(status: string | null | undefined, intervalMs = 2000): number | false {
+  if (isJobTerminal(status)) return false;
+  if (isJobActive(status)) return intervalMs;
+  return false;
+}
+
 export const BATCH_STATUS_LABELS: Record<string, string> = {
   draft: "Draft",
   approved: "Approved",
   submitted: "Submitted",
   void: "Void",
+};
+
+export const ADJUSTMENT_TYPES = [
+  "return_reversal",
+  "agreement_change",
+  "manual_correction",
+  "rebate_clawback",
+  "recovery_reclaim",
+] as const;
+
+export type AdjustmentType = (typeof ADJUSTMENT_TYPES)[number];
+
+export const ADJUSTMENT_TYPE_LABELS: Record<string, string> = {
+  return_reversal: "Return reversal",
+  agreement_change: "Agreement change",
+  manual_correction: "Manual correction",
+  rebate_clawback: "Rebate clawback",
+  recovery_reclaim: "Recovery reclaim",
+};
+
+export const ADJUSTMENT_STATUSES = ["proposed", "approved", "included", "rejected"] as const;
+
+export type AdjustmentStatus = (typeof ADJUSTMENT_STATUSES)[number];
+
+export const ADJUSTMENT_STATUS_LABELS: Record<string, string> = {
+  proposed: "Proposed",
+  approved: "Approved",
+  included: "Included",
+  rejected: "Rejected",
 };
 
 /**
@@ -37,17 +87,20 @@ export const BATCH_STATUS_LABELS: Record<string, string> = {
 export function formatDecimal(value: string | null | undefined): string {
   if (value === null || value === undefined || value === "") return "—";
   const trimmed = value.trim();
-  const match = /^(-?)(\d+)(\.\d+)?$/.exec(trimmed);
-  if (!match) return trimmed;
-  const [, sign, intPart, fracPart] = match;
-  const grouped = (intPart ?? "").replace(/\B(?=(\d{3})+(?!\d))/g, ",");
-  return `${sign ?? ""}${grouped}${fracPart ?? ""}`;
+  const sign = trimmed.startsWith("-") ? "-" : "";
+  const [intPart = "", fracPart, extra] = (sign ? trimmed.slice(1) : trimmed).split(".");
+  const digits = (s: string) => s !== "" && [...s].every((c) => c >= "0" && c <= "9");
+  if (extra !== undefined || !digits(intPart) || (fracPart !== undefined && !digits(fracPart)))
+    return trimmed;
+  const grouped = BigInt(intPart).toLocaleString("en-US"); // exact digit grouping, no float
+  return `${sign}${grouped}${fracPart === undefined ? "" : `.${fracPart}`}`;
 }
 
 export type SourceKind = "text" | "int" | "date" | "decimal";
 
 export const TEMPLATE_SOURCES: { name: string; kind: SourceKind; label: string }[] = [
   // text
+  { name: "line_type", kind: "text", label: "Line type" },
   { name: "claim_reference", kind: "text", label: "Claim reference" },
   { name: "batch_number", kind: "text", label: "Batch number" },
   { name: "manufacturer_code", kind: "text", label: "Manufacturer code" },

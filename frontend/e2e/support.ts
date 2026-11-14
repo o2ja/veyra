@@ -621,3 +621,8 @@ export async function bootstrapRecovery(
     contexts,
   };
 }
+
+/** Value cell of the "Status" term on a claim batch detail page. */
+export function batchStatus(page: Page) {
+  return page.locator("dt", { hasText: /^Status$/ }).locator("xpath=following-sibling::dd");
+}

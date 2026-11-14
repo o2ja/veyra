@@ -185,6 +185,7 @@ def _fail_known(c: RequestContext, user: User, *, mfa_stage: bool) -> None:
 
 
 def login(c: RequestContext, *, email: str, password: str) -> LoginResult:
+    ratelimit.hit(c.db, f"login:ip:{c.ip}", limit=c.settings.login_ip_limit_per_minute, window_seconds=60)
     ratelimit.hit(
         c.db, f"login:{_hkey(c, 'login', f'{c.ip}|{email_key(email)}')}", limit=5, window_seconds=60
     )

@@ -105,6 +105,7 @@ test("S5 calculations: run, completion, exception filter, result trace, propose 
   await approverPage.getByLabel("Your name").fill("Calc Approver");
   await approverPage.getByLabel("Password").fill(PASSWORD);
   await approverPage.getByRole("button", { name: "Accept invitation" }).click();
+  await expect(approverPage).toHaveURL(/\/login\?reason=invited/);
   await signIn(approverPage, approver);
   await enrolMfa(approverPage);
 
