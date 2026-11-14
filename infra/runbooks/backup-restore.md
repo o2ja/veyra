@@ -71,7 +71,11 @@ These numbers are for a ~1 MB dataset and say nothing about production volumes: 
 real-sized data (synthetic, at scale) before relying on the 4 h RTO. Not covered by the drill: encryption of the
 off-host copy, WAL replay, the isolation suite against the restored database (run it as part of the monthly drill).
 
-## WAL archiving / PITR (configuration to apply on the production Postgres; not executed)
+## WAL archiving / PITR
+
+**Superseded by `pitr-restore-drill.md`** (S11.6): `compose.prod.yml` now configures archiving and `infra/scripts/ops/pitr-*.sh`
+do base backups and restores using only the Postgres image's tools. Still configuration only, never executed. The pgBackRest
+sketch below is the alternative if the owner wants repository-managed retention and compression.
 
 Self-run Postgres (OD-3 option a). Recommended tool: pgBackRest (or WAL-G) to object storage in a separate account.
 The compose `postgres` service needs a custom image or a mounted config with pgBackRest installed; decide at host

@@ -60,10 +60,26 @@ services:
     cap_drop: ["ALL"]
     cap_add: ["CHOWN", "DAC_OVERRIDE", "FOWNER", "SETGID", "SETUID"]
     shm_size: 256m
+    # Continuous WAL archiving for point-in-time recovery (runbooks/pitr-restore-drill.md). Self-managed Postgres only:
+    # if OD-3 picks a managed Postgres, delete this `command`, the `wal_archive` volume + mount, and use the provider's PITR.
+    # archive_command copies each completed segment atomically (never overwrites a different file); archive_timeout
+    # forces a segment switch every 5 min, which bounds the RPO (target 15 min). Changing these needs a postgres restart.
+    # The archive volume is on the SAME host: sync it off-host to a separate account (runbook) or it is not a backup.
+    command:
+      - postgres
+      - -c
+      - wal_level=replica
+      - -c
+      - archive_mode=on
+      - -c
+      - archive_timeout=300
+      - -c
+      - archive_command=sh /opt/rebate-scripts/ops/wal-archive.sh %p %f
     volumes:
       - pgdata:/var/lib/postgresql/data
       - ../scripts:/opt/rebate-scripts:ro
       - backups:/backups
+      - wal_archive:/wal_archive
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U postgres"]
       interval: 10s
@@ -207,6 +223,7 @@ networks:
 volumes:
   pgdata:
   seaweeddata:
+  wal_archive:  # completed WAL segments (PITR); owned by the postgres uid (runbook first-time step)
   clamdb:
   caddy_data:
   caddy_config:

@@ -14,7 +14,7 @@ on staff change and immediately on suspected leak (then also follow `incident-te
 | `SEAWEEDFS_SSE_KEY` | Do NOT change on a populated store: objects written under the old key become unreadable. A rotation needs a re-encrypting copy into a new store; plan it as a migration | |
 | `GEMINI_API_KEY` / `ANTHROPIC_API_KEY` / `OPENROUTER_API_KEY` | Generate new key at Google AI Studio / Anthropic Console / OpenRouter (Settings, Keys), update `.env.prod`, `$C up -d api worker`, verify extraction smoke test, revoke old key at provider | Active calls during reload fail and retry; queued jobs pick up the new key |
 | SMTP credentials | Rotate at the provider, update `.env.prod`, `$C up -d worker` | |
-| Cloudflare / registry / backup-storage credentials | Rotate at the provider; update the cron/CI that uses them | |
+| Cloudflare / registry / backup-storage credentials (incl. the off-host copy of `wal_archive` and PITR base backups, `pitr-restore-drill.md`; WAL and base backups hold every tenant's data in clear unless encrypted before upload; no new secret is stored in `.env.prod` for PITR) | Rotate at the provider; update the cron/CI that uses them | |
 
 After rotating: smoke tests from `deploy-rollback.md`, then record the date and which secrets in the ops log. If a
 secret may have been exposed, also revoke sessions:
