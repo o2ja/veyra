@@ -507,7 +507,7 @@ class Gateway:
             sleep=self._sleep,
             reraise=True,
         )
-        return retrying(  # type: ignore[no-any-return]
+        return retrying(
             self.provider.complete,
             model=model,
             system=system,
