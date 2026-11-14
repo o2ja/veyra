@@ -404,7 +404,7 @@ def summary(db: Session, tenant_id: UUID) -> dict[str, Any]:
 
     at_risk = db.execute(
         text(
-            f"SELECT count(*), COALESCE(sum({REMAINING}), 0) FROM variance_cases v "  # noqa: S608  (module constants)
+            f"SELECT count(*), COALESCE(sum({REMAINING}), 0) FROM variance_cases v "  # noqa: S608  (module constants)  # nosec B608 (module constants and fixed column names; every value is a bound parameter)
             f"WHERE v.tenant_id = :t AND {AT_RISK_WHERE}"
         ),
         {"t": tenant_id, "as_of": business_today(db, tenant_id)},

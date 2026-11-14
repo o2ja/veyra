@@ -44,7 +44,7 @@ _ADJ = """
                     USING ERRCODE = 'restrict_violation';
             END IF;
             IF NEW.status = 'included' THEN
-""".replace("@ALLOWED@", _ALLOWED.format(r="NEW"))
+""".replace("@ALLOWED@", _ALLOWED.format(r="NEW"))  # nosec B608 (module constants and fixed column names; every value is a bound parameter)
 
 
 def _patch(fn: str, old: str, new: str) -> None:
