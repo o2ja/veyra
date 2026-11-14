@@ -37,13 +37,18 @@ function LineageCell({ l }: { l: Lineage }) {
 
 function LinesNav() {
   return (
-    <nav aria-label="Line type" className="mb-6 flex gap-4 text-sm">
+    <nav
+      aria-label="Line type"
+      className="mb-6 flex w-fit max-w-full flex-wrap gap-1 rounded-xl border border-line bg-panel p-1 text-sm shadow-card"
+    >
       {(["sales", "purchases"] as const).map((k) => (
         <NavLink
           key={k}
           to={`/lines/${k}`}
           className={({ isActive }) =>
-            isActive ? "font-medium underline underline-offset-4" : "text-muted hover:text-ink"
+            isActive
+              ? "rounded-lg bg-brand px-3 py-1.5 font-medium text-panel"
+              : "rounded-lg px-3 py-1.5 text-muted hover:bg-brand-soft hover:text-ink"
           }
         >
           {k === "sales" ? "Sales lines" : "Purchase lines"}

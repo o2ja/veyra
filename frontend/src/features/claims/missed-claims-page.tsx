@@ -364,23 +364,23 @@ export function MissedClaimsPage() {
             summary.data && (
               <div className="flex flex-col gap-6">
                 <dl className="grid gap-3 text-sm sm:grid-cols-2 lg:grid-cols-4">
-                  <div className="rounded border border-line p-3">
+                  <div className="rounded-lg border border-line p-3">
                     <dt className="text-muted">Total claimable lines</dt>
                     <dd className="font-mono text-lg font-semibold">{summary.data.totals.lines}</dd>
                   </div>
-                  <div className="rounded border border-line p-3">
+                  <div className="rounded-lg border border-line p-3">
                     <dt className="text-muted">Total claimable amount</dt>
                     <dd className="font-mono text-lg font-semibold text-ok">
                       {formatDecimal(summary.data.totals.amount)}
                     </dd>
                   </div>
-                  <div className="rounded border border-line p-3">
+                  <div className="rounded-lg border border-line p-3">
                     <dt className="text-muted">Lost to expiry (lines)</dt>
                     <dd className="font-mono text-lg font-semibold text-danger">
                       {summary.data.lost_to_expiry.lines}
                     </dd>
                   </div>
-                  <div className="rounded border border-line p-3">
+                  <div className="rounded-lg border border-line p-3">
                     <dt className="text-muted">Lost to expiry (amount)</dt>
                     <dd className="font-mono text-lg font-semibold text-danger">
                       {formatDecimal(summary.data.lost_to_expiry.amount)}

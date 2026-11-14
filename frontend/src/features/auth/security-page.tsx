@@ -95,7 +95,7 @@ function RecoveryCodes() {
           </Alert>
           <ol className="mt-3 grid max-w-md grid-cols-2 gap-2 font-mono text-sm">
             {codes.map((c) => (
-              <li key={c} className="rounded border border-line px-2 py-1">
+              <li key={c} className="rounded-lg border border-line px-2 py-1">
                 {c}
               </li>
             ))}

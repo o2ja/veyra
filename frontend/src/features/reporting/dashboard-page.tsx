@@ -17,6 +17,95 @@ import {
   type MetricKey,
 } from "./logic";
 
+const TONE: Record<string, string> = {
+  collected: "text-ok",
+  recovered: "text-ok",
+  short_paid: "text-warn",
+  at_risk: "text-warn",
+  expiring: "text-warn",
+  written_off: "text-danger",
+};
+
+/** Paired bars (claimed vs collected) per month. Pure SVG; values come straight from the API. */
+function MonthlyChart({
+  months,
+}: {
+  months: { month: string; figures: { claimed: string; collected: string } }[];
+}) {
+  const rows = months.map((m) => ({
+    month: m.month,
+    claimed: Number(m.figures.claimed),
+    collected: Number(m.figures.collected),
+  }));
+  const max = Math.max(...rows.flatMap((r) => [r.claimed, r.collected]), 0);
+  if (rows.length < 2 || max <= 0) return null;
+  const W = 720;
+  const H = 220;
+  const pad = { l: 8, r: 8, t: 12, b: 28 };
+  const slot = (W - pad.l - pad.r) / rows.length;
+  const bw = Math.min(26, slot / 2.6);
+  const y = (v: number) => pad.t + (H - pad.t - pad.b) * (1 - v / max);
+  return (
+    <Card
+      title="Claimed vs collected by month"
+      actions={
+        <span className="flex items-center gap-4 text-xs text-muted">
+          <span className="flex items-center gap-1.5">
+            <i className="size-2.5 rounded-sm bg-brand" aria-hidden="true" />
+            Claimed
+          </span>
+          <span className="flex items-center gap-1.5">
+            <i className="size-2.5 rounded-sm bg-ok" aria-hidden="true" />
+            Collected
+          </span>
+        </span>
+      }
+    >
+      <svg
+        viewBox={`0 0 ${W} ${H}`}
+        role="img"
+        aria-label={`Claimed and collected per month, ${rows.length} months. The table below lists the same figures.`}
+        className="h-auto w-full"
+      >
+        <line
+          x1={pad.l}
+          x2={W - pad.r}
+          y1={H - pad.b}
+          y2={H - pad.b}
+          stroke="currentColor"
+          className="text-line"
+        />
+        {rows.map((r, i) => {
+          const cx = pad.l + slot * i + slot / 2;
+          return (
+            <g key={r.month}>
+              <rect
+                x={cx - bw - 1}
+                y={y(r.claimed)}
+                width={bw}
+                height={H - pad.b - y(r.claimed)}
+                rx={3}
+                className="fill-brand"
+              />
+              <rect
+                x={cx + 1}
+                y={y(r.collected)}
+                width={bw}
+                height={H - pad.b - y(r.collected)}
+                rx={3}
+                className="fill-ok"
+              />
+              <text x={cx} y={H - 9} textAnchor="middle" className="fill-muted text-[11px]">
+                {r.month.slice(0, 7)}
+              </text>
+            </g>
+          );
+        })}
+      </svg>
+    </Card>
+  );
+}
+
 export function DashboardPage() {
   const { can } = useSession();
   const client = useQueryClient();
@@ -171,8 +260,11 @@ export function DashboardPage() {
         {/* Header + Refresh action */}
         <div className="flex flex-wrap items-center justify-between gap-4">
           <div>
-            <h1 className="font-semibold text-2xl text-ink">Dashboard</h1>
-            <p className="text-muted text-xs">
+            <h1 className="font-semibold text-2xl tracking-tight text-ink">Dashboard</h1>
+            <p className="mt-1 max-w-xl text-muted text-sm">
+              Money claimed, collected and still at risk. Select any figure to see the rows behind it.
+            </p>
+            <p className="mt-1 text-muted text-xs">
               As of <span className="font-mono">{d.as_of}</span>
               {d.as_of_date && (
                 <>
@@ -229,7 +321,7 @@ export function DashboardPage() {
                   // sends YYYY-MM-01
                   updateFilter("month", val ? `${val}-01` : "");
                 }}
-                className="rounded border border-line bg-surface p-2 text-sm font-mono"
+                className="rounded-lg border border-line bg-surface p-2 text-sm font-mono"
               />
             </div>
           </div>
@@ -249,18 +341,20 @@ export function DashboardPage() {
                 <div key={key} className="flex flex-col">
                   <Link
                     to={to}
-                    className="group flex flex-col justify-between rounded-lg border border-line bg-panel p-5 transition hover:border-ink/50 hover:shadow-sm"
+                    className="group flex h-full flex-col justify-between rounded-xl border border-line bg-panel p-5 shadow-card transition hover:border-brand/50"
                   >
                     <div>
                       <div className="flex items-center justify-between">
-                        <span className="font-medium text-muted text-xs uppercase tracking-wide">
-                          {label}
-                        </span>
+                        <span className="font-medium text-muted text-sm">{label}</span>
                         <span aria-hidden="true" className="text-muted text-xs group-hover:text-ink">
                           ↗
                         </span>
                       </div>
-                      <p className="mt-2 font-mono font-semibold text-2xl text-ink">{formatted}</p>
+                      <p
+                        className={`mt-2 font-mono font-semibold text-3xl tracking-tight ${Number(val) === 0 ? "text-ink" : (TONE[key] ?? "text-ink")}`}
+                      >
+                        {formatted}
+                      </p>
                     </div>
                     {desc && <p className="mt-2 text-muted text-xs leading-relaxed">{desc}</p>}
                   </Link>
@@ -269,11 +363,11 @@ export function DashboardPage() {
                   {key === "written_off" && hasRecoveredAfterWriteOff && (
                     <Link
                       to={drilldownUrl("recovered_after_write_off")}
-                      className="group mt-4 flex flex-col justify-between rounded-lg border border-line bg-panel p-5 transition hover:border-ink/50 hover:shadow-sm"
+                      className="group mt-4 flex flex-col justify-between rounded-xl border border-line bg-panel p-5 shadow-card transition hover:border-brand/50"
                     >
                       <div>
                         <div className="flex items-center justify-between">
-                          <span className="font-medium text-muted text-xs uppercase tracking-wide">
+                          <span className="font-medium text-muted text-sm">
                             {METRIC_LABELS.recovered_after_write_off}
                           </span>
                           <span aria-hidden="true" className="text-muted text-xs group-hover:text-ink">
@@ -294,6 +388,9 @@ export function DashboardPage() {
             })}
           </div>
         </section>
+
+        {/* Claimed vs collected, per month, from the same monthly figures as the table below */}
+        <MonthlyChart months={d.months} />
 
         {/* Monthly table */}
         <Card title={`Monthly breakdown (${d.months.length} months)`}>

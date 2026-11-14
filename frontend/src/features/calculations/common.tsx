@@ -33,14 +33,19 @@ const SECTIONS = [
 
 export function CalculationsNav() {
   return (
-    <nav aria-label="Calculations" className="mb-6 flex flex-wrap gap-4 text-sm">
+    <nav
+      aria-label="Calculations"
+      className="mb-6 flex w-fit max-w-full flex-wrap gap-1 rounded-xl border border-line bg-panel p-1 text-sm shadow-card"
+    >
       {SECTIONS.map((s) => (
         <NavLink
           key={s.to}
           to={s.to}
           end={s.end}
           className={({ isActive }) =>
-            isActive ? "font-medium text-ink underline underline-offset-4" : "text-muted hover:text-ink"
+            isActive
+              ? "rounded-lg bg-brand px-3 py-1.5 font-medium text-panel"
+              : "rounded-lg px-3 py-1.5 text-muted hover:bg-brand-soft hover:text-ink"
           }
         >
           {s.label}
@@ -62,7 +67,7 @@ export function KeyValueGrid({
   return (
     <dl className="grid gap-3 text-sm sm:grid-cols-2 lg:grid-cols-3">
       {entries.map((entry) => (
-        <div key={entry.key} className="rounded border border-line bg-surface/50 px-3 py-2">
+        <div key={entry.key} className="rounded-lg border border-line bg-surface/50 px-3 py-2">
           <dt className="text-xs text-muted break-all">{entry.key}</dt>
           <dd className="mt-0.5 font-mono text-xs break-all">{entry.value}</dd>
         </div>

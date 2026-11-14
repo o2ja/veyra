@@ -20,13 +20,18 @@ const SECTIONS = [
 export function ClaimsNav() {
   const { can } = useSession();
   return (
-    <nav aria-label="Claims" className="mb-6 flex flex-wrap gap-4 text-sm">
+    <nav
+      aria-label="Claims"
+      className="mb-6 flex w-fit max-w-full flex-wrap gap-1 rounded-xl border border-line bg-panel p-1 text-sm shadow-card"
+    >
       {SECTIONS.filter((s) => can(s.permission)).map((s) => (
         <NavLink
           key={s.to}
           to={s.to}
           className={({ isActive }) =>
-            isActive ? "font-medium text-ink underline underline-offset-4" : "text-muted hover:text-ink"
+            isActive
+              ? "rounded-lg bg-brand px-3 py-1.5 font-medium text-panel"
+              : "rounded-lg px-3 py-1.5 text-muted hover:bg-brand-soft hover:text-ink"
           }
         >
           {s.label}
@@ -108,7 +113,7 @@ export function ConfirmDialog({
     <Dialog.Root open={open} onOpenChange={onOpenChange}>
       <Dialog.Portal>
         <Dialog.Overlay className="fixed inset-0 z-40 bg-black/40" />
-        <Dialog.Content className="fixed left-1/2 top-1/3 z-50 w-[min(32rem,92vw)] -translate-x-1/2 rounded-lg border border-line bg-panel p-6 shadow-lg">
+        <Dialog.Content className="fixed left-1/2 top-1/3 z-50 w-[min(32rem,92vw)] -translate-x-1/2 rounded-xl border border-line bg-panel shadow-card p-6 shadow-lg">
           <Dialog.Title className="text-lg font-semibold">{title}</Dialog.Title>
           {description && (
             <Dialog.Description className="mt-1 text-sm text-muted">{description}</Dialog.Description>

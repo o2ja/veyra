@@ -41,7 +41,7 @@ export function MfaSetupPage() {
         </Alert>
         <ol className="mt-4 grid grid-cols-2 gap-2 font-mono text-sm" aria-label="Recovery codes">
           {codes.map((c) => (
-            <li key={c} className="rounded border border-line px-2 py-1">
+            <li key={c} className="rounded-lg border border-line px-2 py-1">
               {c}
             </li>
           ))}

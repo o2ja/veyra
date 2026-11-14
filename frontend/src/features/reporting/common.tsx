@@ -15,13 +15,20 @@ const NAV_ITEMS = [
 
 export function ReportingNav() {
   return (
-    <nav aria-label="Reporting navigation" className="mb-6 flex gap-4 border-b border-line pb-3 text-sm">
+    <nav
+      aria-label="Reporting navigation"
+      className="mb-6 flex w-fit max-w-full flex-wrap gap-1 rounded-xl border border-line bg-panel p-1 text-sm shadow-card"
+    >
       {NAV_ITEMS.map((item) => (
         <NavLink
           key={item.to}
           to={item.to}
           end={item.to === "/dashboard"}
-          className={({ isActive }) => (isActive ? "font-semibold text-ink" : "text-muted hover:text-ink")}
+          className={({ isActive }) =>
+            isActive
+              ? "rounded-lg bg-brand px-3 py-1.5 font-medium text-panel"
+              : "rounded-lg px-3 py-1.5 text-muted hover:bg-brand-soft hover:text-ink"
+          }
         >
           {item.label}
         </NavLink>
@@ -86,7 +93,7 @@ export function BranchSelect({
         value={value}
         onChange={(e) => onChange(e.target.value)}
         disabled={disabled}
-        className="rounded border border-line bg-surface p-2 text-sm"
+        className="rounded-lg border border-line bg-surface p-2 text-sm"
       >
         <option value="">All branches</option>
         {(query.data?.data ?? []).map((b) => (
@@ -103,7 +110,7 @@ export function TraceNodeCard({ node }: { node: TraceNode }) {
   const fields = formatFields(node.fields);
 
   return (
-    <div className="rounded-lg border border-line bg-panel p-4">
+    <div className="rounded-xl border border-line bg-panel shadow-card p-4">
       <div className="flex flex-wrap items-baseline justify-between gap-2 border-b border-line pb-2">
         <h3 className="font-semibold text-sm text-ink">{node.label}</h3>
         <span className="rounded bg-surface px-2 py-0.5 font-mono text-xs text-muted">{node.kind}</span>

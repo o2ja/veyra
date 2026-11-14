@@ -14,14 +14,19 @@ const SECTIONS = [
 
 export function RecoveryNav() {
   return (
-    <nav aria-label="Recovery" className="mb-6 flex flex-wrap gap-4 text-sm">
+    <nav
+      aria-label="Recovery"
+      className="mb-6 flex w-fit max-w-full flex-wrap gap-1 rounded-xl border border-line bg-panel p-1 text-sm shadow-card"
+    >
       {SECTIONS.map((section) => (
         <NavLink
           key={section.to}
           to={section.to}
           end={section.end}
           className={({ isActive }) =>
-            isActive ? "font-medium text-ink underline underline-offset-4" : "text-muted hover:text-ink"
+            isActive
+              ? "rounded-lg bg-brand px-3 py-1.5 font-medium text-panel"
+              : "rounded-lg px-3 py-1.5 text-muted hover:bg-brand-soft hover:text-ink"
           }
         >
           {section.label}
@@ -59,7 +64,7 @@ export function ActionDialog({
     <Dialog.Root open={open} onOpenChange={onOpenChange}>
       <Dialog.Portal>
         <Dialog.Overlay className="fixed inset-0 z-40 bg-black/40" />
-        <Dialog.Content className="fixed left-1/2 top-1/3 z-50 w-[min(34rem,92vw)] -translate-x-1/2 rounded-lg border border-line bg-panel p-6 shadow-lg">
+        <Dialog.Content className="fixed left-1/2 top-1/3 z-50 w-[min(34rem,92vw)] -translate-x-1/2 rounded-xl border border-line bg-panel shadow-card p-6 shadow-lg">
           <Dialog.Title className="text-lg font-semibold">{title}</Dialog.Title>
           {description && (
             <Dialog.Description className="mt-1 text-sm text-muted">{description}</Dialog.Description>
