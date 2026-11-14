@@ -251,7 +251,7 @@ export function RecoveryQueuePage() {
                             className="font-medium text-brand underline after:absolute after:inset-0 after:content-['']"
                           >
                             {item.deadline_unknown ? (
-                              <span className="rounded border border-line px-1.5 py-0.5 text-xs font-medium">
+                              <span className="rounded-lg border border-line px-1.5 py-0.5 text-xs font-medium">
                                 Unknown deadline
                               </span>
                             ) : (
@@ -276,7 +276,11 @@ export function RecoveryQueuePage() {
                         </td>
                         <td className="py-2 pr-4 font-mono">{amountText(item.variance_amount)}</td>
                         <td className="py-2 pr-4 font-mono">{amountText(item.recovered_amount)}</td>
-                        <td className="py-2 pr-4">{statusLabel(item.status)}</td>
+                        <td className="py-2 pr-4">
+                          <span className="inline-flex items-center rounded-full bg-brand-soft px-2.5 py-0.5 text-xs font-medium text-brand">
+                            {statusLabel(item.status)}
+                          </span>
+                        </td>
                         <td className="py-2 pr-4">{ownerText(item.owner_user_id, me?.user.id)}</td>
                       </tr>
                     );

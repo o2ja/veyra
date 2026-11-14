@@ -256,7 +256,16 @@ export function RunsPage() {
               {
                 header: "Status",
                 cell: (r) => (
-                  <span className={r.status === "failed" ? "font-medium text-danger" : "font-medium"}>
+                  <span
+                    className={
+                      "inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium " +
+                      (r.status === "failed"
+                        ? "bg-danger-soft text-danger"
+                        : r.status === "completed"
+                          ? "bg-ok-soft text-ok"
+                          : "bg-brand-soft text-brand")
+                    }
+                  >
                     {RUN_STATUS_LABELS[r.status] ?? r.status}
                   </span>
                 ),

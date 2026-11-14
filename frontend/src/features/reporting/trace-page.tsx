@@ -158,7 +158,7 @@ export function TracePage() {
                       {index + 1}
                     </span>
 
-                    <div className="rounded-lg border border-line bg-panel p-4 shadow-sm">
+                    <div className="rounded-xl border border-line bg-panel shadow-card p-4 shadow-sm">
                       <div className="flex flex-wrap items-baseline justify-between gap-2 border-b border-line pb-2">
                         <div className="flex items-center gap-2">
                           <h2 className="font-semibold text-sm text-ink">{node.label}</h2>

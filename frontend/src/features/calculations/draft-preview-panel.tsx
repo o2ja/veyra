@@ -94,7 +94,7 @@ export function DraftPreviewPanel({ draftId }: { draftId: string }) {
             </div>
 
             {preview.data.accrual && (
-              <div className="rounded border border-line p-3">
+              <div className="rounded-lg border border-line p-3">
                 <h2 className="mb-2 text-sm font-semibold">Accrual preview</h2>
                 <dl className="grid gap-3 text-sm sm:grid-cols-3">
                   <div>

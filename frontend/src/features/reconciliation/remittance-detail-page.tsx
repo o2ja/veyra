@@ -658,7 +658,7 @@ export function RemittanceDetailPage() {
         {r.status === "accepted" && (
           <div className="flex flex-col gap-6">
             {isJobFailed && (
-              <div role="alert" className="rounded border border-line bg-surface/50 p-4 text-sm">
+              <div role="alert" className="rounded-lg border border-line bg-surface/50 p-4 text-sm">
                 <Alert tone="danger">
                   Matching failed:{" "}
                   {(jobQuery.data as { error?: string | null })?.error ?? "Matching job failed"}
@@ -667,7 +667,7 @@ export function RemittanceDetailPage() {
             )}
 
             {isMatching && (
-              <div className="rounded border border-line bg-surface/50 p-4 text-sm">
+              <div className="rounded-lg border border-line bg-surface/50 p-4 text-sm">
                 <div className="flex items-center gap-2">
                   <Loading />
                   <span className="font-medium">Matching remittance lines…</span>
@@ -731,13 +731,13 @@ export function RemittanceDetailPage() {
                       key={row.line.id}
                       role="region"
                       aria-label={`Remittance line ${row.line.line_number}`}
-                      className="flex flex-col gap-3 rounded-lg border border-line bg-panel p-4"
+                      className="flex flex-col gap-3 rounded-xl border border-line bg-panel shadow-card p-4"
                     >
                       {/* Remittance line info */}
                       <div className="flex flex-wrap items-center justify-between gap-2 border-b border-line pb-2 text-sm">
                         <div className="flex items-center gap-3">
                           <span className="font-mono font-bold">Line #{row.line.line_number}</span>
-                          <span className="rounded border border-line px-2 py-0.5 text-xs font-semibold uppercase">
+                          <span className="rounded-lg border border-line px-2 py-0.5 text-xs font-semibold uppercase">
                             {RECONCILIATION_STATE_LABELS[row.state]}
                           </span>
                           {row.line.claim_reference && (
@@ -783,13 +783,16 @@ export function RemittanceDetailPage() {
                             Suggestions & Matches
                           </h2>
                           {row.matches.map((m: MatchOut) => (
-                            <div key={m.id} className="rounded border border-line bg-surface/40 p-3 text-xs">
+                            <div
+                              key={m.id}
+                              className="rounded-lg border border-line bg-surface/40 p-3 text-xs"
+                            >
                               <div className="flex flex-wrap items-center justify-between gap-2">
                                 <div className="flex items-center gap-2">
                                   <span className="font-semibold text-brand">
                                     {MATCH_METHOD_LABELS[m.method] ?? m.method}
                                   </span>
-                                  <span className="rounded border border-line px-1.5 py-0.5 text-[10px] font-medium capitalize">
+                                  <span className="rounded-lg border border-line px-1.5 py-0.5 text-[10px] font-medium capitalize">
                                     {m.status}
                                   </span>
                                   {m.score && <span className="font-mono text-muted">Score: {m.score}</span>}
@@ -937,7 +940,7 @@ export function RemittanceDetailPage() {
                       setSelectedAdjustmentId("");
                       batchLinesPager.reset();
                     }}
-                    className="rounded border border-line bg-surface p-2 text-xs"
+                    className="rounded-lg border border-line bg-surface p-2 text-xs"
                   >
                     <option value="">Select a batch…</option>
                     {(batchesQuery.data?.data ?? []).map((b) => (
@@ -962,7 +965,7 @@ export function RemittanceDetailPage() {
                           setSelectedClaimLineId(e.target.value);
                           if (e.target.value) setSelectedAdjustmentId("");
                         }}
-                        className="rounded border border-line bg-surface p-2 text-xs font-mono"
+                        className="rounded-lg border border-line bg-surface p-2 text-xs font-mono"
                       >
                         <option value="">None / Or choose adjustment below</option>
                         {(batchLinesQuery.data?.data ?? []).map((l) => (
@@ -987,7 +990,7 @@ export function RemittanceDetailPage() {
                             setSelectedAdjustmentId(e.target.value);
                             if (e.target.value) setSelectedClaimLineId("");
                           }}
-                          className="rounded border border-line bg-surface p-2 text-xs font-mono"
+                          className="rounded-lg border border-line bg-surface p-2 text-xs font-mono"
                         >
                           <option value="">None</option>
                           {(batchAdjustmentsQuery.data?.data ?? []).map((a) => (

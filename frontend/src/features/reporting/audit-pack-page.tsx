@@ -152,7 +152,7 @@ export function AuditPackPage() {
                       setExportJobId(null);
                       setExportFileId(null);
                     }}
-                    className="rounded border border-line bg-surface p-2 text-sm font-mono"
+                    className="rounded-lg border border-line bg-surface p-2 text-sm font-mono"
                   >
                     <option value="">Select a submitted batch…</option>
                     {batches.map((b: BatchOut) => (

@@ -14,15 +14,15 @@ export function Button({
   ...props
 }: ButtonHTMLAttributes<HTMLButtonElement> & { variant?: "primary" | "secondary" | "danger" }) {
   const styles = {
-    primary: "bg-brand text-white hover:opacity-90",
-    secondary: "border border-line bg-panel hover:bg-surface",
-    danger: "bg-danger text-white hover:opacity-90",
+    primary: "bg-brand text-panel shadow-card hover:brightness-110",
+    secondary: "border border-line bg-panel shadow-card hover:bg-brand-soft",
+    danger: "bg-danger text-panel shadow-card hover:brightness-110",
   }[variant];
   return (
     <button
       type="button"
-      className={`inline-flex items-center justify-center rounded-md px-3 py-2 text-sm font-medium
-        disabled:opacity-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand
+      className={`inline-flex cursor-pointer items-center justify-center gap-2 rounded-lg px-3.5 py-2 text-sm font-medium
+        transition disabled:cursor-not-allowed disabled:opacity-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand
         ${styles} ${className}`}
       {...props}
     />
@@ -44,7 +44,7 @@ export const Field = forwardRef<HTMLInputElement, FieldProps>(function Field(
   const describedBy = [error ? `${id}-error` : null, hint ? `${id}-hint` : null].filter(Boolean).join(" ");
   return (
     <div className="flex flex-col gap-1">
-      <label htmlFor={id} className="text-sm font-medium">
+      <label htmlFor={id} className="text-sm font-medium text-ink">
         {label}
       </label>
       <input
@@ -52,8 +52,7 @@ export const Field = forwardRef<HTMLInputElement, FieldProps>(function Field(
         ref={ref}
         aria-invalid={error ? true : undefined}
         aria-describedby={describedBy || undefined}
-        className="rounded-md border border-line bg-panel px-3 py-2 text-sm
-          focus-visible:outline-2 focus-visible:outline-brand aria-[invalid=true]:border-danger"
+        className="aria-[invalid=true]:border-danger"
         {...props}
       />
       {hint && (
@@ -78,14 +77,14 @@ export function Alert({
   children: ReactNode;
 }) {
   const styles = {
-    danger: "border-danger text-danger",
-    ok: "border-ok text-ok",
-    info: "border-line text-ink",
+    danger: "border-danger/30 bg-danger-soft text-danger",
+    ok: "border-ok/30 bg-ok-soft text-ok",
+    info: "border-brand/25 bg-brand-soft text-ink",
   }[tone];
   return (
     <div
       role={tone === "danger" ? "alert" : "status"}
-      className={`rounded-md border px-3 py-2 text-sm ${styles}`}
+      className={`rounded-lg border px-3.5 py-2.5 text-sm ${styles}`}
     >
       {children}
     </div>
@@ -112,9 +111,9 @@ export function Card({
   actions?: ReactNode;
 }) {
   return (
-    <section className="rounded-lg border border-line bg-panel p-6" aria-label={title}>
-      <div className="mb-4 flex items-center justify-between gap-4">
-        <h1 className="text-lg font-semibold">{title}</h1>
+    <section className="rounded-xl border border-line bg-panel p-5 shadow-card sm:p-6" aria-label={title}>
+      <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+        <h1 className="text-lg font-semibold tracking-tight">{title}</h1>
         {actions}
       </div>
       {children}
@@ -124,14 +123,22 @@ export function Card({
 
 export function Loading({ label = "Loading…" }: { label?: string }) {
   return (
-    <p role="status" aria-live="polite" className="text-sm text-muted">
+    <div role="status" aria-live="polite" className="flex items-center gap-2.5 py-6 text-sm text-muted">
+      <span
+        aria-hidden="true"
+        className="size-4 animate-spin rounded-full border-2 border-line border-t-brand"
+      />
       {label}
-    </p>
+    </div>
   );
 }
 
 export function Empty({ children }: { children: ReactNode }) {
-  return <p className="text-sm text-muted">{children}</p>;
+  return (
+    <p className="rounded-lg border border-dashed border-line bg-surface px-4 py-6 text-center text-sm text-muted">
+      {children}
+    </p>
+  );
 }
 
 export function PermissionDenied() {
@@ -146,7 +153,10 @@ export function PermissionDenied() {
 
 export function AuthCard({ title, children }: { title: string; children: ReactNode }) {
   return (
-    <div className="mx-auto mt-12 w-full max-w-md">
+    <div className="mx-auto mt-8 w-full max-w-md sm:mt-16">
+      <p className="mb-4 text-center text-sm text-muted">
+        Veyra Recover finds and recovers the rebates manufacturers owe you.
+      </p>
       <Card title={title}>{children}</Card>
     </div>
   );
@@ -155,4 +165,44 @@ export function AuthCard({ title, children }: { title: string; children: ReactNo
 /** First server-side field error for a form field (backend validation is authoritative). */
 export function fieldError(error: ApiError | null | undefined, field: string): string | undefined {
   return error?.details.find((d) => d.field === field)?.message;
+}
+
+const TONES = {
+  ok: "bg-ok-soft text-ok",
+  warn: "bg-warn-soft text-warn",
+  danger: "bg-danger-soft text-danger",
+  info: "bg-brand-soft text-brand",
+  neutral: "bg-surface text-muted",
+} as const;
+
+/** Small status pill; always pairs colour with text so meaning never rests on colour alone. */
+export function Badge({ tone = "neutral", children }: { tone?: keyof typeof TONES; children: ReactNode }) {
+  return (
+    <span
+      className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium ${TONES[tone]}`}
+    >
+      {children}
+    </span>
+  );
+}
+
+/** Page title block: heading, one plain-language line saying what the page is for, and page actions. */
+export function PageHeader({
+  title,
+  description,
+  actions,
+}: {
+  title: string;
+  description?: string;
+  actions?: ReactNode;
+}) {
+  return (
+    <div className="mb-6 flex flex-wrap items-end justify-between gap-4">
+      <div className="max-w-2xl">
+        <h1 className="text-2xl font-semibold tracking-tight">{title}</h1>
+        {description && <p className="mt-1 text-sm text-muted">{description}</p>}
+      </div>
+      {actions && <div className="flex items-center gap-3">{actions}</div>}
+    </div>
+  );
 }

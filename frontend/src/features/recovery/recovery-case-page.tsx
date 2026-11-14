@@ -407,7 +407,7 @@ export function RecoveryCasePage() {
                   <dt className="text-muted">Deadline</dt>
                   <dd className="font-medium" aria-label="Case deadline">
                     {item.deadline_unknown ? (
-                      <span className="rounded border border-line px-1.5 py-0.5 text-xs font-medium">
+                      <span className="rounded-lg border border-line px-1.5 py-0.5 text-xs font-medium">
                         Unknown deadline
                       </span>
                     ) : (

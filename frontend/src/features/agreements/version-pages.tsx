@@ -163,7 +163,7 @@ export function VersionDetailPage() {
               <Card title="Rules">
                 <dl className="grid gap-2 text-sm sm:grid-cols-2 lg:grid-cols-3">
                   {flattenRulesEntries(v.rules).map((entry) => (
-                    <div key={entry.key} className="rounded border border-line px-3 py-2">
+                    <div key={entry.key} className="rounded-lg border border-line px-3 py-2">
                       <dt className="text-xs text-muted">{entry.key}</dt>
                       <dd className="font-medium">{entry.value}</dd>
                     </div>

@@ -441,14 +441,14 @@ export function ClaimBatchDetailPage() {
                 cell: (l) => {
                   if (l.frozen_at) {
                     return (
-                      <span className="rounded border border-line px-1.5 py-0.5 text-xs font-medium text-ok">
+                      <span className="rounded-lg border border-line px-1.5 py-0.5 text-xs font-medium text-ok">
                         Frozen ({utc(l.frozen_at)})
                       </span>
                     );
                   }
                   if (l.released_at) {
                     return (
-                      <span className="rounded border border-line px-1.5 py-0.5 text-xs text-muted">
+                      <span className="rounded-lg border border-line px-1.5 py-0.5 text-xs text-muted">
                         Released ({utc(l.released_at)})
                       </span>
                     );

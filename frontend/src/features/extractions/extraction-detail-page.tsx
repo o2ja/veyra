@@ -40,7 +40,7 @@ function FieldRow({
         <div className="flex flex-wrap items-center gap-2">
           <span className="font-mono text-sm font-semibold">{field.key}</span>
           {field.critical && (
-            <span className="rounded border border-line px-1.5 py-0.5 text-xs font-medium">Critical</span>
+            <span className="rounded-lg border border-line px-1.5 py-0.5 text-xs font-medium">Critical</span>
           )}
           <span
             className={`rounded border px-1.5 py-0.5 text-xs ${
@@ -92,7 +92,7 @@ function FieldRow({
 
       {expanded && (
         <div className="mt-3 grid gap-3 border-t border-line pt-3 text-xs sm:grid-cols-2">
-          <div className="rounded border border-line p-2">
+          <div className="rounded-lg border border-line p-2">
             <h3 className="font-semibold">Pass A</h3>
             {field.pass_a ? (
               <div className="mt-1 space-y-1">
@@ -106,7 +106,7 @@ function FieldRow({
               <p className="mt-1 text-muted">Not recorded.</p>
             )}
           </div>
-          <div className="rounded border border-line p-2">
+          <div className="rounded-lg border border-line p-2">
             <h3 className="font-semibold">Pass B</h3>
             {field.pass_b ? (
               <div className="mt-1 space-y-1">

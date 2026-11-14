@@ -116,10 +116,10 @@ export function ClaimBatchesPage() {
                   <span
                     className={
                       b.status === "void"
-                        ? "font-medium text-danger"
+                        ? "inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium bg-danger-soft text-danger"
                         : b.status === "submitted"
-                          ? "font-medium text-ok"
-                          : "font-medium"
+                          ? "inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium bg-ok-soft text-ok"
+                          : "inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium bg-brand-soft text-brand"
                     }
                   >
                     {BATCH_STATUS_LABELS[b.status] ?? b.status}

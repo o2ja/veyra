@@ -60,7 +60,7 @@ export function UsersPage() {
                     </label>
                     <select
                       id={`role-${u.user_id}`}
-                      className="rounded border border-line bg-panel px-2 py-1"
+                      className="rounded-lg border border-line bg-panel px-2 py-1"
                       value={u.role}
                       disabled={change.isPending}
                       onChange={(e) => change.mutate({ user_id: u.user_id, role: e.target.value as Role })}
