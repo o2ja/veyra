@@ -218,23 +218,32 @@ Legend: **R** = roles allowed (A admin, P approver, N analyst, V viewer). Writes
 |---|---|---|
 | `GET /cases` | Queue; filters `status`, `manufacturer_id`, `owner_user_id`, `deadline_before`, `reason_code`; sort by deadline | all |
 | `GET /cases/summary` | Totals by status/reason, at-risk | all |
-| `GET /cases/{id}`, `GET /cases/{id}/events` | Detail with trace refs and dispute assessment | all |
-| `PATCH /cases/{id}` | Assign owner, update fields | A P N |
+| `GET /cases/{id}`, `GET /cases/{id}/events`, `GET /cases/{id}/attachments` | Detail with trace refs and dispute assessment; timeline; attachments | all |
+| `PATCH /cases/{id}` | `{owner_user_id}` (assign or clear; the owner must be a member) | A P N |
 | `POST /cases/{id}/transition` | `{to_status, note}` (state machine validated) | A P N (except write-off) |
 | `POST /cases/{id}/notes` | | A P N |
 | `POST /cases/{id}/attachments` | `{file_id}` | A P N |
 | `POST /cases/{id}/write-off` | `{reason}`; four-eyes | A P |
 | `POST /cases/{id}/reclaim` | Creates a `recovery_reclaim` adjustment proposal | A P N |
-| `GET /notifications`, `POST /notifications/{id}/read` | In-app | all |
+| `GET /notifications`, `POST /notifications/{id}/read` | In-app; the caller's own only (`unread=true`, keyset paging); another user's id is 404 | all |
+
+Cases (S9): the queue lists `deadline_unknown` cases first, then by `deadline_date`, then id (`sort` accepts only that order).
+`deadline_unknown` is `deadline_date = null`, not a case type. Every change to a case (`PATCH`, `transition`, `write-off`,
+`reclaim`) needs `If-Match: "<revision>"` (412 `precondition_failed` otherwise) and returns the new `ETag`; `write-off`
+also needs `Idempotency-Key`. With workspace four-eyes on, the first approver's `write-off` records a proposal (case stays
+as is, event `write_off_proposed`) and a different approver completes it; the same person gets 403 `four_eyes_violation`.
+`reclaim` returns `{case, adjustment_id}`. A completed `write-off` rejects the case's proposed/approved `recovery_reclaim` adjustment in the same transaction and is refused with 409 `reclaim_included` while that adjustment is in a draft or approved claim batch (once the batch is submitted the write-off of variance − recovered is allowed); a pending write-off proposal is voided by any recovery or status change. `/cases/summary` groups carry `variance_amount`, `recovered_amount` and `written_off_amount` (the last is the sum of what was written off). Notes and reasons are trimmed; blank is 422. Reminders (14/7/3 days before the deadline) are created by the daily sweep and
+mailed once as a digest; there is no endpoint to create them.
 
 ### 2.9 Reporting, trace, audit
 
 | Method & path | Purpose | R |
 |---|---|---|
-| `GET /dashboard` | Claimed/collected/short-paid/recovered/written-off/at-risk/expiring; filters `manufacturer_id`, `month`, `branch_id`; includes `as_of` | all |
-| `GET /dashboard/drilldown` | Rows behind a figure (`metric`, filters) | all |
-| `GET /trace/{kind}/{id}` | Full chain for `calculation_result`, `claim_line`, `remittance_line`, `variance_case` | all |
-| `GET /reports/claim-batches/{id}/audit-pack` | Trace export (CSV/XLSX → job) | A P V |
+| `GET /dashboard` | Claimed/collected/short-paid/recovered/written-off/recovered-after-write-off/at-risk/expiring (definitions: BUSINESS_LOGIC §12.2): Σ of `summary_claims_monthly` rows for the filters `manufacturer_id`, `month` (any day of the month), `branch_id`, plus the same figures per month; `as_of` (when the summary was rebuilt, null = never) and `as_of_date` (business date at-risk/expiring were computed for) | all |
+| `POST /dashboard/refresh` | Queue a summary rebuild (202 `{job_id}`; null when one is already queued this minute). Also queued by every remittance finalisation and hourly | A P N |
+| `GET /dashboard/drilldown` | `metric` + the same filters, cursor-paged: the rows behind the figure (`id`, `trace_kind`, `trace_id`, `manufacturer_id`, `branch_id`, `month`, `amount`, `label`); `figure` (dashboard), `total` (Σ of all matching rows now), `consistent` (`total == figure`, false only if data changed since the refresh). Σ `amount` of all pages = `total` | all |
+| `GET /trace/claim_line/{id}`, `/trace/remittance_line/{id}`, `/trace/variance_case/{id}`, `/trace/claim_adjustment/{id}`, `/trace/calculation_result/{id}` | Chain `{kind, id, chain: [{kind, id, label, fields}]}` from the record to its source file row (`source_row`: file name and row number), through invoice line, claim batch, agreement version, calculation result, confirmed/suggested payments, remittance document and file row, and cases. A rebate claim line ends at its accrual entry (many purchases, no single row). Another tenant's id: 404 | all |
+| `POST /reports/claim-batches/{id}/audit-pack` | body `{format?: csv\|xlsx}` (default csv; audited as `audit_pack.requested`; no PDF in Release 1, PDF in Release 1.1: owner decision 2026-11-13); adjustments are listed under the batch that carries them → 202 `{job, file_id}`; the file has one row per claim line and included adjustment: invoice line, source file row, agreement version, claim, confirmed payment and remittance documents | A P V |
 | `GET /audit-log` | Filters `entity_type`, `entity_id`, `actor_user_id`, `action`, date range | A P V |
 
 ### 2.10 System

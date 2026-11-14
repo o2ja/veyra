@@ -9,6 +9,7 @@ import csv
 import io
 import re
 from collections.abc import Iterable, Mapping, Sequence
+from datetime import date
 from decimal import Decimal
 from typing import Any
 
@@ -200,6 +201,36 @@ def render(
     return buf.getvalue()
 
 
+def render_table(fmt: str, sheet: str, headers: Sequence[str], rows: Iterable[Sequence[Any]]) -> bytes:
+    """A plain table (audit pack): text is formula-escaped, ``Decimal`` keeps its exact stored digits, dates are ISO."""
+    if fmt == "csv":
+        out = io.StringIO()
+        w = csv.writer(out, lineterminator="\r\n")
+        w.writerow([safe_text(h) for h in headers])
+        for row in rows:
+            w.writerow(
+                [
+                    ""
+                    if v is None
+                    else _decimal_text(v, None)
+                    if isinstance(v, Decimal)
+                    else v.isoformat()
+                    if isinstance(v, date)
+                    else safe_text(str(v))
+                    for v in row
+                ]
+            )
+        return out.getvalue().encode("utf-8")
+    wb = Workbook(write_only=True)
+    ws = wb.create_sheet(sheet[:31])
+    ws.append([safe_text(h) for h in headers])
+    for row in rows:
+        ws.append([v if isinstance(v, Decimal | date | int) or v is None else safe_text(str(v)) for v in row])
+    buf = io.BytesIO()
+    wb.save(buf)
+    return buf.getvalue()
+
+
 __all__ = [
     "CONTENT_TYPES",
     "DATE_FORMATS",
@@ -208,5 +239,6 @@ __all__ = [
     "MISSED_COLUMNS",
     "column_error",
     "render",
+    "render_table",
     "safe_text",
 ]

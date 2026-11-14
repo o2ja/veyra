@@ -1,6 +1,7 @@
 """config fail-fast, clock injection, UUIDv7 ids."""
 
 from datetime import UTC, datetime
+from decimal import Decimal
 
 import pytest
 from pydantic import ValidationError
@@ -48,6 +49,27 @@ def test_invalid_value_fails(env: pytest.MonkeyPatch, key: str, value: str) -> N
         env.setenv(k, v)
     with pytest.raises(ValidationError):
         Settings()
+
+
+def test_empty_ai_environment_variables_fallback_to_defaults(env: pytest.MonkeyPatch) -> None:
+    for k, v in VALID.items():
+        env.setenv(k, v)
+    for k in (
+        "AI_PROVIDER",
+        "AI_MODEL",
+        "AI_PRICE_INPUT_PER_MTOK",
+        "AI_PRICE_OUTPUT_PER_MTOK",
+        "GEMINI_API_KEY",
+        "ANTHROPIC_API_KEY",
+    ):
+        env.setenv(k, "")
+    s = Settings()
+    assert s.ai_provider == "anthropic"
+    assert s.ai_model == "claude-sonnet-5-5"
+    assert s.ai_price_input_per_mtok == Decimal("3.00")
+    assert s.ai_price_output_per_mtok == Decimal("15.00")
+    assert s.gemini_api_key is None
+    assert s.anthropic_api_key is None
 
 
 def test_clock_can_be_frozen_and_restored() -> None:

@@ -36,6 +36,11 @@ class AdjustmentAlreadyIncluded(Conflict):
     message = "Some of these adjustments are already in a claim batch."
 
 
+class ReclaimIncluded(Conflict):
+    code = "reclaim_included"
+    message = "The case's reclaim is already in a claim batch; void the batch or wait for the payment first."
+
+
 class CannotNetClaim(Conflict):
     code = "cannot_net_claim"
     message = "This manufacturer does not accept negative claims: the return reversal cannot be net-claimed."
@@ -292,7 +297,7 @@ def _live_agreement_changes(db: Session, tenant_id: UUID, claim_line_ids: list[U
     }
 
 
-def _insert(db: Session, who: Who, run_id: UUID, **values: Any) -> ClaimAdjustment | None:
+def _insert(db: Session, who: Who, run_id: UUID | None, **values: Any) -> ClaimAdjustment | None:
     return db.execute(
         insert(ClaimAdjustment)
         .values(
@@ -307,6 +312,68 @@ def _insert(db: Session, who: Who, run_id: UUID, **values: Any) -> ClaimAdjustme
         .on_conflict_do_nothing()
         .returning(ClaimAdjustment)
     ).scalar_one_or_none()
+
+
+def propose_recovery_reclaim(
+    db: Session,
+    who: Who,
+    *,
+    manufacturer_id: UUID,
+    claim_line_id: UUID,
+    variance_case_id: UUID,
+    amount: Decimal,
+    reason: str,
+) -> ClaimAdjustment:
+    """S9: a recovery case asks to claim its variance again (BUSINESS_LOGIC 12.1, ``to_reclaim``). Enters the
+    ordinary approve -> batch inclusion flow as a ``recovery_reclaim`` adjustment; the amount is the case's open
+    variance (positive), never recomputed here. One proposed/approved reclaim per case (partial unique index)."""
+    a = _insert(
+        db,
+        who,
+        None,
+        manufacturer_id=manufacturer_id,
+        adjustment_type="recovery_reclaim",
+        claim_line_id=claim_line_id,
+        variance_case_id=variance_case_id,
+        amount=amount,
+        reason=reason,
+    )
+    if a is None:  # the partial unique index uq_claim_adjustments_live_reclaim swallowed the insert
+        raise InvalidState("This case already has a reclaim waiting for approval or inclusion.")
+    _audit(db, who, audit.Action.CLAIM_ADJUSTMENT_PROPOSED, a, after=view(a))
+    return a
+
+
+def retire_recovery_reclaims(db: Session, who: Who, variance_case_id: UUID) -> None:
+    """S9 write-off: the case no longer asks for its money. Reject its proposed/approved reclaim adjustments (so they
+    cannot be batched later); 409 ``reclaim_included`` while one sits in a batch that can still be voided (draft or
+    approved). An adjustment in a submitted batch has been claimed: it stays (nothing can undo it), and the case may
+    be written off for what is still outstanding."""
+    rows = list(
+        db.scalars(
+            select(ClaimAdjustment)
+            .where(
+                ClaimAdjustment.tenant_id == who.tenant_id,
+                ClaimAdjustment.variance_case_id == variance_case_id,
+                ClaimAdjustment.adjustment_type == "recovery_reclaim",
+                ClaimAdjustment.status.in_(("proposed", "approved", "included")),
+            )
+            .order_by(ClaimAdjustment.id)
+            .with_for_update()
+        )
+    )
+    voidable = db.scalars(
+        text(
+            "SELECT b.id FROM claim_batches b WHERE b.tenant_id = :t AND b.status IN ('draft', 'approved') "
+            "AND b.id = ANY(CAST(:ids AS uuid[]))"
+        ),
+        {"t": who.tenant_id, "ids": [a.included_in_batch_id for a in rows if a.status == "included"]},
+    ).all()
+    if voidable:
+        raise ReclaimIncluded()
+    for a in rows:
+        if a.status != "included":
+            reject(db, who, a.id)
 
 
 def propose(

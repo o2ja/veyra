@@ -379,6 +379,26 @@ def test_finalising_classifies_the_variances_of_the_ground_truth(story: Story) -
     assert seen[0].document_number == "CM-7781" and str(seen[0].payment_date) == "2026-07-31"
 
 
+def test_finalising_opened_the_recovery_cases_of_the_ground_truth(story: Story) -> None:
+    """S9 hooks into the finalisation: expected_reconciliation.json gives 150.00 short-paid (E12), 2,080.00 rejected
+    (E07), 75.00 unmatched and 660.00 unpaid; the dispute deadline is 2026-07-31 + 60 days = 2026-09-29; the unpaid
+    line has no remittance, so it counts from the claim submission: 2026-07-05 + 60 = 2026-09-03 (D-N2).
+    Final S8 (interim rule D-N11, briefs/G2_S8_money_rule.md H1/H2): ADJ-2026-0001 (-50.00) rides in batch B2, so it cannot net CL-4;
+    remittance line 4 pays 200.00 = 250.00 claimed - 50.00 adjustment, hence CL-4 claimed 250.00 - paid 200.00 =
+    short_paid 50.00, due 2026-07-31 + 60 = 2026-09-29 (the fifth case; findings 150/2080/50/75/660)."""
+    got = story.ws.api.get("/cases", params={"limit": 50}).json()["data"]
+    assert sorted((c["case_type"], c["variance_amount"], c["deadline_date"]) for c in got) == [
+        ("rejected", "2080.0000", "2026-09-29"),
+        ("short_paid", "150.0000", "2026-09-29"),
+        ("short_paid", "50.0000", "2026-09-29"),
+        ("unmatched_payment", "75.0000", "2026-09-29"),
+        ("unpaid", "660.0000", "2026-09-03"),
+    ]
+    # the 50.00 short-pay has no manufacturer code: a payment lower than claimed, unexplained (BL 10.3)
+    assert {c["reason_code"] for c in got if c["variance_amount"] == "50.0000"} == {"short_paid_unexplained"}
+    assert {c["remittance_document_id"] for c in got} == {SHARED["doc"]["id"]}
+
+
 def test_a_finalised_remittance_is_final(story: Story, admin_engine: Engine) -> None:
     ws = story.ws
     doc = SHARED["doc"]

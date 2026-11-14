@@ -107,6 +107,7 @@ def create_workspace(db: Session, *, name: str, admin_user_id: UUID, meta: dict[
         after={"user_id": admin_user_id, "role": "admin", "status": "active"},
         meta=meta,
     )
+    audit.schedule_seal(db, tenant_id)
     return tenant_id
 
 

@@ -32,6 +32,8 @@ from rebate.modules import (
     ingestion,
     masterdata,
     reconciliation,
+    recovery,
+    reporting,
     tenancy,
 )
 from rebate.modules.identity import ratelimit
@@ -49,8 +51,10 @@ MODULE_ROUTERS = (
     ingestion.router,
     agreements.router,
     claims.router,
+    recovery.router,
     extraction.router,
     reconciliation.router,
+    reporting.router,
 )
 PUBLIC_ROUTERS = (health.router,)
 

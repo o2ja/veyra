@@ -410,6 +410,7 @@ The assessment lists the checks run with their inputs. An LLM **may** draft a pr
 |---|---|
 | Claim deadline | `claim_window_basis` date + `claim_window_days` (calendar days). SPA lines: `invoice_date` / `ship_date` = that date of the line; `month_end` = the last calendar day of the month containing the line's claim date (the date-validity date of §4.3: invoice date, or ship date with invoice-date fallback). The trace records the basis and the month end. `period_end` applies to **rebates only**: deadline = measurement period end + `claim_window_days` (stored on the accrual entry); a manufacturer whose basis is `period_end` cannot run SPA lines (the run is refused with `engine_rejected`). `agreement_end` is not a basis (rejected). One `claim_window_basis` / `claim_window_days` per manufacturer serves SPA lines; rebates always use period end + the same `claim_window_days` (owner decision D3, 2026-11-12; a separate rebate window setting is a Release 2 candidate) |
 | Dispute/re-claim deadline | `remittance document date` (or `submission_date` per setting) + `dispute_window_days` |
+| Unpaid case | claim submission date + `dispute_window_days`, whatever `dispute_window_basis` says (an unpaid line has no remittance; owner decision 2026-11-13, D-N2); `deadline_basis = submission_date` |
 
 - Pure calendar-day addition; **no weekend or holiday rolling** (conservative: the earlier date is shown).
 - "Today" for countdowns is the date in the tenant's business time zone.
@@ -439,6 +440,20 @@ stateDiagram-v2
 ```
 
 Every transition writes a `variance_case_events` row and an audit entry. `recovered_amount` is recorded as payments are matched to the resulting adjustment; partial recovery leaves the case `submitted` until fully recovered or closed.
+
+### 12.2 Dashboard figure definitions (owner decision 2026-11-13, D-N6; D-N5)
+
+All figures are per manufacturer, branch (the invoice branch of the claim line; none if there is none) and month. Months are business months: a business date (`submitted_at`, `payment_date`, `document_date`) is truncated as it is, a timestamp is first converted to the tenant's business time zone. One definition each, shared by the dashboard, the drill-down and (for at-risk) `GET /cases/summary`.
+
+- **claimed**: claim lines of submitted batches (not released) plus adjustments included in a submitted batch (`recovery_reclaim` too), at their amounts; an adjustment belongs to the batch that carries it. Month = that batch's submission date.
+- **collected**: cash on matched lines = confirmed allocations of accepted/reconciled remittances to claim lines and to adjustments; an unallocated remainder is not collected. Month = payment date (else document date).
+- **short_paid**: variance of cases of type `short_paid`, `rejected`, `unpaid` (money claimed and not paid); overpaid, unmatched payments and source changes are not owed to us. Month = case creation.
+- **recovered**, **written_off**: the cases' `recovered_amount` / `written_off_amount`. Month = case creation.
+- **recovered_after_write_off** (D-N5): confirmed allocations to the `recovery_reclaim` adjustment of a case that is `written_off`, from a remittance that recorded no recovery for it. Closed cases stay immutable, so this money is reported here and never changes the case. Month = payment date.
+- **at_risk**: variance minus recovered of live cases (`open`, `to_reclaim`, `submitted`) of the reclaimable types above whose deadline is unknown or at most 14 days after the as-of date (overdue included).
+- **expiring**: the part of at-risk with a known deadline from the as-of date to 14 days after it.
+
+At-risk and expiring are bucketed by the month of the case's creation (the same month as short_paid), not by the deadline month.
 
 ## 13. Trace format
 

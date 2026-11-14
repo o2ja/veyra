@@ -171,6 +171,16 @@ class ClaimAdjustment(Base):
         _fk("claim_adjustments", "run_id", "calculation_runs"),
         _fk("claim_adjustments", "claim_line_id", "claim_lines"),
         _fk("claim_adjustments", "rebate_accrual_entry_id", "rebate_accrual_entries"),
+        _fk("claim_adjustments", "variance_case_id", "variance_cases"),
+        Index(
+            "uq_claim_adjustments_live_reclaim",
+            "tenant_id",
+            "variance_case_id",
+            unique=True,
+            postgresql_where=text(
+                "adjustment_type = 'recovery_reclaim' AND status IN ('proposed', 'approved')"
+            ),
+        ),
         Index(
             "uq_claim_adjustments_proposal",
             "tenant_id",
@@ -205,7 +215,7 @@ class ClaimAdjustment(Base):
     claim_line_id: Mapped[UUID | None] = mapped_column()
     rebate_accrual_entry_id: Mapped[UUID | None] = mapped_column()
     calculation_result_id: Mapped[UUID | None] = mapped_column()
-    variance_case_id: Mapped[UUID | None] = mapped_column()  # FK to variance_cases arrives with S9
+    variance_case_id: Mapped[UUID | None] = mapped_column()
     run_id: Mapped[UUID | None] = mapped_column()
     amount: Mapped[Decimal] = mapped_column(Numeric(18, 4))
     reason: Mapped[str] = mapped_column(Text)

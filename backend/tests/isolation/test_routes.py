@@ -15,7 +15,9 @@ from fastapi.routing import APIRoute
 from sqlalchemy import Engine, text
 
 from rebate.api.app import MODULE_ROUTERS
+from rebate.core.db import transaction
 from rebate.modules.files import storage
+from rebate.modules.reporting import service
 from tests.conftest import DbUrls
 from tests.integration.agreements_support import activate, payload
 from tests.integration.conftest import Workspace, clean_file, import_file, put, run_import, seed_master, walk
@@ -38,6 +40,7 @@ class Side:
     s5: dict[str, str] = field(default_factory=dict)  # S5 path parameter -> one id of this tenant
     s6: dict[str, str] = field(default_factory=dict)  # S6 path parameter -> one id of this tenant
     s7: dict[str, str] = field(default_factory=dict)  # S7 path parameter -> one id of this tenant
+    s9: dict[str, str] = field(default_factory=dict)  # S9 path parameter -> one id of this tenant
     s8: dict[str, str] = field(default_factory=dict)  # S8 path parameter -> one id of this tenant
 
 
@@ -71,6 +74,7 @@ def sides(migrated_db: DbUrls, admin_engine: Engine) -> Iterator[tuple[Side, Sid
             side.s6 = _seed_s6(api)
             side.s7 = _seed_s7(api, side.s3)
             side.s7["adjustment_id"] = _seed_adjustment(admin_engine, side)
+            side.s9 = _seed_case(admin_engine, side)
             side.s8 = _seed_s8(app, admin_engine, side)
             out.append(side)
         yield out[0], out[1]
@@ -217,6 +221,36 @@ def _seed_adjustment(admin: Engine, side: Side) -> str:
     return str(adj)
 
 
+def _seed_case(admin: Engine, side: Side) -> dict[str, str]:
+    """An open 'unpaid' case on the claim line of the fixture batch (cases come from a remittance finalisation, which
+    the isolation world has none of, so the owner role inserts the row like for the adjustment above) and a deadline
+    reminder for the tenant's admin."""
+    case, note = uuid.uuid4(), uuid.uuid4()
+    with admin.begin() as conn:
+        line = conn.execute(
+            text(
+                "SELECT l.id, b.manufacturer_id FROM claim_lines l JOIN claim_batches b ON b.tenant_id = l.tenant_id "
+                "AND b.id = l.batch_id WHERE l.tenant_id = :t LIMIT 1"
+            ),
+            {"t": side.tenant_id},
+        ).one()
+        conn.execute(
+            text(
+                "INSERT INTO variance_cases (tenant_id, id, manufacturer_id, claim_line_id, case_type, reason_code, "
+                "variance_amount) VALUES (:t, :c, :m, :l, 'unpaid', 'unpaid_no_remittance', 1)"
+            ),
+            {"t": side.tenant_id, "c": case, "m": line.manufacturer_id, "l": line.id},
+        )
+        conn.execute(
+            text(
+                "INSERT INTO notifications (tenant_id, id, user_id, kind, entity_type, entity_id, title, dedupe_key) "
+                "VALUES (:t, :n, :u, 'deadline_reminder', 'variance_case', :c, 'isolation fixture', 'iso:14')"
+            ),
+            {"t": side.tenant_id, "n": note, "u": side.user_id, "c": case},
+        )
+    return {"case_id": str(case), "notification_id": str(note)}
+
+
 def _seed_s8(app: Any, admin: Engine, side: Side) -> dict[str, str]:
     """An accepted remittance (CSV through the real ingest job, one line of 5.00) and a suggested match of its line to
     the fixture claim line (inserted by the owner role: a match to a claim needs a submitted batch the isolation world
@@ -277,8 +311,14 @@ def _claim_line(admin: Engine, side: Side) -> uuid.UUID:
         )
 
 
-S8_PARAMS = ("remittance_id", "match_id")
+S8_PARAMS = (
+    "remittance_id",
+    "match_id",
+    "remittance_line_id",
+    "claim_line_id",
+)  # the last two: S10 trace routes
 S6_PARAMS = ("extraction_id",)
+S9_PARAMS = ("case_id", "notification_id")
 S7_PARAMS = ("batch_id", "export_template_id", "adjustment_id")
 S4_PARAMS = ("agreement_id", "draft_id", "version_id", "other_version_id")
 S3_PARAMS = ("manufacturer_id", "customer_id", "product_id", "conversion_id", "entry_id", "import_id",
@@ -295,6 +335,7 @@ PARAM_SOURCES = {
     **{p: f"s5.{p}" for p in S5_PARAMS},
     **{p: f"s6.{p}" for p in S6_PARAMS},
     **{p: f"s7.{p}" for p in S7_PARAMS},
+    **{p: f"s9.{p}" for p in S9_PARAMS},
     **{p: f"s8.{p}" for p in S8_PARAMS},
 }
 
@@ -307,6 +348,8 @@ def _attack_value(side: Side, param: str) -> str:
         return side.s5[param]
     if source.startswith("s7."):
         return side.s7[param]
+    if source.startswith("s9."):
+        return side.s9[param]
     if source.startswith("s8."):
         return side.s8[param]
     if source.startswith("s6."):
@@ -338,7 +381,7 @@ def _call(api: Api, method: str, path: str, body: Any) -> Any:
         return put(api, path, body, headers={"If-Match": '"1"'})
     if method == "POST":  # approve needs an Idempotency-Key, items:import an If-Match; others ignore them
         return api.post(path, json=body, headers={"Idempotency-Key": str(uuid.uuid4()), "If-Match": '"1"'})
-    return api.patch(path, json=body)
+    return api.patch(path, json=body, headers={"If-Match": '"1"'})  # cases check the revision after the id
 
 
 # A body that passes validation, so the response depends only on whether the id is visible.
@@ -369,6 +412,11 @@ BODIES: dict[str, Any] = {
     "/claim-batches/{batch_id}/submit": {"submitted_at": "2026-01-01", "external_reference": "x"},
     "/claim-batches/{batch_id}/void": {"reason": "x"},
     "/claim-batches/{batch_id}/export": {},
+    "/cases/{case_id}": {"owner_user_id": None},
+    "/cases/{case_id}/transition": {"to_status": "to_reclaim"},
+    "/cases/{case_id}/notes": {"note": "x"},
+    "/cases/{case_id}/attachments": {"file_id": "00000000-0000-7000-8000-000000000000"},
+    "/cases/{case_id}/write-off": {"reason": "x"},
 }
 
 
@@ -691,3 +739,64 @@ def test_s5_tracker_and_run_filters_never_show_the_other_tenant(sides: tuple[Sid
     assert r.status_code == missing.status_code == 422
     assert r.json()["error"]["code"] == missing.json()["error"]["code"]
     assert r.json()["error"]["details"] == missing.json()["error"]["details"]
+
+
+def test_s9_foreign_cases_and_notifications_are_unreachable(sides: tuple[Side, Side]) -> None:
+    a, b = sides
+    own = a.api.get("/cases", params={"limit": 200}).json()["data"]
+    assert [c["id"] for c in own] == [a.s9["case_id"]], (
+        "A sees exactly its own case (else this proves nothing)"
+    )
+    assert [n["id"] for n in a.api.get("/notifications").json()["data"]] == [a.s9["notification_id"]]
+    # filters by a foreign id match nothing; the summary counts only the own case (variance 1)
+    for params in ({"manufacturer_id": b.s3["manufacturer_id"]}, {"owner_user_id": b.user_id}):
+        got = a.api.get("/cases", params=params)
+        assert got.status_code == 200 and got.json()["data"] == [], params
+    summary = a.api.get("/cases/summary").json()
+    assert [(r["key"], r["count"], r["variance_amount"]) for r in summary["by_status"]] == [
+        ("open", 1, "1.0000")
+    ]
+    # another tenant's file cannot be attached: it looks exactly like an unknown file
+    foreign = a.api.post(f"/cases/{a.s9['case_id']}/attachments", json={"file_id": b.file_id})
+    missing = a.api.post(
+        f"/cases/{a.s9['case_id']}/attachments", json={"file_id": "00000000-0000-7000-8000-000000000000"}
+    )
+    assert foreign.status_code == missing.status_code and foreign.status_code in (404, 422)
+    assert foreign.json()["error"]["code"] == missing.json()["error"]["code"]
+    assert foreign.json()["error"]["message"] == missing.json()["error"]["message"]
+    # a foreign owner is not a member of this workspace
+    r = a.api.patch(
+        f"/cases/{a.s9['case_id']}", json={"owner_user_id": b.user_id}, headers={"If-Match": '"1"'}
+    )
+    assert r.status_code == 422 and r.json()["error"]["details"][0]["code"] == "not_a_member"
+    # nothing of B's changed through A's attempts
+    assert b.api.get(f"/cases/{b.s9['case_id']}").json()["revision"] == 1
+    assert b.api.get(f"/cases/{b.s9['case_id']}/events").json()["data"] == []
+    assert [n["read_at"] for n in b.api.get("/notifications").json()["data"]] == [None]
+
+
+def test_s10_dashboard_drilldown_and_trace_never_show_the_other_tenant(
+    sides: tuple[Side, Side], app_engine: Engine
+) -> None:
+    """Each side has one unpaid case of 1.00 (no deadline): a leak would show 2.00 or the other's case id."""
+    a, b = sides
+    for side in (a, b):
+        with transaction(app_engine, uuid.UUID(side.tenant_id)) as db:
+            service.refresh(db, uuid.UUID(side.tenant_id))
+    for own, other in ((a, b), (b, a)):
+        body = own.api.get("/dashboard").json()
+        assert [body["figures"][m] for m in ("short_paid", "at_risk")] == ["1.0000", "1.0000"]
+        assert len(body["months"]) == 1
+        drill = own.api.get("/dashboard/drilldown", params={"metric": "short_paid"}).json()
+        assert [x["trace_id"] for x in drill["data"]] == [own.s9["case_id"]], "A sees exactly its own case"
+        assert drill["total"] == "1.0000" and drill["consistent"] is True
+        foreign = {"manufacturer_id": other.s3["manufacturer_id"]}
+        assert set(own.api.get("/dashboard", params=foreign).json()["figures"].values()) == {"0"}
+        assert (
+            own.api.get("/dashboard/drilldown", params={"metric": "short_paid", **foreign}).json()["data"]
+            == []
+        )
+        assert own.api.get(f"/trace/variance_case/{other.s9['case_id']}").status_code == 404
+        assert own.api.post(f"/reports/claim-batches/{other.s7['batch_id']}/audit-pack").status_code == 404
+        mine = own.api.get(f"/trace/variance_case/{own.s9['case_id']}").json()["chain"]
+        assert {n["id"] for n in mine if n["kind"] == "claim_line"} <= {own.s8["claim_line_id"]}
