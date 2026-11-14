@@ -108,7 +108,7 @@ def classify_unmatched_payment(
     confirmed = [m for m in matches if m.status is Status.CONFIRMED and m.remittance_line_id == line.id]
     if confirmed:
         # claim-line parts are cash applied to claims; a positive adjustment allocation consumes cash too, a negative one
-        # never frees any (D-N11 interim). Never below 0 (a same-batch split can exceed the payment) nor above it.
+        # (D-N11: a credit netted inside the payment) is not cash. Never below 0 (a split can exceed the payment).
         claim_parts = sum(
             (
                 a.amount if a.adjustment_ref is None else max(a.amount, Decimal(0))
