@@ -147,6 +147,7 @@ class State:
     submitted: dict[str, date | None]
     elsewhere: set[str]  # claim lines with a confirmed allocation from another remittance
     adjustment_line: dict[str, str]  # adjustment id -> claim line id (every carried adjustment)
+    carriers: dict[str, frozenset[str]]  # cross-batch adjustment id -> claim line ids of its carrying batch
     adjustments: dict[
         str, AdjustmentItem
     ]  # the adjustments carried by ANOTHER batch than their original line
@@ -174,7 +175,13 @@ def _aliases(db: Session, tenant_id: UUID) -> dict[str, str]:
 
 def _claims(
     db: Session, doc: RemittanceDocument
-) -> tuple[dict[str, ClaimLine], dict[str, date | None], dict[str, str], dict[str, AdjustmentItem]]:
+) -> tuple[
+    dict[str, ClaimLine],
+    dict[str, date | None],
+    dict[str, str],
+    dict[str, AdjustmentItem],
+    dict[str, frozenset[str]],
+]:
     adj = claims.included_adjustments(db, doc.tenant_id, doc.manufacturer_id)
     lines = claims.submitted_claim_lines(db, doc.tenant_id, doc.manufacturer_id)
     batch_of = {str(r.id): r.batch_id for r in lines}
@@ -184,6 +191,17 @@ def _claims(
     for r in lines:
         lines_of_batch[r.batch_id].append(str(r.id))
     carried: dict[str, list[Adjustment]] = defaultdict(list)
+    carriers: dict[str, frozenset[str]] = {}
+    allocated = {  # adjustments a person (or an earlier run) already allocated stay out of the automatic split
+        r[0]
+        for r in db.execute(
+            select(ReconciliationMatch.claim_adjustment_id).where(
+                ReconciliationMatch.tenant_id == doc.tenant_id,
+                ReconciliationMatch.status == "confirmed",
+                ReconciliationMatch.claim_adjustment_id.is_not(None),
+            )
+        )
+    }
     for a in adj:
         line_id = str(a.claim_line_id)
         if batch_of.get(line_id) == a.batch_id:  # carried by its original line's batch: part of that line
@@ -192,7 +210,8 @@ def _claims(
             separate[str(a.id)] = AdjustmentItem(str(a.id), line_id, a.batch_id, a.amount)
             # D-N11: a negative one rides the payment of the carrying batch's single claim line (with several lines
             # the manufacturer's split is unknowable: it stays a manual item)
-            if a.amount < 0 and len(lines_of_batch[a.batch_id]) == 1:
+            carriers[str(a.id)] = frozenset(lines_of_batch[a.batch_id])
+            if a.amount < 0 and len(lines_of_batch[a.batch_id]) == 1 and a.id not in allocated:
                 carried[lines_of_batch[a.batch_id][0]].append(Adjustment(str(a.id), a.amount, line_id))
     by_id, submitted = {}, {}
     for r in lines:
@@ -211,7 +230,7 @@ def _claims(
             carried=tuple(carried.get(cid, ())),
         )
         submitted[cid] = r.submitted_at
-    return by_id, submitted, {str(a.id): str(a.claim_line_id) for a in adj}, separate
+    return by_id, submitted, {str(a.id): str(a.claim_line_id) for a in adj}, separate, carriers
 
 
 def _state(db: Session, doc: RemittanceDocument) -> State:
@@ -237,7 +256,7 @@ def _state(db: Session, doc: RemittanceDocument) -> State:
         )
         for r in lines
     }
-    claims, submitted, adj_line, separate = _claims(db, doc)
+    claims, submitted, adj_line, separate, carriers = _claims(db, doc)
     rows = list(
         db.scalars(
             select(ReconciliationMatch)
@@ -271,8 +290,8 @@ def _state(db: Session, doc: RemittanceDocument) -> State:
     except NotFound:  # no settings row: the documented default
         tolerance = Decimal("0.01")
     return State(
-        doc, remits, {i: UUID(i) for i in remits}, claims, submitted, set(paid_elsewhere), adj_line, separate,
-        rows, paid_elsewhere, {str(r.id) for r in lines if r.category}, tolerance,
+        doc, remits, {i: UUID(i) for i in remits}, claims, submitted, set(paid_elsewhere), adj_line, carriers,
+        separate, rows, paid_elsewhere, {str(r.id) for r in lines if r.category}, tolerance,
     )  # fmt: skip
 
 
@@ -492,7 +511,7 @@ def decide(db: Session, who: Who, match_id: UUID, revision: int, decision: str) 
         group = confirm_suggestion(_matches(rows, st.adjustment_line)[0])
         confirmed = [*_matches(st.rows, st.adjustment_line, "confirmed"), group]
         try:
-            validate_matches(confirmed, st.remits, st.claims)
+            validate_matches(confirmed, st.remits, st.claims, st.carriers)
         except InvariantViolation as exc:
             raise MatchInvariant(str(exc)) from None
         values = {"status": "confirmed", "confirmed_by": who.user_id, "confirmed_at": now}
@@ -576,6 +595,10 @@ def manual(
                 "The adjustment is already allocated; the total cannot exceed its amount.",
             )
     claim = st.claims.get(adjustment.claim_line_id if adjustment else str(claim_line_id))
+    if (
+        claim is None and adjustment is not None
+    ):  # the adjusted line may be paid in full or released: only a stub
+        claim = ClaimLine(adjustment.claim_line_id, str(doc.manufacturer_id), "", "", None, ZERO)
     if claim is None:
         raise _invalid("claim_line_id", "not_found", "Not a submitted claim line of this manufacturer.")
     evidence: dict[str, object] = {"method": "manual", "entered_by": str(who.user_id)}
@@ -583,12 +606,14 @@ def manual(
         match = (
             manual_adjustment_match(rem, claim, adjustment.id, amount, evidence)
             if adjustment
-            else manual_match(rem, [(claim, amount)], evidence)
+            else manual_match(rem, [(claim, amount)], evidence, check_paid=False)
         )
         _delete_suggested(db, st, [remittance_line_id])
         db.flush()
         keep = [r for r in st.rows if r.status != "suggested" or r.remittance_line_id != remittance_line_id]
-        validate_matches([*_matches(keep, st.adjustment_line, "confirmed"), match], st.remits, st.claims)
+        validate_matches(
+            [*_matches(keep, st.adjustment_line, "confirmed"), match], st.remits, st.claims, st.carriers
+        )
     except InvariantViolation as exc:
         raise MatchInvariant(str(exc)) from None
     (match_id,) = _insert(db, st, [match], None, who.user_id)

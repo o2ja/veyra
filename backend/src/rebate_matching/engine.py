@@ -43,9 +43,14 @@ class InvariantViolation(Exception):
 def allocate(claim: ClaimLine, paid: Decimal) -> tuple[Allocation, ...]:
     """Split ``paid`` over a claim line: adjustments at face value, remainder on the claim itself. A carried adjustment
     belongs to its own claim line (D-N11), so the claim line is never reduced by it."""
+    carried = claim.carried
+    if paid < -sum(
+        (a.amount for a in carried), Decimal(0)
+    ):  # a payment below the credit cannot be said to net it
+        carried = ()
     adj = tuple(Allocation(claim.id, a.amount, a.ref) for a in claim.adjustments)
-    adj += tuple(Allocation(a.claim_line_id or claim.id, a.amount, a.ref) for a in claim.carried)
-    rest = paid - sum((a.amount for a in (*claim.adjustments, *claim.carried)), Decimal(0))
+    adj += tuple(Allocation(a.claim_line_id or claim.id, a.amount, a.ref) for a in carried)
+    rest = paid - sum((a.amount for a in (*claim.adjustments, *carried)), Decimal(0))
     return (Allocation(claim.id, rest), *adj)
 
 
@@ -78,19 +83,43 @@ def tolerance_wide(claim: ClaimLine, cfg: MatchConfig) -> Decimal:
 
 
 def validate_matches(
-    matches: Sequence[Match], remits: Mapping[str, RemittanceLine], claims: Mapping[str, ClaimLine]
+    matches: Sequence[Match],
+    remits: Mapping[str, RemittanceLine],
+    claims: Mapping[str, ClaimLine],
+    carriers: Mapping[str, frozenset[str]] | None = None,
 ) -> None:
-    """§10.2 invariants: same manufacturer; per remittance line, Σ allocations (signed) <= amount_paid. A negative
-    adjustment allocation frees room, a positive one consumes it (owner decision D-N11, 2026-11-14)."""
+    """§10.2 invariants: same manufacturer; per remittance line, Σ allocations <= amount_paid, where an allocation to
+    an adjustment item carried by ANOTHER batch counts max(amount, 0) (a positive one consumes room), except a NEGATIVE
+    one on a line that also pays a claim line of the carrying batch (``carriers``: adjustment ref -> claim line ids of
+    its carrying batch; the claims' ``carried`` add to it): there it counts signed and frees room (owner decision D-N11,
+    2026-11-14). A negative one on any other line never frees room for other claim lines. An allocation to an
+    adjustment item needs no adjusted claim line in ``claims`` (it may be paid in full or released)."""
+    carrier = {k: set(v) for k, v in (carriers or {}).items()}
+    for c in claims.values():
+        for adj in c.carried:
+            carrier.setdefault(adj.ref, set()).add(c.id)
+    paid_lines: dict[str, set[str]] = defaultdict(set)  # remittance line -> claim lines it pays
+    for m in matches:
+        paid_lines[m.remittance_line_id] |= m.claim_line_ids
     totals: dict[str, Decimal] = defaultdict(Decimal)
     for m in matches:
         rem = remits[m.remittance_line_id]
         for a in m.allocations:
-            if claims[a.claim_line_id].manufacturer != rem.manufacturer:
+            claim = claims.get(a.claim_line_id)
+            if claim is None and a.adjustment_ref is None:
+                raise InvariantViolation(f"match {m.remittance_line_id} references an unknown claim line")
+            if claim is not None and claim.manufacturer != rem.manufacturer:
                 raise InvariantViolation(
                     f"match {m.remittance_line_id} references another manufacturer's claim line"
                 )
-        totals[rem.id] += m.allocated
+            if a.adjustment_ref is None or (
+                claim is not None and any(adj.ref == a.adjustment_ref for adj in claim.adjustments)
+            ):
+                totals[rem.id] += a.amount  # a claim line, or a same-batch adjustment (face value)
+            elif a.amount < 0 and carrier.get(a.adjustment_ref, set()) & paid_lines[rem.id]:
+                totals[rem.id] += a.amount  # D-N11: the credit netted inside its carrying batch's payment
+            else:
+                totals[rem.id] += max(a.amount, Decimal(0))
     for rid, total in totals.items():
         if total > remits[rid].amount_paid:
             raise InvariantViolation(
@@ -102,8 +131,12 @@ def manual_match(
     rem: RemittanceLine,
     allocations: Sequence[tuple[ClaimLine, Decimal]],
     evidence: dict[str, object] | None = None,
+    *,
+    check_paid: bool = True,
 ) -> Match:
-    """A user's selection: always ``confirmed``, never ``auto_confirm``. Validates manufacturer and Σ <= paid."""
+    """A user's selection: always ``confirmed``, never ``auto_confirm``. Validates manufacturer and Σ <= paid; the
+    service passes ``check_paid=False`` because the aggregate check follows in ``validate_matches``, which knows a
+    negative adjustment allocation on the same line (D-N11) that this one match cannot see."""
     if not allocations:
         raise InvariantViolation("manual match needs at least one allocation")
     total = Decimal(0)
@@ -113,7 +146,7 @@ def manual_match(
             raise InvariantViolation("manual match across manufacturers")
         total += amount
         out.append(Allocation(claim.id, amount))
-    if total > rem.amount_paid:
+    if check_paid and total > rem.amount_paid:
         raise InvariantViolation(f"allocations {total} exceed amount_paid {rem.amount_paid}")
     return Match(rem.id, Method.MANUAL, Status.CONFIRMED, tuple(out), dict(evidence or {}), False)
 

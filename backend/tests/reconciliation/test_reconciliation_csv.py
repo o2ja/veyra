@@ -553,16 +553,17 @@ def _raw_confirmed(
     )
 
 
-def test_cross_batch_negative_adjustment_allocation_frees_room_for_claim_lines_and_categorised_lines_stay_closed(
+def test_cross_batch_adjustment_allocation_never_frees_room_for_claim_lines_and_categorised_lines_stay_closed(
     story: Story, admin_engine: Engine, app_engine: Engine
 ) -> None:
-    """D-N11 (was: the -20.00 counted 0). Line 1 pays 200.00. A person gives 200.00 to INV-10010 and confirms -20.00 of
-    the cross-batch ADJ on it: 200.00 - 20.00 = 180.00. A further 20.00 to INV-10011 makes 200.00 <= 200.00: accepted
-    (201). Another 0.01 would make 200.01 > 200.00: refused (409 match_invariant); the trigger refuses the same insert.
+    """Line 1 pays 200.00. A person gives 200.00 to INV-10010 and confirms -20.00 of the cross-batch ADJ on it. A further
+    20.00 to INV-10011 would make 200.00 + 20.00 = 220.00 > 200.00 (the -20.00 counts 0): refused (409 match_invariant),
+    although the signed sum 200.00 - 20.00 + 20.00 = 200.00 would fit. The database trigger refuses the same insert.
     The ADJ (-50.00) can be allocated up to its amount over all lines and no further (422; trigger as rebate_app).
     Line 3 (300.00, within 5% of the 312.50 carrier claim by invoice + SKU + quantity) is only suggested (T3); once a
     person categorises it, confirming the suggestion is refused (409 line_categorised), in the service and in the
-    database, and rejecting still works."""
+    database, and rejecting still works. D-N11 narrows this rule, it does not remove it: a negative adjustment frees room
+    only on the line that also pays a claim line of the adjustment's carrying batch (B2); line 1 pays B1 lines."""
     ws, volt = story.ws, story.mfr["VOLT"]
     carrier = story.lines["INV-10020"]
     body = HEADER + (
@@ -588,8 +589,7 @@ def test_cross_batch_negative_adjustment_allocation_frees_room_for_claim_lines_a
 
     assert post(claim_line_id=a, allocated_amount="200.00").status_code == 201
     assert post(claim_adjustment_id=story.adjustment["id"], allocated_amount="-20.00").status_code == 201
-    assert post(claim_line_id=b, allocated_amount="20.00").status_code == 201
-    refused = post(claim_line_id=b, allocated_amount="0.01")
+    refused = post(claim_line_id=b, allocated_amount="20.00")
     assert refused.status_code == 409 and refused.json()["error"]["code"] == "match_invariant"
     # the ADJ's cap: allocate exactly the room left (whatever earlier tests spent), then one cent more is refused
     adj = story.adjustment["id"]
@@ -619,9 +619,7 @@ def test_cross_batch_negative_adjustment_allocation_frees_room_for_claim_lines_a
     with admin_engine.begin() as conn:
         _raw_confirmed(conn, ws, line1, a, "0.00")  # no effect on the sum
         sp = conn.begin_nested()
-        _raw_confirmed(
-            conn, ws, line1, b, "60.00"
-        )  # line 1 sums to at most 200.00 here, so +60.00 always exceeds
+        _raw_confirmed(conn, ws, line1, b, "20.00")
         with pytest.raises(Exception, match="exceed the amount paid"):
             conn.execute(text("SET CONSTRAINTS ALL IMMEDIATE"))
         sp.rollback()

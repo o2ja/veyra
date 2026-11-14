@@ -4,6 +4,7 @@ truth's: B1 claims CL-4 250.00 (frozen); ADJ-2026-0001 (return reversal -50.00, 
 together with INV-10020/1 (312.50), so B2 = 312.50 - 50.00 = 262.50. Every number is hand-derived in the comments, never
 read from the code under test. Each test builds its own story (the scenarios must not share payments)."""
 
+import uuid
 from collections.abc import Iterator
 from contextlib import ExitStack
 from datetime import UTC, datetime, timedelta
@@ -187,8 +188,10 @@ def test_a_positive_carried_adjustment_is_not_split_off_the_payment(
     story: Story, admin_engine: Engine
 ) -> None:
     """Only a NEGATIVE adjustment is split (a credit netted inside the payment). With the ADJ forced to +25.00 (fixture
-    edit, triggers off for that statement), B2 paid 312.50 on one line: all 312.50 goes to INV-10020 (claimed 312.50, no
-    case) and the adjustment item gets no allocation (unchanged by D-N11)."""
+    edit, triggers off for that statement), B2 paid 312.50 on one line: all 312.50 goes to INV-10020 and the adjustment
+    item gets no allocation (unchanged by D-N11). OPEN POINT, not a correct outcome (docs/reports/notes/dn11-open-points.md,
+    b): an UNPAID positive carried adjustment is silent (claimed - collected = 25.00, short-paid 0), and a manufacturer
+    that pays B2 in full leaves INV-10020 overpaid; the owner has not decided how to treat it."""
     ws = story.ws
     with admin_engine.begin() as conn:
         conn.execute(text("SET LOCAL session_replication_role = replica"))
@@ -200,3 +203,157 @@ def test_a_positive_carried_adjustment_is_not_split_off_the_payment(
     assert _alloc_rows(admin_engine, doc["id"]) == [(1, story.lines["INV-10020"]["id"], None, D("312.50"))]
     assert finalize(ws.api, doc["id"]).status_code == 200
     assert "INV-10020" not in _cases(story)
+
+
+def _line_id(admin: Engine, remittance_id: str) -> str:
+    with admin.connect() as conn:
+        return str(
+            conn.execute(
+                text("SELECT id FROM remittance_lines WHERE remittance_document_id = :d"),
+                {"d": remittance_id},
+            ).scalar_one()
+        )
+
+
+def test_b2_paid_in_excess_overpays_inv_10020_by_the_excess_over_the_net(
+    story: Story, admin_engine: Engine
+) -> None:
+    """B2 expected 262.50, paid 300.00. Split: adjustment -50.00, claim part 300.00 + 50.00 = 350.00; sum 300.00.
+    INV-10020: paid 350.00 - claimed 312.50 = overpaid 37.50 (= 300.00 - 262.50). CL-4 one 50.00 case."""
+    _b1_pays_cl4(story)
+    doc = _remit(story, "B2-OVER", _b2_rows(story, "300.00"), "300.00")
+    inv20, cl4 = story.lines["INV-10020"]["id"], story.lines["INV-10021"]["id"]
+    assert _alloc_rows(admin_engine, doc["id"]) == [
+        (1, inv20, None, D("350.00")),
+        (1, None, cl4, D("-50.00")),
+    ]
+    assert finalize(story.ws.api, doc["id"]).status_code == 200
+    cases = _cases(story)
+    assert cases["INV-10020"] == [D("37.50")] and cases["INV-10021"] == [D("50.00")]
+
+
+def test_b2_paid_nothing_with_a_rejection_code_stays_a_rejection_and_the_adjustment_is_not_split(
+    story: Story, admin_engine: Engine
+) -> None:
+    """B2 paid 0.00 with E07 (mapped to a rejected_* reason). A payment below the 50.00 credit does not net it: the
+    claim line gets 0.00, the adjustment no allocation, so INV-10020 is `rejected` 312.50 (312.50 - 0.00), never a
+    fake 50.00 payment. CL-4 one 50.00 case."""
+    _b1_pays_cl4(story)
+    qty = story.lines["INV-10020"]["quantity"]
+    doc = _remit(story, "B2-ZERO", f"1,INV-10020,1,BRK-3P-60A,{qty},312.50,0.00,E07,rejected\n", "0.00")
+    assert _alloc_rows(admin_engine, doc["id"]) == [(1, story.lines["INV-10020"]["id"], None, D("0.00"))]
+    assert finalize(story.ws.api, doc["id"]).status_code == 200
+    cases = _cases(story)
+    assert cases["INV-10020"] == [D("312.50")] and cases["INV-10021"] == [D("50.00")]
+    kinds = {
+        c["case_type"]
+        for c in story.ws.api.get("/cases", params={"limit": 200}).json()["data"]
+        if c["claim_line_id"] == story.lines["INV-10020"]["id"]
+    }
+    assert kinds == {"rejected"}
+
+
+def _pay_cl4_in_full(story: Story) -> None:
+    doc = _remit(story, "B1-FULL", "1,INV-10021,1,BRK-3P-60A,16,250.00,250.00,,\n", "250.00")
+    assert finalize(story.ws.api, doc["id"]).status_code == 200
+
+
+@pytest.mark.parametrize(
+    "released", [False, True], ids=["cl4_paid_in_full", "cl4_paid_in_full_then_released"]
+)
+def test_cl4_paid_in_full_is_not_needed_in_the_matching_pool(
+    env: Env, story: Story, admin_engine: Engine, released: bool
+) -> None:
+    """B1 paid CL-4 250.00 in full (no CL-4 case), CN-5002 later credits -50.00 (ADJ in B2), B2 paid 262.50. CL-4 is no
+    longer in the matching pool (fully paid; or released): the run must not crash. Allocations 312.50 to INV-10020 and
+    -50.00 attributed to CL-4; INV-10020 no case; CL-4 no case. claimed 10,672.50 - collected (250.00 + 312.50 - 50.00 =
+    512.50) = 10,160.00 = short-paid (the six other B1 lines, unpaid)."""
+    ws = story.ws
+    _pay_cl4_in_full(story)
+    inv20, cl4 = story.lines["INV-10020"]["id"], story.lines["INV-10021"]["id"]
+    if released:
+        with admin_engine.begin() as conn:
+            conn.execute(text("SET LOCAL session_replication_role = replica"))
+            conn.execute(text("UPDATE claim_lines SET released_at = now() WHERE id = :c"), {"c": cl4})
+    doc = _remit(story, "B2-PAY", _b2_rows(story, "262.50"), "262.50")
+    assert _alloc_rows(admin_engine, doc["id"]) == [
+        (1, inv20, None, D("312.50")),
+        (1, None, cl4, D("-50.00")),
+    ]
+    assert finalize(ws.api, doc["id"]).status_code == 200
+    cases = _cases(story)
+    assert "INV-10020" not in cases and "INV-10021" not in cases
+    if not released:
+        drain(env.app)
+        env.clock.t = NOW + timedelta(minutes=2)
+        assert ws.api.post("/dashboard/refresh").status_code == 202
+        drain(env.app)
+        f = {k: D(v) for k, v in ws.api.get("/dashboard").json()["figures"].items()}
+        assert (f["claimed"], f["collected"], f["short_paid"]) == (D("10672.50"), D("512.50"), D("10160.00"))
+        assert f["claimed"] - f["collected"] == f["short_paid"]
+
+
+def test_an_adjustment_a_person_already_allocated_is_not_split_again(
+    story: Story, admin_engine: Engine
+) -> None:
+    """A person confirmed ADJ -50.00 on an unrelated 100.00 line (manual). B2's payment 262.50 must not allocate the ADJ
+    a second time (-100.00 would exceed 50.00 and abort the run): the claim line gets the whole 262.50 (INV-10020
+    short 312.50 - 262.50 = 50.00; the person's allocation stays the only one: -50.00 in total)."""
+    ws = story.ws
+    _b1_pays_cl4(story)
+    other = _remit(story, "MAN-1", "1,,,,,,100.00,,x\n", "100.00")
+    lid = _line_id(admin_engine, other["id"])
+    body = {
+        "remittance_line_id": lid,
+        "claim_adjustment_id": story.adjustment["id"],
+        "allocated_amount": "-50.00",
+    }
+    assert ws.api.post("/matches", json=body).status_code == 201
+    doc = _remit(story, "B2-PAY", _b2_rows(story, "262.50"), "262.50")
+    assert _alloc_rows(admin_engine, doc["id"]) == [(1, story.lines["INV-10020"]["id"], None, D("262.50"))]
+    assert finalize(ws.api, doc["id"]).status_code == 200
+    assert _cases(story)["INV-10020"] == [D("50.00")]
+
+
+def test_a_person_can_confirm_the_adjustment_on_the_carrying_batchs_own_payment(
+    story: Story, admin_engine: Engine
+) -> None:
+    """Manual repair on B2's own line (262.50, no identifiers so nothing is auto-matched): ADJ -50.00 first (counts 0 on
+    its own), then 312.50 to INV-10020: 312.50 - 50.00 = 262.50 <= 262.50, accepted because the line pays a claim line
+    of the carrying batch. (The refusal on an unrelated line is the restored guard test in test_reconciliation_csv.py.)
+    Trigger: an allocation of +10.00 on the -50.00 adjustment is refused (sign), so is -100.00 (abs cap)."""
+    ws = story.ws
+    adj = story.adjustment["id"]
+    own = _remit(story, "B2-MAN", "1,,,,,,262.50,,paid B2\n", "262.50")
+    lid = _line_id(admin_engine, own["id"])
+    first = {"remittance_line_id": lid, "claim_adjustment_id": adj, "allocated_amount": "-50.00"}
+    assert ws.api.post("/matches", json=first).status_code == 201
+    second = {
+        "remittance_line_id": lid,
+        "claim_line_id": story.lines["INV-10020"]["id"],
+        "allocated_amount": "312.50",
+    }
+    ok_ = ws.api.post("/matches", json=second)
+    assert ok_.status_code == 201, ok_.text
+    other = _remit(story, "UNREL", "1,,,,,,200.00,,x\n", "200.00")
+    ul = _line_id(admin_engine, other["id"])
+    for amount in ("10.00", "-100.00"):
+        with admin_engine.connect() as conn:
+            tx = conn.begin()
+            try:
+                tenant = conn.execute(
+                    text("SELECT tenant_id FROM remittance_lines WHERE id = :l"), {"l": ul}
+                ).scalar_one()
+                with pytest.raises(Exception, match=r"sign|exceed"):
+                    conn.execute(
+                        text(
+                            "INSERT INTO reconciliation_matches (tenant_id, id, match_id, remittance_line_id, "
+                            "allocated_amount, method, evidence, status, confirmed_by, confirmed_at, "
+                            "claim_adjustment_id) VALUES (:t, :m, :m, :l, :a, 'manual', '{}', 'confirmed', :u, "
+                            "now(), :j)"
+                        ),
+                        {"t": tenant, "m": uuid.uuid4(), "l": ul, "a": amount, "u": ws.user_id, "j": adj},
+                    )
+                    conn.execute(text("SET CONSTRAINTS ALL IMMEDIATE"))
+            finally:
+                tx.rollback()
