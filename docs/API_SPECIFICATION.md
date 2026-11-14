@@ -107,8 +107,8 @@ Legend: **R** = roles allowed (A admin, P approver, N analyst, V viewer). Writes
 |---|---|---|
 | `POST /files` (multipart: `file`, `kind`) | Upload to quarantine; returns `file` with `scan_status=pending`. `kind` ∈ `import`, `agreement`, `remittance`, `attachment`. Before the body is read: a live session and the session-bound CSRF token (401/403), `Content-Length` required and `Transfer-Encoding` refused (411 `length_required`), larger than the limit → 413, at most 30 uploads per user per minute (429). CSV must be UTF-8/ASCII text (UTF-16 "Unicode Text" exports are rejected as `content_type_mismatch`; save as "CSV UTF-8"). XLSX with VBA, Excel 4 macro sheets, OLE embeddings, ActiveX, external links, encryption or duplicate entry names is rejected. Rejections: 422 `upload_rejected` with a detail code (`type_not_allowed`, `declared_type_mismatch`, `content_type_mismatch`, `macros`, `archive_ratio`, `archive_too_large`, `archive_too_complex`, `encrypted`, `not_a_workbook`, `empty`); same content already uploaded for that kind → 409 `duplicate_file` (detail message = existing file id) | A P N |
 | `GET /files` | List (newest first; `limit` ≤ 200, `before` = last id) — added S2 | all |
-| `GET /files/{id}` | Metadata and scan status | all |
-| `GET /files/{id}/download-url` | Short-lived presigned URL (≤ 300 s, `Content-Disposition: attachment`; audited). Only `clean` files: otherwise 409 `invalid_state` | all |
+| `GET /files/{id}` | Metadata and scan status (same export-file rule as download-url) | all |
+| `GET /files/{id}/download-url` | Short-lived presigned URL (≤ 300 s, `Content-Disposition: attachment`; audited). Only `clean` files: otherwise 409 `invalid_state`. `export` files also need the permission of the export that made them: claim batch exports `claim_batch.export` (A P N), audit packs `audit_pack.export` (A P V), missed-claims lists `data.read`; otherwise 403 `permission_denied`, and `GET /files` leaves those files out | all (export files: see text) |
 
 ### 2.3 Master data
 
@@ -201,7 +201,7 @@ Legend: **R** = roles allowed (A admin, P approver, N analyst, V viewer). Writes
 |---|---|---|
 | `POST /remittances` | `{file_id, manufacturer_id, doc_type, channel, mapping_template_id?, document_number?, document_date?, payment_date?, total_amount?, currency_code?}` → 202 `{remittance, job}` (the `remittance_ingest` job reads the file). `Idempotency-Key` required. A PDF needs `ai_processing_enabled` (else 409 `ai_not_enabled`; CSV/XLSX never use AI). Same manufacturer + `document_number` as a non-void remittance → 409 `duplicate_remittance`; a file already used by a remittance → 409 `conflict`. A CSV/XLSX with no stated total (none in the request, none in the file) is not auto-accepted: it waits in `pending_review` with the problem `total_required` and `accept` answers 422 `total_required` until `total_amount` is entered. CSV/XLSX that pass every check are `accepted` by the requesting user; a PDF always lands in `pending_review` | A P N |
 | `GET /remittances` (filters `status`, `manufacturer_id`), `GET /remittances/{id}`, `GET /remittances/{id}/lines` | Cursor pagination. Lines exist only after acceptance (`remittance_lines`); before that read the staging rows via `/extraction` | all |
-| `GET /remittances/{id}/extraction` | Staged lines, per-line `issues` and document-level `problems` (`total_mismatch`, `not_in_document`, `negative_amount`, ...) | all |
+| `GET /remittances/{id}/extraction` | Staged lines, per-line `issues` and document-level `problems` (`total_mismatch`, `not_in_document`, `negative_amount`, ...); staging data is working data, so it needs `remittance.reconcile` | A P N |
 | `POST /remittances/{id}/accept` | `{document_number?, document_date?, payment_date?, total_amount?, corrections?: [{line_number, ...}]}`: corrections are kept as evidence; refused with 409 `cannot_accept` (details = the remaining problems) unless every line has an amount, none is negative and the lines add up to the document total (+-0.01). Lines become matchable only on acceptance | A P N |
 | `POST /remittances/{id}/void` | Only while `uploaded` or `pending_review` (else 409 `invalid_state`); `void` is final | A P N |
 | `POST /remittances/{id}/reconcile` | Run matching → 202 `{job}`; 409 `invalid_state` unless `accepted`. A re-run keeps confirmed matches and recomputes the rest | A P N |
@@ -223,7 +223,7 @@ Legend: **R** = roles allowed (A admin, P approver, N analyst, V viewer). Writes
 | `POST /cases/{id}/transition` | `{to_status, note}` (state machine validated) | A P N (except write-off) |
 | `POST /cases/{id}/notes` | | A P N |
 | `POST /cases/{id}/attachments` | `{file_id}` | A P N |
-| `POST /cases/{id}/write-off` | `{reason}`; four-eyes | A P |
+| `POST /cases/{id}/write-off` | `{reason}`; four-eyes. The proposing call stores `reason`; the completing call ignores its body `reason` and writes off with the stored proposal reason (the field stays required, so the schema is unchanged) | A P |
 | `POST /cases/{id}/reclaim` | Creates a `recovery_reclaim` adjustment proposal | A P N |
 | `GET /notifications`, `POST /notifications/{id}/read` | In-app; the caller's own only (`unread=true`, keyset paging); another user's id is 404 | all |
 

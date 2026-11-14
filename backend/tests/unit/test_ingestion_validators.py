@@ -275,3 +275,29 @@ def test_card_number_in_a_template_header_is_refused() -> None:
     with pytest.raises(MappingInvalid) as err:
         check_mapping("customers", {"customer_code": "c", "customer_name": "n"}, {}, headers)
     assert ("headers[2]", "card_number") in {(d["field"], d["code"]) for d in err.value.details}
+
+
+def test_large_file_duplicates_at_both_ends_and_credit_note_originals() -> None:
+    """Whole-file state is kept as digests (memory); results must equal exact-key semantics."""
+    n_rows = 50_000
+    v = _validator(lk=lookups(sales_line_exists=lambda keys: {("INV-DB", 1)} & set(keys)))
+    status: dict[int, str] = {}
+    for i in range(1, n_rows + 1):
+        status[i] = v.validate(i, _row(document_number=f"INV-{i}")).status
+    assert set(status.values()) == {"valid"}
+    # at the end of the file: repeats of the very first rows (same values / changed values) and a new key
+    assert v.validate(n_rows + 1, _row(document_number="INV-1")).status == "duplicate"
+    last = v.validate(n_rows + 2, _row(document_number="INV-1", quantity="11", extended_amount="968"))
+    assert last.status == "error" and "row 1 " in last.issues[0].message
+    assert v.validate(n_rows + 3, _row(document_number=f"INV-{n_rows}")).status == "duplicate"
+    assert v.validate(n_rows + 4, _row(document_number=f"INV-{n_rows + 1}")).status == "valid"
+    # same document number, other line: a different key
+    assert v.validate(n_rows + 5, _row(document_number="INV-1", line_number="2")).status == "valid"
+    cn = dict(doc_type="credit_note", quantity="-1", extended_amount="-88.00")
+    for row, orig, line in ((n_rows + 6, "INV-7", "1"), (n_rows + 7, f"INV-{n_rows}", "1"),
+                            (n_rows + 8, "INV-DB", "1"), (n_rows + 9, "INV-NONE", "1"),
+                            (n_rows + 10, "INV-7", "2")):  # fmt: skip
+        r = v.validate(row, _row(document_number=f"CN-{row}", original_document_number=orig,
+                                 original_line_number=line, **cn))  # fmt: skip
+        assert r.status == "valid", r.issues
+    assert sorted(v.finish()) == [n_rows + 9, n_rows + 10]  # only the two unresolved originals warn
