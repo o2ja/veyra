@@ -8,7 +8,7 @@ from uuid import UUID
 from pydantic import BaseModel, ConfigDict, Field, StringConstraints, model_validator
 
 from rebate.core.money import Money
-from rebate.core.validation import NO_CONTROL, STRICT, JsonUUID
+from rebate.core.validation import NO_CONTROL, NO_CONTROL_TEXT, STRICT, JsonUUID
 from rebate.modules.claims import exporting
 from rebate.modules.claims.schemas import JsonDate, RunJobRef
 from rebate.modules.masterdata import Page
@@ -19,7 +19,9 @@ ShortText = Annotated[str, StringConstraints(min_length=1, max_length=100, patte
 Reference = Annotated[
     str, StringConstraints(strip_whitespace=True, min_length=1, max_length=200, pattern=NO_CONTROL)
 ]
-Reason = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=1000)]
+Reason = Annotated[
+    str, StringConstraints(strip_whitespace=True, min_length=1, max_length=1000, pattern=NO_CONTROL_TEXT)
+]
 
 
 # ---- missed claims -----------------------------------------------------------------------------------------
@@ -109,7 +111,7 @@ class OptionsIn(BaseModel):
     include_header: bool = True
     delimiter: Literal[",", ";", "\t", "|"] = ","
     sheet_name: Annotated[
-        str, StringConstraints(min_length=1, max_length=31, pattern=r"^[^\\/*?:\[\]]+$")
+        str, StringConstraints(min_length=1, max_length=31, pattern=r"^[^\\/*?:\[\]\x00-\x1f\x7f]+$")
     ] = "Claims"
 
 

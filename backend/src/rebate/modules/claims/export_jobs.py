@@ -18,7 +18,7 @@ from sqlalchemy.orm import Session
 
 from rebate.core import clock
 from rebate.core.ids import new_id
-from rebate.core.jobs import JobContext, PermanentError, enqueue, job
+from rebate.core.jobs import JobContext, PermanentError, enqueue, find_active, job
 from rebate.modules import audit, files
 from rebate.modules.claims import exporting, missed
 from rebate.modules.claims.models import ClaimBatch, ClaimExportTemplate
@@ -45,6 +45,9 @@ _COMMON = (
 
 def enqueue_export(db: Session, tenant_id: UUID, user_id: UUID, payload: dict[str, str]) -> tuple[UUID, UUID]:
     """Queue an export; returns ``(file_id, job_id)``."""
+    active = find_active(db, JOB_KIND, tenant_id, payload)  # same export already in flight: same job
+    if active is not None:
+        return UUID(active.payload["file_id"]), active.id
     file_id = new_id()
     job_id = enqueue(
         db,

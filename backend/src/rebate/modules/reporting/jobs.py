@@ -20,7 +20,7 @@ from sqlalchemy.orm import Session
 from rebate.core import clock
 from rebate.core.errors import NotFound
 from rebate.core.ids import new_id
-from rebate.core.jobs import JobContext, PermanentError, enqueue, job
+from rebate.core.jobs import JobContext, PermanentError, enqueue, find_active, job
 from rebate.modules import audit, claims, files, reconciliation
 from rebate.modules.masterdata import Who
 from rebate.modules.reporting import service
@@ -76,12 +76,16 @@ def request_audit_pack(db: Session, who: Who, batch_id: UUID, fmt: str) -> tuple
     tenant = who.tenant_id
     if claims.audit_pack_rows(db, tenant, batch_id) is None:
         raise NotFound()
+    want = {"batch_id": str(batch_id), "format": fmt}
+    active = find_active(db, PACK_JOB, tenant, want)  # same pack already in flight: same job
+    if active is not None:
+        return UUID(active.payload["file_id"]), active.id
     file_id = new_id()
     job_id = enqueue(
         db,
         PACK_JOB,
         tenant_id=tenant,
-        payload={"batch_id": str(batch_id), "format": fmt, "file_id": str(file_id)},
+        payload={**want, "file_id": str(file_id)},
         created_by=who.user_id,
         dedupe_key=f"{PACK_JOB}:{file_id}",
     )

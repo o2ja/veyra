@@ -8,12 +8,14 @@ from uuid import UUID
 from pydantic import BaseModel, ConfigDict, StringConstraints, computed_field
 
 from rebate.core.money import Money
-from rebate.core.validation import STRICT, JsonUUID
+from rebate.core.validation import NO_CONTROL_TEXT, STRICT, JsonUUID
 from rebate.modules.masterdata import Page
 
 CaseStatus = Literal["open", "to_reclaim", "submitted", "recovered", "written_off", "closed_no_action"]
 CaseType = Literal["short_paid", "rejected", "unpaid", "overpaid", "unmatched_payment", "source_changed"]
-Text = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=2000)]
+Text = Annotated[
+    str, StringConstraints(strip_whitespace=True, min_length=1, max_length=2000, pattern=NO_CONTROL_TEXT)
+]
 
 
 class CaseOut(BaseModel):
@@ -132,7 +134,9 @@ class AttachmentIn(BaseModel):
 class WriteOffIn(BaseModel):
     model_config = STRICT
 
-    reason: Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=1000)]
+    reason: Annotated[
+        str, StringConstraints(strip_whitespace=True, min_length=1, max_length=1000, pattern=NO_CONTROL_TEXT)
+    ]
 
 
 class ReclaimOut(BaseModel):

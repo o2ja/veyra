@@ -69,6 +69,24 @@ def _general_limits(c: RequestContext) -> None:
         ratelimit.hit(c.db, f"req:ip:{c.ip}", limit=GENERAL_IP_LIMIT, window_seconds=60)
 
 
+# Routes that enqueue expensive jobs on the shared queue: per-user throttle (ASVS review R3-1).
+JOB_REQUESTS_PER_MINUTE = 6
+JOB_ROUTES = {  # (method, route template) -> counter family
+    ("POST", "/api/v1/claim-batches/{batch_id}/export"): "export",
+    ("GET", "/api/v1/missed-claims"): "export",  # only with ?format= (the export request)
+    ("POST", "/api/v1/reports/claim-batches/{batch_id}/audit-pack"): "audit_pack",
+    ("POST", "/api/v1/remittances/{remittance_id}/reconcile"): "reconcile",
+}
+
+
+def _job_limits(request: Request, c: RequestContext) -> None:
+    p = c.principal
+    family = JOB_ROUTES.get((request.method, route_template(request)))
+    if p is None or family is None or (request.method == "GET" and "format" not in request.query_params):
+        return
+    ratelimit.hit(c.db, f"jobs:{family}:user:{p.user_id}", limit=JOB_REQUESTS_PER_MINUTE, window_seconds=60)
+
+
 AI_ROUTES = frozenset({"/api/v1/document-extractions", "/api/v1/imports/{import_id}/suggest-mapping"})
 
 
@@ -145,6 +163,7 @@ def request_context(request: Request) -> Iterator[RequestContext]:
         _check_csrf(request, c)
         _general_limits(c)
         _ai_limits(request, c)
+        _job_limits(request, c)
         yield c
     except DomainError as exc:
         if exc.commit:

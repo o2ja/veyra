@@ -20,7 +20,7 @@ from sqlalchemy.orm import Session
 from rebate.core import clock
 from rebate.core.errors import Conflict, InvalidState, NotFound, PreconditionFailed, ValidationFailed
 from rebate.core.ids import new_id
-from rebate.core.jobs import JobContext, PermanentError, enqueue, job
+from rebate.core.jobs import JobContext, PermanentError, enqueue, find_active, job
 from rebate.modules import audit, claims, masterdata, tenancy
 from rebate.modules.audit import Action, Actor
 from rebate.modules.masterdata import Who, decode_cursor, encode_cursor, product_alias_rows
@@ -362,6 +362,9 @@ def _locked(db: Session, who_tenant: UUID, remittance_id: UUID) -> RemittanceDoc
 
 def request_run(db: Session, who: Who, remittance_id: UUID) -> UUID:
     doc = _locked(db, who.tenant_id, remittance_id)
+    active = find_active(db, JOB, who.tenant_id, {"remittance_id": str(doc.id)})
+    if active is not None:  # a run for this remittance is already in flight: same job
+        return active.id
     job_id = enqueue(
         db,
         JOB,
