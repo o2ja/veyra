@@ -1,4 +1,6 @@
-import { readFileSync } from "node:fs";
+import { mkdtempSync, readFileSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { isAbsolute, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
 import AxeBuilder from "@axe-core/playwright";
@@ -25,7 +27,7 @@ interface Manufacturer {
 
 async function importFile(page: Page, type: string, relPath: string) {
   await page.goto("/imports/new");
-  await page.getByLabel("File to upload").setInputFiles(data(relPath));
+  await page.getByLabel("File to upload").setInputFiles(isAbsolute(relPath) ? relPath : data(relPath));
   await page.getByLabel("What the file contains").selectOption({ label: type });
   await page.getByRole("button", { name: "Start import" }).click();
   await expect(page).toHaveURL(/\/imports\/[0-9a-f-]{36}$/, { timeout: 60_000 });
@@ -38,6 +40,20 @@ async function importFile(page: Page, type: string, relPath: string) {
   }
   await page.getByRole("button", { name: "Confirm import" }).click();
   await expect(page.getByRole("heading", { name: "Result" })).toBeVisible({ timeout: 120_000 });
+}
+
+/**
+ * The scenario sales file split in two (the backend's import_sales_part): everything but the late credit note CN-5002,
+ * or only that credit note. INV-10021/1 is claimed at 250.00 before CN-5002 exists (claim_batches_fixture.json).
+ */
+function salesPart(late: boolean): string {
+  const [header = "", ...rows] = readFileSync(data("sales/sales_scenarios_layoutA.csv"), "utf8").split(
+    /(?<=\n)/,
+  );
+  const dir = mkdtempSync(join(tmpdir(), "veyra-sales-"));
+  const file = join(dir, late ? "sales_late_return.csv" : "sales_before_return.csv");
+  writeFileSync(file, header + rows.filter((r) => r.startsWith("CN-5002,") === late).join(""));
+  return file;
 }
 
 const escapeRe = (t: string) => t.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
@@ -121,7 +137,7 @@ test("S7 claims adjustments: queue, four-eyes approval, rejection, carry into ba
   }
 
   // 3. Initial sales file
-  await importFile(page, "Sales", "sales/sales_scenarios_layoutA.csv");
+  await importFile(page, "Sales", salesPart(false));
 
   // 4. Invite approvers & analyst
   await page.getByRole("link", { name: "Invitations" }).click();
@@ -236,10 +252,8 @@ test("S7 claims adjustments: queue, four-eyes approval, rejection, carry into ba
 
   const linesTable = page.getByRole("table", { name: "Missed claim lines" });
   await expect(linesTable).toBeVisible();
-  await linesTable
-    .getByRole("checkbox", { name: /^Select / })
-    .first()
-    .check();
+  await linesTable.getByRole("checkbox", { name: "Select INV-10021 line 1" }).check();
+  await linesTable.getByRole("checkbox", { name: "Select INV-10001 line 1" }).check();
 
   await page.getByRole("button", { name: /Create batch from selected/ }).click();
   const createDialog = page.getByRole("dialog");
@@ -263,7 +277,9 @@ test("S7 claims adjustments: queue, four-eyes approval, rejection, carry into ba
   await submitDialog.getByRole("button", { name: "Confirm submission" }).click();
   await expect(batchStatus(page)).toHaveText("Submitted", { timeout: 15_000 });
 
-  // 8. Import changed sales CSV (return / corrected rows) and re-run calculation
+  // 8. The late credit note CN-5002 (4 units back on the claimed INV-10021/1) arrives; re-run the calculation
+  await importFile(page, "Sales", salesPart(true));
+  // ... and INV-10001/1 (claimed, 2,200.00) is corrected to price 87.00 (expected_changed_rows.json), which makes it a price_mismatch
   await importFile(page, "Sales", "sales/sales_corrected_changed_rows.csv");
 
   await approver1Page.getByRole("link", { name: "Calculations" }).click();
@@ -289,7 +305,9 @@ test("S7 claims adjustments: queue, four-eyes approval, rejection, carry into ba
   await expect(proposedSummary).toBeVisible({ timeout: 30_000 });
   const proposedCount = /(\d+)\s+adjustment\(s\)\s+proposed/.exec(await proposedSummary.innerText());
   expect(proposedCount, "proposal count text").not.toBeNull();
-  expect(Number(proposedCount?.[1])).toBeGreaterThan(0);
+  // Ground truth: ADJ-2026-0001 (SC-09r) return_reversal -50.00 for INV-10021/1, and agreement_change -2,200.00 (the frozen
+  // amount) for INV-10001/1 (test_adjustment_flows.py, BUSINESS_LOGIC 9.3)
+  expect(Number(proposedCount?.[1])).toBe(2);
 
   // 9. Adjustments queue (/claims/adjustments)
   await analystPage.goto("/claims/adjustments");
@@ -301,6 +319,8 @@ test("S7 claims adjustments: queue, four-eyes approval, rejection, carry into ba
   await expect(adjTable).toBeVisible();
   const firstAdjRow = adjTable.getByRole("row").nth(1);
   await expect(firstAdjRow).toBeVisible();
+  await expect(adjTable.getByRole("row", { name: /Return reversal.*-50\.00/ })).toHaveCount(1);
+  await expect(adjTable.getByRole("row", { name: /Agreement change.*-2,?200\.00/ })).toHaveCount(1);
   await expect(firstAdjRow.getByRole("button", { name: /Approve/ })).toHaveCount(0);
   await expect(firstAdjRow.getByRole("button", { name: /Reject/ })).toHaveCount(0);
 
