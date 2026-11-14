@@ -8,3 +8,4 @@ Recovery runbooks for the scenarios in `docs/DEPLOYMENT.md` §7.1 are in this fo
 - [`secret-rotation.md`](secret-rotation.md): every secret and how to rotate it.
 - [`incident-tenant-data-exposure.md`](incident-tenant-data-exposure.md): suspected cross-tenant exposure.
 - [`cloudflare-ip-update.md`](cloudflare-ip-update.md): refreshing `CLOUDFLARE_IP_RANGES`, origin lock.
+- [`audit-seal-verify.md`](audit-seal-verify.md): verify the audit hash chain, retention dry run (S11.1).
