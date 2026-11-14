@@ -7,7 +7,7 @@ import { ApiError, unwrap } from "../../lib/api/errors";
 import { useSession } from "../../lib/session";
 import { ManufacturerSelect } from "../masterdata/common";
 import { ReportingNav } from "./common";
-import { formatDecimal, type BatchOut } from "./logic";
+import { formatDecimal, jobPollDecision, type BatchOut } from "./logic";
 
 export function AuditPackPage() {
   const { can } = useSession();
@@ -18,7 +18,6 @@ export function AuditPackPage() {
 
   const [exportJobId, setExportJobId] = useState<string | null>(null);
   const [exportFileId, setExportFileId] = useState<string | null>(null);
-  const [jobStatus, setJobStatus] = useState<string | null>(null);
 
   // Batches query: submitted batches for chosen manufacturer
   const batchesQuery = useQuery({
@@ -38,50 +37,34 @@ export function AuditPackPage() {
       ),
   });
 
-  // Job polling
-  useQuery({
+  // Job polling: statuses are exactly queued|running|succeeded|failed; stop on the last two.
+  const jobQuery = useQuery({
     queryKey: ["jobs", exportJobId],
     enabled: Boolean(exportJobId),
     queryFn: () => {
       if (!exportJobId) throw new Error("Missing job id");
-      return unwrap(
-        api.GET("/api/v1/jobs/{job_id}", {
-          params: { path: { job_id: exportJobId } },
-        }),
-      );
+      return unwrap(api.GET("/api/v1/jobs/{job_id}", { params: { path: { job_id: exportJobId } } }));
     },
-    refetchInterval: (query) => {
-      const st = query.state.data?.status;
-      setJobStatus(st ?? null);
-      if (st === "completed" || st === "finished") {
-        return false;
-      }
-      return 1500;
-    },
+    refetchInterval: (query) => (jobPollDecision(query.state.data?.status) === "poll" ? 1500 : false),
   });
+  const jobStatus = jobQuery.data?.status ?? (exportJobId ? "queued" : null);
+  const decision = jobPollDecision(jobQuery.data?.status);
 
-  // Generate audit pack mutation (XLSX only)
+  // Generate audit pack mutation (XLSX only): POST, CSRF is added by the api client middleware.
   const generateMutation = useMutation({
     mutationFn: async () => {
       if (!selectedBatchId) throw new Error("Please select a claim batch.");
-      const res = await unwrap(
-        api.GET("/api/v1/reports/claim-batches/{batch_id}/audit-pack", {
-          params: {
-            path: { batch_id: selectedBatchId },
-            query: { format: "xlsx" },
-          },
+      const res: unknown = await unwrap(
+        api.POST("/api/v1/reports/claim-batches/{batch_id}/audit-pack", {
+          params: { path: { batch_id: selectedBatchId } },
+          body: { format: "xlsx" },
         }),
       );
-      return res as unknown as { job?: { id: string }; file_id?: string };
+      return res as { job?: { id: string }; file_id?: string };
     },
     onSuccess: (data) => {
-      if (data?.file_id) {
-        setExportFileId(data.file_id);
-      }
-      if (data?.job?.id) {
-        setExportJobId(data.job.id);
-        setJobStatus("pending");
-      }
+      setExportFileId(data.file_id ?? null);
+      setExportJobId(data.job?.id ?? null);
     },
   });
 
@@ -108,7 +91,6 @@ export function AuditPackPage() {
     );
   }
 
-  const isJobComplete = jobStatus === "completed" || jobStatus === "finished";
   const genErr = generateMutation.error as ApiError | null;
 
   if (genErr?.status === 403 || genErr?.code === "forbidden") {
@@ -138,9 +120,6 @@ export function AuditPackPage() {
           <div className="flex flex-col gap-4">
             {/* 1. Manufacturer selection */}
             <div className="flex flex-col gap-1 text-sm">
-              <label htmlFor="audit-mfg" className="font-medium text-xs text-muted">
-                Manufacturer
-              </label>
               <ManufacturerSelect
                 value={manufacturerId}
                 onChange={(mfg) => {
@@ -148,7 +127,6 @@ export function AuditPackPage() {
                   setSelectedBatchId("");
                   setExportJobId(null);
                   setExportFileId(null);
-                  setJobStatus(null);
                 }}
               />
             </div>
@@ -173,7 +151,6 @@ export function AuditPackPage() {
                       setSelectedBatchId(e.target.value);
                       setExportJobId(null);
                       setExportFileId(null);
-                      setJobStatus(null);
                     }}
                     className="rounded border border-line bg-surface p-2 text-sm font-mono"
                   >
@@ -193,7 +170,9 @@ export function AuditPackPage() {
             <div className="pt-2">
               <Button
                 disabled={
-                  !selectedBatchId || generateMutation.isPending || Boolean(exportJobId && !isJobComplete)
+                  !selectedBatchId ||
+                  generateMutation.isPending ||
+                  Boolean(exportJobId && decision === "poll")
                 }
                 onClick={() => generateMutation.mutate()}
               >
@@ -208,12 +187,20 @@ export function AuditPackPage() {
           <Card title="Export status">
             <div className="flex flex-col gap-3 text-sm">
               <div className="flex items-center gap-2">
-                {!isJobComplete && <Loading />}
+                {decision === "poll" && <Loading />}
                 <span className="font-medium">Job status:</span>
-                <span className="font-mono text-xs capitalize">{jobStatus ?? "Queued"}</span>
+                <span className="font-mono text-xs">{jobStatus}</span>
               </div>
 
-              {isJobComplete && exportFileId && (
+              {jobQuery.error && <ErrorAlert error={jobQuery.error as ApiError} />}
+              {decision === "failed" && (
+                <div role="alert">
+                  <Alert tone="danger">{jobQuery.data?.last_error ?? "The audit pack job failed."}</Alert>
+                </div>
+              )}
+              {downloadMutation.error && <ErrorAlert error={downloadMutation.error as ApiError} />}
+
+              {decision === "succeeded" && exportFileId && (
                 <div className="mt-2 flex flex-col gap-2">
                   <Alert tone="ok">Audit pack generated successfully in XLSX format.</Alert>
                   <div>

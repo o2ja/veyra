@@ -79,3 +79,12 @@ export function formatFields(fields: Record<string, string | null> | null | unde
     value: v === null || v === undefined || v === "" ? "—" : String(v),
   }));
 }
+
+export type JobStatus = "queued" | "running" | "succeeded" | "failed";
+
+/** What a job poll should do next: keep polling, finish (offer the result), or stop with the error. */
+export function jobPollDecision(status: string | null | undefined): "poll" | "succeeded" | "failed" {
+  if (status === "succeeded") return "succeeded";
+  if (status === "failed") return "failed";
+  return "poll";
+}

@@ -121,6 +121,8 @@ export function DrilldownPage() {
           )}
         </div>
 
+        {refreshMutation.error && <ErrorAlert error={refreshMutation.error as ApiError} />}
+
         {/* Consistency warning if consistent === false */}
         {d && d.consistent === false && (
           <Alert tone="info">

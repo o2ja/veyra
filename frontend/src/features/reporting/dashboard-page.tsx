@@ -8,7 +8,14 @@ import { ApiError, unwrap } from "../../lib/api/errors";
 import { useSession } from "../../lib/session";
 import { ManufacturerSelect } from "../masterdata/common";
 import { BranchSelect, ReportingNav } from "./common";
-import { formatDecimal, METRIC_DESCRIPTIONS, METRIC_KEYS, METRIC_LABELS, type MetricKey } from "./logic";
+import {
+  formatDecimal,
+  jobPollDecision,
+  METRIC_DESCRIPTIONS,
+  METRIC_KEYS,
+  METRIC_LABELS,
+  type MetricKey,
+} from "./logic";
 
 export function DashboardPage() {
   const { can } = useSession();
@@ -56,8 +63,7 @@ export function DashboardPage() {
       );
     },
     refetchInterval: (query) => {
-      const st = query.state.data?.status;
-      if (st === "completed" || st === "finished") {
+      if (jobPollDecision(query.state.data?.status) !== "poll") {
         setRefreshJobId(null);
         void client.invalidateQueries({ queryKey: ["dashboard"] });
         return false;
@@ -128,6 +134,7 @@ export function DashboardPage() {
         <ReportingNav />
         <Card title="Executive Dashboard">
           <Empty>Figures have not been built yet</Empty>
+          {refreshMutation.error && <ErrorAlert error={refreshMutation.error as ApiError} />}
           {can("report.refresh") && (
             <div className="mt-4">
               <Button
@@ -147,11 +154,11 @@ export function DashboardPage() {
     d.figures.recovered_after_write_off !== undefined && d.figures.recovered_after_write_off !== null;
 
   // Build the drill-down link preserving active query params
-  function drilldownUrl(metric: MetricKey) {
+  function drilldownUrl(metric: MetricKey, month = monthParam) {
     const params = new URLSearchParams();
     if (manufacturerId) params.set("manufacturer_id", manufacturerId);
     if (branchId) params.set("branch_id", branchId);
-    if (monthParam) params.set("month", monthParam);
+    if (month) params.set("month", month);
     const qs = params.toString();
     return `/dashboard/${metric}${qs ? `?${qs}` : ""}`;
   }
@@ -195,14 +202,12 @@ export function DashboardPage() {
         </div>
 
         {refreshNotice && <Alert tone="info">{refreshNotice}</Alert>}
+        {refreshMutation.error && <ErrorAlert error={refreshMutation.error as ApiError} />}
 
         {/* Filters */}
         <Card title="Filters">
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
             <div className="flex flex-col gap-1 text-sm">
-              <label htmlFor="mfg-filter" className="font-medium text-xs text-muted">
-                Manufacturer
-              </label>
               <ManufacturerSelect
                 value={manufacturerId}
                 onChange={(v) => updateFilter("manufacturer_id", v)}
@@ -333,27 +338,33 @@ export function DashboardPage() {
                   </tr>
                 </thead>
                 <tbody>
-                  {d.months.map((m) => (
-                    <tr key={m.month} className="border-b border-line hover:bg-surface/50">
-                      <td className="py-2 pr-4 font-mono font-medium">{m.month}</td>
-                      <td className="py-2 pr-4 text-right font-mono">{formatDecimal(m.figures.claimed)}</td>
-                      <td className="py-2 pr-4 text-right font-mono">{formatDecimal(m.figures.collected)}</td>
+                  {d.months.map((m) => {
+                    const cell = (metric: MetricKey, value: string | null | undefined) => (
                       <td className="py-2 pr-4 text-right font-mono">
-                        {formatDecimal(m.figures.short_paid)}
+                        <Link
+                          to={drilldownUrl(metric, m.month)}
+                          aria-label={`${METRIC_LABELS[metric] ?? metric} ${m.month}: ${formatDecimal(value)}, view details`}
+                          className="underline-offset-2 hover:underline"
+                        >
+                          {formatDecimal(value)}
+                        </Link>
                       </td>
-                      <td className="py-2 pr-4 text-right font-mono">{formatDecimal(m.figures.recovered)}</td>
-                      <td className="py-2 pr-4 text-right font-mono">
-                        {formatDecimal(m.figures.written_off)}
-                      </td>
-                      {hasRecoveredAfterWriteOff && (
-                        <td className="py-2 pr-4 text-right font-mono">
-                          {formatDecimal(m.figures.recovered_after_write_off)}
-                        </td>
-                      )}
-                      <td className="py-2 pr-4 text-right font-mono">{formatDecimal(m.figures.at_risk)}</td>
-                      <td className="py-2 pr-4 text-right font-mono">{formatDecimal(m.figures.expiring)}</td>
-                    </tr>
-                  ))}
+                    );
+                    return (
+                      <tr key={m.month} className="border-b border-line hover:bg-surface/50">
+                        <td className="py-2 pr-4 font-mono font-medium">{m.month}</td>
+                        {cell("claimed", m.figures.claimed)}
+                        {cell("collected", m.figures.collected)}
+                        {cell("short_paid", m.figures.short_paid)}
+                        {cell("recovered", m.figures.recovered)}
+                        {cell("written_off", m.figures.written_off)}
+                        {hasRecoveredAfterWriteOff &&
+                          cell("recovered_after_write_off", m.figures.recovered_after_write_off)}
+                        {cell("at_risk", m.figures.at_risk)}
+                        {cell("expiring", m.figures.expiring)}
+                      </tr>
+                    );
+                  })}
                 </tbody>
               </table>
             </div>
