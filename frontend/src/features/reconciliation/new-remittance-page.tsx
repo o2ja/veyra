@@ -1,9 +1,11 @@
+import { zodResolver } from "@hookform/resolvers/zod";
 import { useMutation, useQuery } from "@tanstack/react-query";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useForm } from "react-hook-form";
 import { useNavigate } from "react-router-dom";
 import { z } from "zod";
 
+import type { components } from "../../api/schema";
 import { Alert, Button, Card, ErrorAlert, Field, Loading } from "../../components/ui";
 import { api } from "../../lib/api/client";
 import { ApiError, unwrap } from "../../lib/api/errors";
@@ -18,10 +20,9 @@ import {
   type RemittanceIn,
 } from "./logic";
 
-const schema = z.object({
-  manufacturer_id: z.string().min(1, "Manufacturer is required"),
-  doc_type: z.enum(REMITTANCE_DOC_TYPES),
-  channel: z.enum(REMITTANCE_CHANNELS),
+type RemittanceAccepted = components["schemas"]["RemittanceAccepted"];
+
+const formFieldsSchema = z.object({
   document_number: z.string().optional(),
   document_date: z
     .string()
@@ -45,7 +46,7 @@ const schema = z.object({
   mapping_template_id: z.string().optional(),
 });
 
-type FormValues = z.infer<typeof schema>;
+type FormFields = z.infer<typeof formFieldsSchema>;
 
 export function NewRemittancePage() {
   const navigate = useNavigate();
@@ -58,15 +59,16 @@ export function NewRemittancePage() {
   const [idemKey] = useState(() => crypto.randomUUID());
 
   const [manufacturerId, setManufacturerId] = useState("");
-  const [docType, setDocType] = useState<FormValues["doc_type"]>("credit_memo");
-  const [channel, setChannel] = useState<FormValues["channel"]>("credit_memo");
+  const [docType, setDocType] = useState<(typeof REMITTANCE_DOC_TYPES)[number]>("credit_memo");
+  const [channel, setChannel] = useState<(typeof REMITTANCE_CHANNELS)[number]>("credit_memo");
   const [mfgError, setMfgError] = useState<string | null>(null);
 
   const {
     register,
     handleSubmit,
     formState: { errors },
-  } = useForm<Omit<FormValues, "manufacturer_id" | "doc_type" | "channel">>({
+  } = useForm<FormFields>({
+    resolver: zodResolver(formFieldsSchema),
     defaultValues: {
       document_number: "",
       document_date: "",
@@ -95,32 +97,26 @@ export function NewRemittancePage() {
     },
   });
 
-  // Watch job status
-  const jobStatus = jobQuery.data?.status;
-  if (jobStatus === "completed" || jobStatus === "finished") {
-    if (targetRemittanceId) {
+  const job = jobQuery.data;
+  const jobStatus = job?.status;
+  const isJobSucceeded = jobStatus === "succeeded";
+  const isJobFailed = jobStatus === "failed";
+  const jobError = job?.last_error ?? (job as { error?: string } | undefined)?.error;
+
+  useEffect(() => {
+    if (isJobSucceeded && targetRemittanceId) {
       navigate(`/reconciliation/${targetRemittanceId}`);
     }
-  }
+  }, [isJobSucceeded, targetRemittanceId, navigate]);
 
   const createRemittance = useMutation({
-    mutationFn: async (vals: Omit<FormValues, "manufacturer_id" | "doc_type" | "channel">) => {
+    mutationFn: async (vals: FormFields) => {
       if (!fileId) throw new Error("Please upload a remittance file first.");
       if (!manufacturerId) {
         setMfgError("Manufacturer is required");
         throw new Error("Manufacturer is required");
       }
       setMfgError(null);
-
-      const parsed = schema.safeParse({
-        manufacturer_id: manufacturerId,
-        doc_type: docType,
-        channel,
-        ...vals,
-      });
-      if (!parsed.success) {
-        throw new Error(parsed.error.errors[0]?.message ?? "Invalid form data");
-      }
 
       const body: RemittanceIn = {
         file_id: fileId,
@@ -141,7 +137,7 @@ export function NewRemittancePage() {
           body,
         }),
       );
-      return res as unknown as { remittance: { id: string }; job?: { id: string } };
+      return res as RemittanceAccepted;
     },
     onSuccess: (data) => {
       if (data.job?.id) {
@@ -179,11 +175,19 @@ export function NewRemittancePage() {
         <Card title="New remittance">
           {jobId && (
             <div className="mb-4 rounded border border-line bg-surface/50 p-4 text-sm">
-              <div className="flex items-center gap-2">
-                <Loading />
-                <span className="font-medium">Ingesting remittance file…</span>
-                <span className="text-muted">(Job status: {jobStatus ?? "pending"})</span>
-              </div>
+              {isJobFailed ? (
+                <div role="alert">
+                  <Alert tone="danger">
+                    Ingestion failed: {jobError || "An error occurred while processing the remittance file."}
+                  </Alert>
+                </div>
+              ) : (
+                <div className="flex items-center gap-2">
+                  <Loading />
+                  <span className="font-medium">Ingesting remittance file…</span>
+                  <span className="text-muted">(Job status: {jobStatus ?? "queued"})</span>
+                </div>
+              )}
             </div>
           )}
 
@@ -247,7 +251,7 @@ export function NewRemittancePage() {
                 <SelectField
                   label="Document type"
                   value={docType}
-                  onChange={(e) => setDocType(e.target.value as FormValues["doc_type"])}
+                  onChange={(e) => setDocType(e.target.value as (typeof REMITTANCE_DOC_TYPES)[number])}
                   required
                 >
                   {REMITTANCE_DOC_TYPES.map((dt) => (
@@ -260,7 +264,7 @@ export function NewRemittancePage() {
                 <SelectField
                   label="Channel"
                   value={channel}
-                  onChange={(e) => setChannel(e.target.value as FormValues["channel"])}
+                  onChange={(e) => setChannel(e.target.value as (typeof REMITTANCE_CHANNELS)[number])}
                   required
                 >
                   {REMITTANCE_CHANNELS.map((ch) => (

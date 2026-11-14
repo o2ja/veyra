@@ -53,4 +53,3 @@ describe("reconciliation logic", () => {
     expect(expandable).toContain("root.details");
   });
 });
-

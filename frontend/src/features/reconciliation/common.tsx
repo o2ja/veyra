@@ -1,13 +1,11 @@
-import * as Dialog from "@radix-ui/react-dialog";
-import type { ReactNode } from "react";
 import { useMemo, useState } from "react";
 import { NavLink } from "react-router-dom";
 
-import { Alert, Button, Empty, ErrorAlert } from "../../components/ui";
-import type { ApiError } from "../../lib/api/errors";
+import { Empty } from "../../components/ui";
 import { useSession } from "../../lib/session";
-import { useManufacturers } from "../masterdata/common";
 import { buildEvidenceTree, collectExpandableIds, type EvidenceNode } from "./logic";
+
+export { ConfirmDialog, ValidationDetailsAlert, useManufacturerMap } from "../claims/common";
 
 const SECTIONS = [
   { to: "/reconciliation", label: "Remittances", permission: "data.read" },
@@ -32,81 +30,6 @@ export function ReconciliationNav() {
         </NavLink>
       ))}
     </nav>
-  );
-}
-
-export function useManufacturerMap() {
-  const list = useManufacturers();
-  const map = new Map<string, { id: string; name: string; code: string }>();
-  for (const m of list.data?.data ?? []) {
-    map.set(m.id, m);
-  }
-  return map;
-}
-
-export function ValidationDetailsAlert({ error }: { error: ApiError | null | undefined }) {
-  if (!error) return null;
-  return (
-    <div className="flex flex-col gap-2">
-      <ErrorAlert error={error} />
-      {error.details.length > 0 && (
-        <Alert tone="danger">
-          <ul className="list-disc pl-5 text-xs">
-            {error.details.map((d, idx) => (
-              <li key={`${d.field}-${d.code}-${idx}`}>
-                {d.field ? `${d.field}: ` : ""}
-                {d.message}
-              </li>
-            ))}
-          </ul>
-        </Alert>
-      )}
-    </div>
-  );
-}
-
-export function ConfirmDialog({
-  open,
-  onOpenChange,
-  title,
-  description,
-  confirmLabel = "Confirm",
-  confirmVariant = "primary",
-  busy = false,
-  onConfirm,
-  children,
-}: {
-  open: boolean;
-  onOpenChange: (open: boolean) => void;
-  title: string;
-  description?: ReactNode;
-  confirmLabel?: string;
-  confirmVariant?: "primary" | "secondary" | "danger";
-  busy?: boolean;
-  onConfirm: () => void;
-  children?: ReactNode;
-}) {
-  return (
-    <Dialog.Root open={open} onOpenChange={onOpenChange}>
-      <Dialog.Portal>
-        <Dialog.Overlay className="fixed inset-0 z-40 bg-black/40" />
-        <Dialog.Content className="fixed left-1/2 top-1/3 z-50 w-[min(32rem,92vw)] -translate-x-1/2 rounded-lg border border-line bg-panel p-6 shadow-lg">
-          <Dialog.Title className="text-lg font-semibold">{title}</Dialog.Title>
-          {description && (
-            <Dialog.Description className="mt-1 text-sm text-muted">{description}</Dialog.Description>
-          )}
-          {children && <div className="mt-4">{children}</div>}
-          <div className="mt-6 flex justify-end gap-2">
-            <Button variant="secondary" disabled={busy} onClick={() => onOpenChange(false)}>
-              Cancel
-            </Button>
-            <Button variant={confirmVariant} disabled={busy} onClick={onConfirm}>
-              {busy ? "Working…" : confirmLabel}
-            </Button>
-          </div>
-        </Dialog.Content>
-      </Dialog.Portal>
-    </Dialog.Root>
   );
 }
 

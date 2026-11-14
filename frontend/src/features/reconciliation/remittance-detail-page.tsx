@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useParams } from "react-router-dom";
 
 import {
@@ -44,6 +44,7 @@ export function RemittanceDetailPage() {
   const { can } = useSession();
   const client = useQueryClient();
   const pager = usePager();
+  const batchLinesPager = usePager();
   const manufacturers = useManufacturerMap();
 
   const [stateFilter, setStateFilter] = useState<"all" | "matched" | "suggested" | "unmatched">("all");
@@ -133,14 +134,14 @@ export function RemittanceDetailPage() {
 
   // Lines of selected batch
   const batchLinesQuery = useQuery({
-    queryKey: ["claim-batches", selectedBatchId, "lines"],
+    queryKey: ["claim-batches", selectedBatchId, "lines", batchLinesPager.cursor],
     enabled: Boolean(selectedBatchId),
     queryFn: () =>
       unwrap(
         api.GET("/api/v1/claim-batches/{batch_id}/lines", {
           params: {
             path: { batch_id: selectedBatchId },
-            query: { limit: 100 },
+            query: { limit: 100, cursor: batchLinesPager.cursor },
           },
         }),
       ),
@@ -177,15 +178,27 @@ export function RemittanceDetailPage() {
     },
     refetchInterval: (query) => {
       const st = query.state.data?.status;
-      if (st === "completed" || st === "finished") {
-        setReconcileJobId(null);
-        void client.invalidateQueries({ queryKey: ["remittances", remittanceId] });
-        void client.invalidateQueries({ queryKey: ["remittances", remittanceId, "reconciliation"] });
+      if (st === "succeeded" || st === "failed") {
         return false;
       }
       return 1500;
     },
   });
+
+  const isJobFailed = Boolean(reconcileJobId && jobQuery.data?.status === "failed");
+  const isMatching = Boolean(
+    reconcileJobId &&
+    (jobQuery.data?.status === "queued" ||
+      jobQuery.data?.status === "running" ||
+      (!jobQuery.data && !jobQuery.error)),
+  );
+
+  useEffect(() => {
+    if (jobQuery.data?.status === "succeeded") {
+      void client.invalidateQueries({ queryKey: ["remittances", remittanceId] });
+      void client.invalidateQueries({ queryKey: ["remittances", remittanceId, "reconciliation"] });
+    }
+  }, [jobQuery.data?.status, client, remittanceId]);
 
   // Mutations
   const acceptMutation = useMutation({
@@ -225,12 +238,12 @@ export function RemittanceDetailPage() {
 
   const runReconcileMutation = useMutation({
     mutationFn: async () => {
-      const res = await unwrap(
+      const res = (await unwrap(
         api.POST("/api/v1/remittances/{remittance_id}/reconcile", {
           params: { path: { remittance_id: remittanceId } },
         }),
-      );
-      return res as unknown as { job?: { id: string } };
+      )) as { job?: { id: string } };
+      return res;
     },
     onSuccess: (data) => {
       if (data.job?.id) {
@@ -257,7 +270,7 @@ export function RemittanceDetailPage() {
       void client.invalidateQueries({ queryKey: ["remittances", remittanceId, "reconciliation"] });
     },
     onError: (err: ApiError) => {
-      if (err.status === 412) {
+      if (err.status === 412 || (err.status === 409 && err.code === "invalid_state")) {
         setStaleBanner(true);
         void client.invalidateQueries({ queryKey: ["remittances", remittanceId, "reconciliation"] });
       }
@@ -280,7 +293,7 @@ export function RemittanceDetailPage() {
       void client.invalidateQueries({ queryKey: ["remittances", remittanceId, "reconciliation"] });
     },
     onError: (err: ApiError) => {
-      if (err.status === 412) {
+      if (err.status === 412 || (err.status === 409 && err.code === "invalid_state")) {
         setStaleBanner(true);
         void client.invalidateQueries({ queryKey: ["remittances", remittanceId, "reconciliation"] });
       }
@@ -338,6 +351,23 @@ export function RemittanceDetailPage() {
     },
   });
 
+  const claimRefMap = useMemo(() => {
+    const map = new Map<string, string>();
+    for (const row of reconciliationQuery.data?.data ?? []) {
+      if (row.line.claim_reference) {
+        map.set(row.line.id, row.line.claim_reference);
+      }
+      for (const m of row.matches ?? []) {
+        for (const al of m.allocations ?? []) {
+          if (al.claim_line_id && al.claim_reference) {
+            map.set(al.claim_line_id, al.claim_reference);
+          }
+        }
+      }
+    }
+    return map;
+  }, [reconciliationQuery.data?.data]);
+
   const remittanceErr = remittanceQuery.error as ApiError | null;
   if (remittanceErr?.status === 403 || remittanceErr?.code === "forbidden") {
     return (
@@ -357,6 +387,15 @@ export function RemittanceDetailPage() {
     );
   }
 
+  if (remittanceErr) {
+    return (
+      <>
+        <ReconciliationNav />
+        <ErrorAlert error={remittanceErr} />
+      </>
+    );
+  }
+
   if (!r) {
     return (
       <>
@@ -372,6 +411,8 @@ export function RemittanceDetailPage() {
     if (stateFilter === "all") return true;
     return l.state === stateFilter;
   });
+
+  const totalRequiredProblem = extractionQuery.data?.problems?.find((p) => p.code === "total_required");
 
   return (
     <>
@@ -472,14 +513,14 @@ export function RemittanceDetailPage() {
                   <div>
                     <Field
                       label="Document total"
-                      required
+                      required={Boolean(totalRequiredProblem)}
                       placeholder="e.g. 1500.00"
                       defaultValue={r.total_amount ?? ""}
                       onChange={(e) => setTotalAmount(e.target.value)}
                     />
-                    <p className="mt-1 text-xs text-muted">
-                      Required for acceptance. Must match sum of staged lines.
-                    </p>
+                    {totalRequiredProblem && (
+                      <p className="mt-1 text-xs text-danger">{totalRequiredProblem.message}</p>
+                    )}
                   </div>
                 </div>
 
@@ -616,7 +657,16 @@ export function RemittanceDetailPage() {
         {/* 2. Accepted view (Workbench) */}
         {r.status === "accepted" && (
           <div className="flex flex-col gap-6">
-            {reconcileJobId && (
+            {isJobFailed && (
+              <div role="alert" className="rounded border border-line bg-surface/50 p-4 text-sm">
+                <Alert tone="danger">
+                  Matching failed:{" "}
+                  {(jobQuery.data as { error?: string | null })?.error ?? "Matching job failed"}
+                </Alert>
+              </div>
+            )}
+
+            {isMatching && (
               <div className="rounded border border-line bg-surface/50 p-4 text-sm">
                 <div className="flex items-center gap-2">
                   <Loading />
@@ -633,7 +683,7 @@ export function RemittanceDetailPage() {
                   <div className="flex flex-wrap gap-2">
                     <Button
                       variant="secondary"
-                      disabled={runReconcileMutation.isPending || Boolean(reconcileJobId)}
+                      disabled={runReconcileMutation.isPending || isMatching}
                       onClick={() => runReconcileMutation.mutate()}
                     >
                       {runReconcileMutation.isPending ? "Starting matching…" : "Run matching"}
@@ -643,12 +693,19 @@ export function RemittanceDetailPage() {
                 ) : undefined
               }
             >
+              {runReconcileMutation.error && (
+                <div className="mb-4">
+                  <ValidationDetailsAlert error={runReconcileMutation.error as ApiError} />
+                </div>
+              )}
+
               {/* Filter chips */}
               <div className="mb-4 flex flex-wrap gap-2 text-xs">
                 {(["all", "matched", "suggested", "unmatched"] as const).map((st) => (
                   <button
                     key={st}
                     type="button"
+                    aria-pressed={stateFilter === st}
                     className={`rounded-full px-3 py-1 font-medium transition-colors ${
                       stateFilter === st
                         ? "bg-brand text-white"
@@ -760,6 +817,20 @@ export function RemittanceDetailPage() {
                                 )}
                               </div>
 
+                              {confirmMatchMutation.error &&
+                                confirmMatchMutation.variables?.matchId === m.id && (
+                                  <div className="mt-2">
+                                    <ValidationDetailsAlert error={confirmMatchMutation.error as ApiError} />
+                                  </div>
+                                )}
+
+                              {rejectMatchMutation.error &&
+                                rejectMatchMutation.variables?.matchId === m.id && (
+                                  <div className="mt-2">
+                                    <ValidationDetailsAlert error={rejectMatchMutation.error as ApiError} />
+                                  </div>
+                                )}
+
                               {/* Allocations */}
                               {m.allocations.length > 0 && (
                                 <div className="mt-2 flex flex-col gap-1">
@@ -786,22 +857,25 @@ export function RemittanceDetailPage() {
                         </div>
                       )}
 
-                      {/* Unmatched row actions */}
-                      {row.state === "unmatched" && canReconcile && (
+                      {/* Row actions (manual match / categorise) */}
+                      {canReconcile && !row.line.category && (
                         <div className="mt-2 flex flex-wrap items-center gap-2 border-t border-line pt-2">
-                          <Button
-                            variant="secondary"
-                            onClick={() => {
-                              setManualMatchTargetLine(row.line.id);
-                              setSelectedBatchId("");
-                              setSelectedClaimLineId("");
-                              setSelectedAdjustmentId("");
-                              setManualAllocatedAmount("");
-                            }}
-                          >
-                            Manual match
-                          </Button>
-                          {!row.line.category && (
+                          {(row.state === "unmatched" || row.state === "suggested") && (
+                            <Button
+                              variant="secondary"
+                              onClick={() => {
+                                setManualMatchTargetLine(row.line.id);
+                                setSelectedBatchId("");
+                                setSelectedClaimLineId("");
+                                setSelectedAdjustmentId("");
+                                setManualAllocatedAmount("");
+                                batchLinesPager.reset();
+                              }}
+                            >
+                              Manual match
+                            </Button>
+                          )}
+                          {row.state === "unmatched" && (
                             <Button
                               variant="secondary"
                               disabled={categoriseLineMutation.isPending}
@@ -810,6 +884,12 @@ export function RemittanceDetailPage() {
                               Mark as unmatched payment
                             </Button>
                           )}
+                        </div>
+                      )}
+
+                      {categoriseLineMutation.error && categoriseLineMutation.variables === row.line.id && (
+                        <div className="mt-2">
+                          <ValidationDetailsAlert error={categoriseLineMutation.error as ApiError} />
                         </div>
                       )}
                     </div>
@@ -855,6 +935,7 @@ export function RemittanceDetailPage() {
                       setSelectedBatchId(e.target.value);
                       setSelectedClaimLineId("");
                       setSelectedAdjustmentId("");
+                      batchLinesPager.reset();
                     }}
                     className="rounded border border-line bg-surface p-2 text-xs"
                   >
@@ -891,6 +972,7 @@ export function RemittanceDetailPage() {
                           </option>
                         ))}
                       </select>
+                      <PagerControls pager={batchLinesPager} page={batchLinesQuery.data?.page} />
                     </div>
 
                     {(batchAdjustmentsQuery.data?.data?.length ?? 0) > 0 && (
@@ -978,17 +1060,42 @@ export function RemittanceDetailPage() {
                       cell: (f: FindingOut) => f.reason_code ?? "—",
                     },
                     {
-                      header: "Amount",
+                      header: "External reason",
+                      cell: (f: FindingOut) => f.external_reason_code ?? "—",
+                    },
+                    {
+                      header: "Claim reference",
+                      cell: (f: FindingOut) => {
+                        const claimRef =
+                          (f as { claim_reference?: string | null }).claim_reference ??
+                          (f.claim_line_id ? claimRefMap.get(f.claim_line_id) : null) ??
+                          (f.remittance_line_id ? claimRefMap.get(f.remittance_line_id) : null) ??
+                          "—";
+                        return <span className="font-mono text-xs">{claimRef}</span>;
+                      },
+                    },
+                    {
+                      header: "Claimed",
                       cell: (f: FindingOut) => (
-                        <span className="block text-right font-mono font-medium">
-                          {formatDecimal(f.amount)}
+                        <span className="block text-right font-mono">
+                          {f.claimed ? formatDecimal(f.claimed) : "—"}
                         </span>
                       ),
                     },
                     {
-                      header: "Claim line ID",
+                      header: "Paid",
                       cell: (f: FindingOut) => (
-                        <span className="font-mono text-xs">{f.claim_line_id ?? "—"}</span>
+                        <span className="block text-right font-mono font-medium">
+                          {formatDecimal(f.paid)}
+                        </span>
+                      ),
+                    },
+                    {
+                      header: "Variance",
+                      cell: (f: FindingOut) => (
+                        <span className="block text-right font-mono font-medium">
+                          {formatDecimal(f.amount)}
+                        </span>
                       ),
                     },
                   ]}
