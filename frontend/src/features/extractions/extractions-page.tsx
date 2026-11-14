@@ -106,7 +106,6 @@ export function ExtractionsPage() {
     (f) => f.kind === "agreement" && f.scan_status === "clean",
   );
   const aiDisabled = startErr?.code === "ai_not_enabled";
-  const rateLimited = startErr?.code === "rate_limited" || startErr?.code === "too_many_extractions";
 
   return (
     <>
@@ -188,8 +187,6 @@ export function ExtractionsPage() {
                     "Ask a workspace admin to enable it in settings."
                   )}
                 </Alert>
-              ) : rateLimited ? (
-                <Alert>{startErr.message}</Alert>
               ) : (
                 <ErrorAlert error={uploadError ?? startErr} />
               )}
