@@ -22,7 +22,19 @@ from typing import Any, cast
 from uuid import UUID
 
 import structlog
-from sqlalchemy import CursorResult, Engine, ForeignKey, Index, Integer, Result, Text, select, text, update
+from sqlalchemy import (
+    CursorResult,
+    Engine,
+    ForeignKey,
+    Index,
+    Integer,
+    Result,
+    Text,
+    literal,
+    select,
+    text,
+    update,
+)
 from sqlalchemy.dialects.postgresql import JSONB, insert
 from sqlalchemy.orm import Mapped, Session, mapped_column
 from sqlalchemy.types import DateTime
@@ -125,6 +137,21 @@ def job(
         return fn
 
     return register
+
+
+def find_active(db: Session, kind: str, tenant_id: UUID, payload: dict[str, str]) -> Job | None:
+    """The tenant's queued or running job of ``kind`` whose payload (ignoring ``file_id``) equals ``payload``."""
+    return db.scalars(
+        select(Job)
+        .where(
+            Job.tenant_id == tenant_id,
+            Job.kind == kind,
+            Job.status.in_(("queued", "running")),
+            Job.payload.op("-")("file_id") == literal(payload, JSONB),
+        )
+        .order_by(Job.created_at)
+        .limit(1)
+    ).first()
 
 
 def enqueue(

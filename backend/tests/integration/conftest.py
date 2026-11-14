@@ -8,6 +8,7 @@ from typing import Any
 
 import pytest
 from fastapi import FastAPI
+from sqlalchemy import Engine, text
 
 from rebate.modules.files import storage
 from tests.conftest import DbUrls
@@ -168,3 +169,10 @@ def seed_master(ws: Workspace, *, master: bool = True) -> Workspace:
 def ws(app: FastAPI, clk: FakeClock) -> Iterator[Workspace]:
     with api_client(app) as api:
         yield new_workspace(app, api)
+
+
+@pytest.fixture(autouse=True)
+def _fresh_job_throttles(admin_engine: Engine) -> None:
+    """The fake clock never advances on its own, so the per-user job-request counters (R3) would carry over."""
+    with admin_engine.begin() as conn:
+        conn.execute(text("DELETE FROM rate_limit_counters WHERE key LIKE 'jobs:%'"))
