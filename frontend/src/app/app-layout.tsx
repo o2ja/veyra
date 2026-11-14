@@ -8,6 +8,7 @@ import { useSession } from "../lib/session";
 
 const NAV = [
   { to: "/", label: "Home", permission: null },
+  { to: "/dashboard", label: "Dashboard", permission: "data.read" },
   { to: "/files", label: "Files", permission: "data.read" },
   { to: "/imports", label: "Imports", permission: "data.read" },
   { to: "/lines/sales", label: "Lines", permission: "data.read" },
@@ -16,6 +17,7 @@ const NAV = [
   { to: "/calculations", label: "Calculations", permission: "data.read" },
   { to: "/extractions", label: "Extractions", permission: "data.read" },
   { to: "/claims", label: "Claims", permission: "data.read" },
+  { to: "/reports/audit-pack", label: "Audit pack", permission: "data.read" },
   { to: "/recovery", label: "Recovery", permission: "data.read" },
   { to: "/notifications", label: "Notifications", permission: "data.read" },
   { to: "/reconciliation", label: "Reconciliation", permission: "data.read" },
