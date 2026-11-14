@@ -39,7 +39,15 @@ export function ClaimBatchDetailPage() {
   const [voidOpen, setVoidOpen] = useState(false);
   const [voidReason, setVoidReason] = useState("");
   const [submitOpen, setSubmitOpen] = useState(false);
-  const [submittedAt, setSubmittedAt] = useState(() => new Date().toISOString().slice(0, 10));
+  // The server rejects a submission date later than today in the tenant business timezone, so default to that
+  // day (not the UTC or browser day, which can already be tomorrow).
+  const settings = useQuery({ queryKey: ["settings"], queryFn: () => unwrap(api.GET("/api/v1/settings")) });
+  const [submittedAtEdit, setSubmittedAt] = useState("");
+  const submittedAt =
+    submittedAtEdit ||
+    (settings.data
+      ? new Intl.DateTimeFormat("en-CA", { timeZone: settings.data.business_timezone }).format(new Date())
+      : "");
   const [externalReference, setExternalReference] = useState("");
   const [exportOpen, setExportOpen] = useState(false);
   const [selectedTemplateId, setSelectedTemplateId] = useState("");

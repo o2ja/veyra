@@ -2,9 +2,18 @@ import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 
 import AxeBuilder from "@axe-core/playwright";
-import { expect, test, type Page } from "@playwright/test";
+import { expect, type Page } from "@playwright/test";
 
-import { PASSWORD, enrolMfa, signIn, tokenFromMail, uniqueEmail } from "./support";
+import {
+  PASSWORD,
+  batchStatus,
+  clientIpHeader,
+  enrolMfa,
+  signIn,
+  test,
+  tokenFromMail,
+  uniqueEmail,
+} from "./support";
 
 const data = (rel: string) => fileURLToPath(new URL(`../../testdata/generated/${rel}`, import.meta.url));
 const truth = (name: string) => JSON.parse(readFileSync(data(`ground_truth/${name}`), "utf8")) as unknown;
@@ -128,30 +137,33 @@ test("S7 claims adjustments: queue, four-eyes approval, rejection, carry into ba
   }
 
   // Set up contexts for users
-  const approver1Ctx = await browser.newContext();
+  const approver1Ctx = await browser.newContext({ extraHTTPHeaders: clientIpHeader() });
   const approver1Page = await approver1Ctx.newPage();
   await approver1Page.goto(`/accept-invite#token=${await tokenFromMail(approver1)}`);
   await approver1Page.getByLabel("Your name").fill("Approver One");
   await approver1Page.getByLabel("Password").fill(PASSWORD);
   await approver1Page.getByRole("button", { name: "Accept invitation" }).click();
+  await expect(approver1Page).toHaveURL(/\/login\?reason=invited/);
   await signIn(approver1Page, approver1);
   await enrolMfa(approver1Page);
 
-  const approver2Ctx = await browser.newContext();
+  const approver2Ctx = await browser.newContext({ extraHTTPHeaders: clientIpHeader() });
   const approver2Page = await approver2Ctx.newPage();
   await approver2Page.goto(`/accept-invite#token=${await tokenFromMail(approver2)}`);
   await approver2Page.getByLabel("Your name").fill("Approver Two");
   await approver2Page.getByLabel("Password").fill(PASSWORD);
   await approver2Page.getByRole("button", { name: "Accept invitation" }).click();
+  await expect(approver2Page).toHaveURL(/\/login\?reason=invited/);
   await signIn(approver2Page, approver2);
   await enrolMfa(approver2Page);
 
-  const analystCtx = await browser.newContext();
+  const analystCtx = await browser.newContext({ extraHTTPHeaders: clientIpHeader() });
   const analystPage = await analystCtx.newPage();
   await analystPage.goto(`/accept-invite#token=${await tokenFromMail(analyst)}`);
   await analystPage.getByLabel("Your name").fill("Analyst One");
   await analystPage.getByLabel("Password").fill(PASSWORD);
   await analystPage.getByRole("button", { name: "Accept invitation" }).click();
+  await expect(analystPage).toHaveURL(/\/login\?reason=invited/);
   await signIn(analystPage, analyst);
   await enrolMfa(analystPage);
 
@@ -162,7 +174,7 @@ test("S7 claims adjustments: queue, four-eyes approval, rejection, carry into ba
   const spaDraftId = page.url().split("/").pop() ?? "";
 
   await page.getByLabel("Agreement type").selectOption("spa");
-  await page.getByLabel("External number").fill("SPA-VOLT-2026-ADJ");
+  await page.getByLabel("External number").fill("SPA-VOLT-2026-884");
   await page.getByLabel("Manufacturer code").fill("VOLT");
   await page.getByLabel("Name", { exact: true }).fill("Voltara contractor SPA (SYNTHETIC)");
   await page.getByLabel("Valid from").fill("2026-01-01");
@@ -213,6 +225,8 @@ test("S7 claims adjustments: queue, four-eyes approval, rejection, carry into ba
   const firstRunRow = runsTable.getByRole("row").nth(1);
   await expect(firstRunRow).toBeVisible({ timeout: 30_000 });
   await expect(firstRunRow).toContainText("Completed", { timeout: 180_000 });
+  // Compare by href: UUIDv7 ids created within a minute share their 8-character prefix.
+  const firstRunHref = await firstRunRow.getByRole("link").first().getAttribute("href");
 
   // 7. Initial missed claims batch creation and submission
   await page.getByRole("link", { name: "Claims" }).click();
@@ -239,7 +253,7 @@ test("S7 claims adjustments: queue, four-eyes approval, rejection, carry into ba
   await approver1Page.goto(`/claims/batches/${initialBatchId}`);
   await approver1Page.getByRole("button", { name: "Approve batch" }).click();
   await approver1Page.getByRole("dialog").getByRole("button", { name: "Approve batch" }).click();
-  await expect(approver1Page.getByText("Approved", { exact: true })).toBeVisible({ timeout: 15_000 });
+  await expect(batchStatus(approver1Page)).toHaveText("Approved", { timeout: 15_000 });
 
   // Admin submits initial batch
   await page.goto(`/claims/batches/${initialBatchId}`);
@@ -247,7 +261,7 @@ test("S7 claims adjustments: queue, four-eyes approval, rejection, carry into ba
   const submitDialog = page.getByRole("dialog");
   await submitDialog.getByLabel("External reference").fill("PORTAL-INITIAL-001");
   await submitDialog.getByRole("button", { name: "Confirm submission" }).click();
-  await expect(page.getByText("Submitted", { exact: true })).toBeVisible({ timeout: 15_000 });
+  await expect(batchStatus(page)).toHaveText("Submitted", { timeout: 15_000 });
 
   // 8. Import changed sales CSV (return / corrected rows) and re-run calculation
   await importFile(page, "Sales", "sales/sales_corrected_changed_rows.csv");
@@ -258,7 +272,11 @@ test("S7 claims adjustments: queue, four-eyes approval, rejection, carry into ba
   await approver1Page.getByRole("button", { name: "Start calculation run" }).click();
 
   const runsTable2 = approver1Page.getByRole("table", { name: "Calculation runs" });
-  const run2Row = runsTable2.getByRole("row").nth(1);
+  // The list still shows run 1 until the new run appears, so wait for a row that is not run 1.
+  const run2Row = runsTable2
+    .locator("tbody tr")
+    .filter({ hasNot: approver1Page.locator(`a[href="${firstRunHref}"]`) })
+    .first();
   await expect(run2Row).toBeVisible({ timeout: 30_000 });
   await expect(run2Row).toContainText("Completed", { timeout: 180_000 });
   await run2Row.getByRole("link").first().click();

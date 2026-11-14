@@ -91,3 +91,8 @@ export async function signIn(page: Page, email: string, password = PASSWORD): Pr
   await page.getByLabel("Password").fill(password);
   await page.getByRole("button", { name: "Sign in" }).click();
 }
+
+/** Value cell of the "Status" term on a claim batch detail page. */
+export function batchStatus(page: Page) {
+  return page.locator("dt", { hasText: /^Status$/ }).locator("xpath=following-sibling::dd");
+}

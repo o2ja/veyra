@@ -2,9 +2,18 @@ import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 
 import AxeBuilder from "@axe-core/playwright";
-import { expect, test, type Page } from "@playwright/test";
+import { expect, type Page } from "@playwright/test";
 
-import { PASSWORD, enrolMfa, signIn, tokenFromMail, uniqueEmail } from "./support";
+import {
+  PASSWORD,
+  batchStatus,
+  clientIpHeader,
+  enrolMfa,
+  signIn,
+  test,
+  tokenFromMail,
+  uniqueEmail,
+} from "./support";
 
 const data = (rel: string) => fileURLToPath(new URL(`../../testdata/generated/${rel}`, import.meta.url));
 const truth = (name: string) => JSON.parse(readFileSync(data(`ground_truth/${name}`), "utf8")) as unknown;
@@ -99,12 +108,13 @@ test("S7 claims: missed scan, batch creation, four-eyes approval, templates, exp
   await page.getByRole("button", { name: "Invite" }).click();
   await expect(page.getByText(`Invitation created for ${approver}`)).toBeVisible();
 
-  const approverCtx = await browser.newContext();
+  const approverCtx = await browser.newContext({ extraHTTPHeaders: clientIpHeader() });
   const approverPage = await approverCtx.newPage();
   await approverPage.goto(`/accept-invite#token=${await tokenFromMail(approver)}`);
   await approverPage.getByLabel("Your name").fill("Claims Approver");
   await approverPage.getByLabel("Password").fill(PASSWORD);
   await approverPage.getByRole("button", { name: "Accept invitation" }).click();
+  await expect(approverPage).toHaveURL(/\/login\?reason=invited/);
   await signIn(approverPage, approver);
   await enrolMfa(approverPage);
 
@@ -115,7 +125,7 @@ test("S7 claims: missed scan, batch creation, four-eyes approval, templates, exp
   const spaDraftId = page.url().split("/").pop() ?? "";
 
   await page.getByLabel("Agreement type").selectOption("spa");
-  await page.getByLabel("External number").fill("SPA-VOLT-2026-CLAIM");
+  await page.getByLabel("External number").fill("SPA-VOLT-2026-884");
   await page.getByLabel("Manufacturer code").fill("VOLT");
   await page.getByLabel("Name", { exact: true }).fill("Voltara contractor SPA (SYNTHETIC)");
   await page.getByLabel("Valid from").fill("2026-01-01");
@@ -170,7 +180,7 @@ test("S7 claims: missed scan, batch creation, four-eyes approval, templates, exp
   await noViolations(page, "/claims/missed");
 
   // Filter by Voltara Ltd
-  await page.getByLabel("Manufacturer").selectOption({ index: 1 });
+  await page.getByLabel("Manufacturer").selectOption({ label: "Voltara Electric (SYNTHETIC) (VOLT)" });
   await page.getByRole("button", { name: "Apply filters" }).click();
 
   // Summary values shown
@@ -200,7 +210,7 @@ test("S7 claims: missed scan, batch creation, four-eyes approval, templates, exp
   await noViolations(page, `/claims/batches/${batchId}`);
 
   // Batch details: total amount and creator's four-eyes check
-  await expect(page.getByText("Draft", { exact: true })).toBeVisible();
+  await expect(batchStatus(page)).toHaveText("Draft");
   await expect(
     page.getByText("Four-eyes rule: you created this batch, so a second approver must approve it."),
   ).toBeVisible();
@@ -208,7 +218,7 @@ test("S7 claims: missed scan, batch creation, four-eyes approval, templates, exp
 
   // Approver opens batch and approves it
   await approverPage.goto(`/claims/batches/${batchId}`);
-  await expect(approverPage.getByText("Draft", { exact: true })).toBeVisible();
+  await expect(batchStatus(approverPage)).toHaveText("Draft");
   const approverApproveBtn = approverPage.getByRole("button", { name: "Approve batch" });
   await expect(approverApproveBtn).toBeEnabled();
   await approverApproveBtn.click();
@@ -216,7 +226,7 @@ test("S7 claims: missed scan, batch creation, four-eyes approval, templates, exp
   const approverDialog = approverPage.getByRole("dialog");
   await expect(approverDialog).toBeVisible();
   await approverDialog.getByRole("button", { name: "Approve batch" }).click();
-  await expect(approverPage.getByText("Approved", { exact: true })).toBeVisible({ timeout: 15_000 });
+  await expect(batchStatus(approverPage)).toHaveText("Approved", { timeout: 15_000 });
 
   // 8. Create export template (/claims/templates)
   await page.getByRole("link", { name: "Export templates" }).click();
@@ -225,7 +235,10 @@ test("S7 claims: missed scan, batch creation, four-eyes approval, templates, exp
 
   await page.getByRole("button", { name: "New template" }).click();
   await page.getByLabel("Template name").fill("VOLT Test Template");
-  await page.getByLabel("Manufacturer").selectOption({ index: 1 });
+  await page
+    .getByRole("region", { name: "Create new export template" })
+    .getByLabel("Manufacturer")
+    .selectOption({ label: "Voltara Electric (SYNTHETIC) (VOLT)" });
   await page.getByRole("button", { name: "Save template" }).click();
   await expect(
     page.getByRole("table", { name: "Export templates" }).getByText("VOLT Test Template"),
@@ -233,7 +246,7 @@ test("S7 claims: missed scan, batch creation, four-eyes approval, templates, exp
 
   // 9. Back to batch detail: export and submit
   await page.goto(`/claims/batches/${batchId}`);
-  await expect(page.getByText("Approved", { exact: true })).toBeVisible();
+  await expect(batchStatus(page)).toHaveText("Approved");
 
   // Export batch
   await page.getByRole("button", { name: "Export batch" }).click();
@@ -252,18 +265,18 @@ test("S7 claims: missed scan, batch creation, four-eyes approval, templates, exp
   await submitDialog.getByLabel("External reference").fill("PORTAL-REF-12345");
   await submitDialog.getByRole("button", { name: "Confirm submission" }).click();
 
-  await expect(page.getByText("Submitted", { exact: true })).toBeVisible({ timeout: 15_000 });
+  await expect(batchStatus(page)).toHaveText("Submitted", { timeout: 15_000 });
   await expect(page.getByText("Frozen")).toBeVisible();
 
   // 10. Check batch in batches list (/claims/batches)
   await page.getByRole("link", { name: "Claim batches" }).click();
   await expect(page).toHaveURL("/claims/batches");
   await noViolations(page, "/claims/batches");
-  await expect(page.getByRole("table", { name: "Claim batches" }).getByText("Submitted")).toBeVisible();
+  await expect(page.getByRole("table", { name: "Claim batches" }).getByText("Submitted", { exact: true })).toBeVisible();
 
   // 11. Verify submitted line is no longer in missed claims scan
   await page.goto("/claims/missed");
-  await page.getByLabel("Manufacturer").selectOption({ index: 1 });
+  await page.getByLabel("Manufacturer").selectOption({ label: "Voltara Electric (SYNTHETIC) (VOLT)" });
   await page.getByRole("button", { name: "Apply filters" }).click();
   await expect(linesTable).toBeVisible();
   const currentRows = await linesTable.locator("tbody tr").allInnerTexts();
