@@ -86,7 +86,7 @@ Roles: `admin`, `approver`, `analyst`, `viewer`. Permissions are enforced in the
 - Mass assignment prevented by explicit request models; server-set fields (`status`, `created_by`, amounts) never accepted from clients.
 - Security headers: CSP (`default-src 'self'; frame-ancestors 'none'; object-src 'none'; base-uri 'self'; form-action 'self'`; no inline scripts, hashes/nonces for Vite build), `X-Frame-Options: DENY`, `Permissions-Policy` minimal.
 - Error handling: generic 500s; no stack traces, SQL, or paths in responses.
-- Dependency hygiene: lockfiles, `pip-audit`, `npm audit`, Dependabot/Renovate, SBOM from CI (Later), pinned base images by digest.
+- Dependency hygiene: lockfiles, `pip-audit`, `npm audit`, Dependabot (weekly, grouped per ecosystem; owner D-N8 2026-11-13; `.github/dependabot.yml`), SBOM from CI (Later), pinned base images by digest.
 - SSRF: no user-supplied URLs are fetched by the server in Release 1 (a rule; any future fetch must use an allow-list).
 
 ## 7. Audit logging
