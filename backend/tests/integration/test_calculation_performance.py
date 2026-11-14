@@ -31,6 +31,7 @@ from sqlalchemy import Engine, event
 
 from tests.integration.calc_support import activate_all, all_settings, open_workspace, run
 from tests.integration.conftest import confirm, map_suggested, start
+from tests.integration.missed_reference import assert_same_as_reference
 from tests.integration.test_import_performance import _rss_mb, _seed_clean_file
 from tests.support import FakeClock
 
@@ -151,3 +152,7 @@ def test_calculation_performance(app: FastAPI, clk: FakeClock, admin_engine: Eng
                 _explain(admin_engine, label, [(s, p) for s, p in captured if needle in s])
         finally:
             event.remove(Engine, "before_cursor_execute", grab)
+        # the rewritten missed-claims SQL returns exactly the rows of the pre-S11 DISTINCT ON query, in the same order
+        n = assert_same_as_reference(admin_engine, ws.tenant_id)
+        print(f"\nPERF missed claims equivalent to the DISTINCT ON reference: {n} eligible rows identical")
+        assert n == gt["eligible_count"]
