@@ -13,7 +13,7 @@ from rebate.core.figures import Filter
 from rebate.core.query import only_query_params
 from rebate.core.request import Principal, ctx
 from rebate.modules.claims import RunJobRef
-from rebate.modules.masterdata import decode_cursor, page
+from rebate.modules.masterdata import Who, decode_cursor, page
 from rebate.modules.reporting import jobs, service
 from rebate.modules.reporting import schemas as s
 
@@ -124,22 +124,20 @@ def trace_calculation_result(
     return _trace(request, principal, "calculation_result", result_id)
 
 
-@router.get(
-    "/reports/claim-batches/{batch_id}/audit-pack",
-    status_code=202,
-    operation_id="claim_batch_audit_pack",
-    dependencies=[Depends(only_query_params("format"))],
+@router.post(
+    "/reports/claim-batches/{batch_id}/audit-pack", status_code=202, operation_id="claim_batch_audit_pack"
 )
 def audit_pack(
     request: Request,
     batch_id: UUID,
     principal: Annotated[Principal, Depends(require("audit_pack.export"))],
-    format: s.ExportFormat = "csv",
+    body: s.AuditPackIn | None = None,
 ) -> JSONResponse:
     c = ctx(request)
-    file_id, job_id = jobs.request_audit_pack(c.db, tenant_of(principal), principal.user_id, batch_id, format)
-    body = s.AuditPackAccepted(
+    who = Who(tenant_of(principal), principal.user_id, c.audit_meta())
+    file_id, job_id = jobs.request_audit_pack(c.db, who, batch_id, (body or s.AuditPackIn()).format)
+    body_out = s.AuditPackAccepted(
         job=RunJobRef(id=job_id, status="queued", progress=0, result_url=f"/api/v1/files/{file_id}"),
         file_id=file_id,
     )
-    return JSONResponse(body.model_dump(mode="json"), 202)
+    return JSONResponse(body_out.model_dump(mode="json"), 202)

@@ -199,8 +199,11 @@ def _case_deadline(
     if s is None or s.dispute_window_days is None:
         return None, None
     base: date | None
-    if s.dispute_window_basis == "remittance_date":
-        # a finding without a remittance line (``unpaid``) has no remittance to count from: deadline unknown
+    basis = s.dispute_window_basis
+    if f.case_type == "unpaid":
+        # an unpaid line has no remittance: its deadline counts from the claim submission (owner decision D-N2)
+        basis = "submission_date"
+    if basis == "remittance_date":
         base = rem.document_date if f.remittance_line_id is not None else None
     else:
         base = db.scalar(
@@ -211,7 +214,7 @@ def _case_deadline(
             {"t": tenant_id, "c": f.claim_line_id},
         )
     due = deadlines.dispute_deadline(base, s.dispute_window_days)
-    return (due, s.dispute_window_basis) if due is not None else (None, None)
+    return (due, basis) if due is not None else (None, None)
 
 
 def open_cases(db: Session, who: Who, rem: FinalisedRemittance) -> list[VarianceCase]:
@@ -401,7 +404,7 @@ def summary(db: Session, tenant_id: UUID) -> dict[str, Any]:
 
     at_risk = db.execute(
         text(
-            f"SELECT count(*), COALESCE(sum({REMAINING}), 0) FROM variance_cases v "  # noqa: S608  (module constants)
+            f"SELECT count(*), COALESCE(sum({REMAINING}), 0) FROM variance_cases v "  # noqa: S608  (module constants)  # nosec B608 (module constants and fixed column names; every value is a bound parameter)
             f"WHERE v.tenant_id = :t AND {AT_RISK_WHERE}"
         ),
         {"t": tenant_id, "as_of": business_today(db, tenant_id)},
@@ -609,6 +612,7 @@ def write_off(db: Session, who: Who, case_id: UUID, reason: str, revision: int) 
         db, who, c, st.CaseStatus.WRITTEN_OFF, reason,
         written_off_by=who.user_id, written_off_at=clock.now(),
         written_off_amount=c.variance_amount - c.recovered_amount,
+        **({"write_off_reason": reason} if c.write_off_reason is None else {}),  # four-eyes off: no proposal made it
     )  # fmt: skip
     _audit(db, who, audit.Action.VARIANCE_CASE_WRITTEN_OFF, c, after=view(c))
     return c

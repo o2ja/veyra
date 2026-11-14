@@ -22,6 +22,7 @@ from rebate.core.errors import NotFound
 from rebate.core.ids import new_id
 from rebate.core.jobs import JobContext, PermanentError, enqueue, job
 from rebate.modules import audit, claims, files, reconciliation
+from rebate.modules.masterdata import Who
 from rebate.modules.reporting import service
 
 REFRESH_JOB = "refresh_summaries"
@@ -70,8 +71,9 @@ def refresh_summaries(db: Session, ctx: JobContext) -> None:
     _next_hour(db, tenant)
 
 
-def request_audit_pack(db: Session, tenant: UUID, user: UUID, batch_id: UUID, fmt: str) -> tuple[UUID, UUID]:
-    """Queue the pack of an existing batch; returns ``(file_id, job_id)``."""
+def request_audit_pack(db: Session, who: Who, batch_id: UUID, fmt: str) -> tuple[UUID, UUID]:
+    """Queue the pack of an existing batch and audit the request; returns ``(file_id, job_id)``."""
+    tenant = who.tenant_id
     if claims.audit_pack_rows(db, tenant, batch_id) is None:
         raise NotFound()
     file_id = new_id()
@@ -80,11 +82,21 @@ def request_audit_pack(db: Session, tenant: UUID, user: UUID, batch_id: UUID, fm
         PACK_JOB,
         tenant_id=tenant,
         payload={"batch_id": str(batch_id), "format": fmt, "file_id": str(file_id)},
-        created_by=user,
+        created_by=who.user_id,
         dedupe_key=f"{PACK_JOB}:{file_id}",
     )
     if job_id is None:  # unreachable: the dedupe key embeds a fresh id
         raise RuntimeError("audit pack job was not enqueued")
+    audit.record(
+        db,
+        tenant_id=tenant,
+        actor=audit.Actor("user", who.user_id),
+        action=audit.Action.AUDIT_PACK_REQUESTED,
+        entity_type="claim_batch",
+        entity_id=batch_id,
+        after={"file_id": file_id, "format": fmt},
+        meta=who.meta,
+    )
     return file_id, job_id
 
 

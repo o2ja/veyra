@@ -37,7 +37,7 @@ REMAINING = "v.variance_amount - v.recovered_amount"
 
 def _source(amount: str, where: str) -> str:
     return (
-        "SELECT v.id, 'variance_case' AS trace_kind, v.id AS trace_id, v.manufacturer_id, sd.branch_id, "
+        "SELECT v.id, 'variance_case' AS trace_kind, v.id AS trace_id, v.manufacturer_id, sd.branch_id, "  # nosec B608 (module constants and fixed column names; every value is a bound parameter)
         f"date_trunc('month', v.created_at AT TIME ZONE :tz)::date AS month, {amount} AS amount, "
         "v.case_type || ' ' || v.reason_code AS label "
         "FROM variance_cases v "

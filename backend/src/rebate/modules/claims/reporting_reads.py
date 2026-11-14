@@ -24,7 +24,7 @@ _BRANCH = (
 figures = FigureSet(
     {
         "claimed": (
-            "SELECT c.id, 'claim_line' AS trace_kind, c.id AS trace_id, b.manufacturer_id, d.branch_id, "
+            "SELECT c.id, 'claim_line' AS trace_kind, c.id AS trace_id, b.manufacturer_id, d.branch_id, "  # nosec B608 (module constants and fixed column names; every value is a bound parameter)
             "date_trunc('month', b.submitted_at::timestamp)::date AS month, c.claim_amount AS amount, "
             "c.claim_reference AS label "
             f"FROM claim_lines c JOIN claim_batches b ON b.tenant_id = c.tenant_id AND b.id = c.batch_id {_BRANCH}"
@@ -112,7 +112,7 @@ def trace_claim_line(db: Session, tenant: UUID, claim_line_id: UUID) -> list[dic
     imported file row. ``None`` when the claim line does not exist."""
     r = db.execute(
         text(
-            "SELECT c.id, c.claim_reference, c.source_kind, c.claim_amount, c.quantity, c.unit_amount, "
+            "SELECT c.id, c.claim_reference, c.source_kind, c.claim_amount, c.quantity, c.unit_amount, "  # nosec B608 (module constants and fixed column names; every value is a bound parameter)
             "c.calculation_result_id, c.agreement_version_id, c.rebate_accrual_entry_id, c.sales_document_line_id, "
             "c.released_at, b.id AS batch_id, b.batch_number, b.status AS batch_status, b.submitted_at, "
             "av.version_number, ag.external_number, ag.name AS agreement_name, "
@@ -170,7 +170,7 @@ def trace_claim_line(db: Session, tenant: UUID, claim_line_id: UUID) -> list[dic
 def trace_calculation_result(db: Session, tenant: UUID, result_id: UUID) -> list[dict[str, Any]] | None:
     r = db.execute(
         text(
-            "SELECT r.id, r.status, r.exception_code, r.claim_amount, r.run_id, r.agreement_version_id, "
+            "SELECT r.id, r.status, r.exception_code, r.claim_amount, r.run_id, r.agreement_version_id, "  # nosec B608 (module constants and fixed column names; every value is a bound parameter)
             "r.sales_document_line_id, av.version_number, ag.external_number, "
             "s.document_number, s.line_number, s.invoice_date, s.sku_raw, s.extended_amount, s.source_row_number, "
             "s.import_batch_id, ib.file_id, f.original_name AS file_name "
@@ -213,7 +213,7 @@ def audit_pack_rows(db: Session, tenant: UUID, batch_id: UUID) -> list[dict[str,
         return None
     lines = db.execute(
         text(
-            "SELECT c.id, c.claim_reference, c.source_kind AS line_type, c.quantity, c.unit_amount, c.claim_amount, "
+            "SELECT c.id, c.claim_reference, c.source_kind AS line_type, c.quantity, c.unit_amount, c.claim_amount, "  # nosec B608 (module constants and fixed column names; every value is a bound parameter)
             "ag.external_number AS agreement_number, av.version_number, "
             "s.document_number AS invoice_number, s.line_number AS invoice_line, s.invoice_date, "
             "s.sku_raw AS sku, f.original_name AS source_file, s.source_row_number AS source_row "

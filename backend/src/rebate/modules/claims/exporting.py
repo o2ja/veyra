@@ -225,7 +225,7 @@ def render_table(fmt: str, sheet: str, headers: Sequence[str], rows: Iterable[Se
     ws = wb.create_sheet(sheet[:31])
     ws.append([safe_text(h) for h in headers])
     for row in rows:
-        ws.append([v if isinstance(v, Decimal | date) or v is None else safe_text(str(v)) for v in row])
+        ws.append([v if isinstance(v, Decimal | date | int) or v is None else safe_text(str(v)) for v in row])
     buf = io.BytesIO()
     wb.save(buf)
     return buf.getvalue()

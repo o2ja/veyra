@@ -20,7 +20,7 @@ composite FK now that the table exists.
 Forward-only like the rest of the chain (no downgrade functions).
 
 Revision ID: 20261118_0900_recovery_cases
-Revises: 20261117_0910_recon_matches
+Revises: 20261118_0910_recon_guards
 """
 
 from alembic import op
@@ -28,7 +28,7 @@ from alembic import op
 from migrations._rls import enable_tenant_rls
 
 revision = "20261118_0900_recovery_cases"
-down_revision = "20261117_0910_recon_matches"
+down_revision = "20261118_0910_recon_guards"
 branch_labels = None
 depends_on = None
 

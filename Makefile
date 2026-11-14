@@ -18,7 +18,7 @@ FE_RUN := $(COMPOSE) run --rm --no-deps -T frontend
 ADMIN_URL := postgresql+psycopg://postgres:$$POSTGRES_PASSWORD@postgres:5432/postgres
 OWNER_URL := postgresql+psycopg://rebate_owner:$$REBATE_OWNER_PASSWORD@postgres:5432/rebate
 
-.PHONY: env up down db-init migrate test test-backend test-frontend test-isolation lint gen-client check-client
+.PHONY: env up down db-init migrate test test-backend test-frontend test-isolation lint gen-client check-client ci-local
 
 env: ## create .env with generated local-only secrets (refuses to overwrite)
 	$(PYTHON) infra/scripts/make-env.py
@@ -59,3 +59,6 @@ gen-client: ## regenerate frontend/src/api from the backend OpenAPI document
 
 check-client: gen-client ## CI-style drift check
 	git diff --exit-code -- frontend/src/api
+
+ci-local: ## the six CI jobs locally on the current commit; stops at the first failure (owner rule 2026-11-13)
+	bash infra/scripts/ci-local.sh

@@ -75,6 +75,25 @@ def returned_quantities(
     return {r.original_line_id: r.returned for r in rows}
 
 
+def returned_before(
+    db: Session, tenant_id: UUID, manufacturer_id: UUID | None, cutoff: datetime
+) -> dict[UUID, Decimal]:
+    """Return line id -> sum of |quantity| of the linked returns of the same original that come earlier in the engine's
+    processing order (invoice date, document number, line number, id). Same population as ``returned_quantities``."""
+    rows = db.execute(
+        text(
+            "SELECT l.id, COALESCE(sum(-l.quantity) OVER (PARTITION BY l.original_line_id "  # nosec B608 (module constants only; values are bound)
+            "ORDER BY l.invoice_date, l.document_number, l.line_number, l.id "
+            "ROWS BETWEEN UNBOUNDED PRECEDING AND 1 PRECEDING), 0) AS before FROM sales_document_lines l "
+            + _BATCH
+            + "WHERE l.tenant_id = :t AND l.is_current AND l.quantity < 0 AND l.original_line_id IS NOT NULL "
+            "AND l.invoice_date <= :cutoff_date " + _MFR
+        ),
+        {"t": tenant_id, "m": manufacturer_id, "cutoff": cutoff, "cutoff_date": cutoff.date()},
+    )
+    return {r.id: r.before for r in rows}
+
+
 def line_quantities(db: Session, tenant_id: UUID, line_ids: list[UUID]) -> dict[UUID, Decimal]:
     return {
         r.id: r.quantity

@@ -23,7 +23,7 @@ class FigureSet:
 
     def by_month(self, db: Session, tenant: UUID, metric: str, tz: str, as_of: date) -> list[Row[Any]]:
         sql = (
-            f"SELECT manufacturer_id, branch_id, month, sum(amount) AS amount FROM ({self.sources[metric]}) x "
+            f"SELECT manufacturer_id, branch_id, month, sum(amount) AS amount FROM ({self.sources[metric]}) x "  # nosec B608 (module constants and fixed column names; every value is a bound parameter)
             "GROUP BY manufacturer_id, branch_id, month"
         )
         return list(db.execute(text(sql), {"t": tenant, "tz": tz, "as_of": as_of}))
@@ -41,7 +41,7 @@ class FigureSet:
     ) -> list[Row[Any]]:
         where, params = flt.sql()
         sql = (
-            f"SELECT * FROM ({self.sources[metric]}) x WHERE {where} AND (CAST(:after AS uuid) IS NULL OR id > :after) "
+            f"SELECT * FROM ({self.sources[metric]}) x WHERE {where} AND (CAST(:after AS uuid) IS NULL OR id > :after) "  # nosec B608 (module constants and fixed column names; every value is a bound parameter)
             "ORDER BY id LIMIT :n"
         )
         return list(
@@ -52,7 +52,7 @@ class FigureSet:
 
     def total(self, db: Session, tenant: UUID, metric: str, tz: str, as_of: date, flt: Filter) -> Any:
         where, params = flt.sql()
-        sql = f"SELECT COALESCE(sum(amount), 0) FROM ({self.sources[metric]}) x WHERE {where}"
+        sql = f"SELECT COALESCE(sum(amount), 0) FROM ({self.sources[metric]}) x WHERE {where}"  # nosec B608 (module constants and fixed column names; every value is a bound parameter)
         return db.execute(text(sql), {"t": tenant, "tz": tz, "as_of": as_of, **params}).scalar_one()
 
 

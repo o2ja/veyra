@@ -1,6 +1,6 @@
 # Project Status
 
-> Living document. Updated at the end of every stage and whenever a decision, risk or known issue changes. Last updated: 2026-11-12.
+> Living document. Updated at the end of every stage and whenever a decision, risk or known issue changes. Last updated: 2026-11-13.
 
 ## 1. Current position
 
@@ -24,6 +24,10 @@
 ## 3. In progress
 
 S1 signed off by the owner 2026-11-10. Evidence and open points: `docs/reports/S1_COMPLETION_REPORT.md`. CI green on `main` (jobs: backend incl. isolation negative control, frontend, e2e (Playwright W1–W2 + axe), api-contract, secrets, images).
+
+**CI and merging (owner, 2026-11-13):** GitHub Actions is unpaid; the merge gate is `make ci-local` (6/6 on the exact commit, posted as a PR comment with the SHA) after merging latest `main`, plus the required reviews; nothing skipped or failing. Workflow runs only on ready-for-review PRs and pushes to `main`, with path filters; WIP PRs are drafts. At most 2 agents; full suite + Playwright once per merge; never two full suites at once. Full text: `CLAUDE.md` §19.
+
+**Resume point (2026-11-14):** `docs/reports/notes/resume-prompt.md` + `FINISH_PLAN.md`. Backend S7–S10 built and reviewed (all findings fixed); UI S7–S10 built, reviews in progress, not Playwright-verified; #21 needs a fresh gate; owner merges; D-N11 open.
 
 ### S3–S6 batch (in progress, started 2026-11-10; S2 approved)
 
@@ -89,6 +93,7 @@ S5/S6 UI, then S7 onwards per `DEVELOPMENT_ROADMAP.md` / `IMPLEMENTATION_PLAN.md
 ## 7. Risks being watched
 
 Top items only; full list in the analysis and `SECURITY.md` §12.
+- **R-2 Restore drill (2026-11-13, local dev stack, who: builder L1):** backup 8 s, restore 16 s, row counts of all tables, alembic head, 100/100 object SHA-256 all equal; isolation + golden suites 380 passed against a fresh test DB. WAL/PITR NOT set up or drilled; not run against production-sized data or the restored DB itself. Details: `docs/reports/RESTORE_DRILL_2026-11-13.md`.
 - **R-1 Dev/prod storage parity:** local/CI use SeaweedFS, production uses the provider chosen in OD-3/OD-4. Before the first pilot, run the same storage test suite (presigned expiry, versioning, SSE, quarantine → clean copy) against the production provider.
 - Agreement and remittance formats vary widely; mapping and review UX will matter more than extraction accuracy.
 - Provider terms for LLM data processing (OD-2).
@@ -116,3 +121,5 @@ Top items only; full list in the analysis and `SECURITY.md` §12.
 | 2026-11-10 | S1 complete: audit shows actor names; runbook operator scripts + dry run (found and fixed a missing EXECUTE grant, migration `20261110_0900`); session-ended message; axe on S1 pages; completion report |
 | 2026-11-10 | S2 complete: job queue (ADR-005 fallback), worker, files module (SeaweedFS + ClamAV, quarantine → clean), Files/Jobs pages; two independent reviews (8 serious findings fixed); K-4, K-9 closed; K-10..K-12 opened |
 | 2026-11-12 | Owner decisions: S5 signed off; OD-1 approved; OD-2 deferred (recorded fixtures); 3 validator refusals + split-period tiers moved to Release 2; `cannot_be_net_claimed` adjustments stay `proposed` and batches <= 0 are refused unless `allow_negative_claims`; unpaid line without rejection code = `short_paid_unexplained` (BUSINESS_LOGIC §10.3) |
+| 2026-11-13 | Owner rules: `make ci-local` merge gate, draft-PR/path-filtered workflow, 2-agent limit (`CLAUDE.md` §19). Owner decisions D-N1/D-N3/D-N7 (an adjustment belongs to the batch that carries it; frozen claim lines reconcile at their frozen amount; no return_reversal/agreement_change for a return netted into a frozen claim), D-N2 (unpaid deadline = submission date + dispute window), D-N5 (closed cases immutable; separate "recovered after write-off" S10 figure), D-N6 (dashboard definitions; one at-risk definition; month buckets in tenant business time zone; XLSX audit pack for Release 1, PDF Release 1.1), D-N4 deferred (legal review; dry-run only), D-N8 (ESLint security plugin + weekly grouped Dependabot approved; ZAP/pen test wait for staging), D-N9 (no 1M run locally; measure 100k/250k import memory, growth = streaming bug) |
+| 2026-11-13 | Owner decision D-N10: a return netted into a frozen claim and later reduced or voided → claimed original evaluated on q − min(netted, current returns); shortfall proposed as `agreement_change`, carried by a later batch |

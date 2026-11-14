@@ -122,7 +122,7 @@ def test_every_scenario_line_has_a_result_and_nothing_else_is_claimed(baseline: 
 def test_run_resource_pins_inputs_and_totals(baseline: dict[str, Any], calc: Scenario) -> None:
     r, res = baseline["run"], baseline["results"]
     assert r["status"] == "completed" and r["error"] is None
-    assert r["run_date"] == CALC["run_date"] and r["engine_version"] == "1.0.0"
+    assert r["run_date"] == CALC["run_date"] and r["engine_version"] == "1.1.0"
     pinned = {v["id"] for v in calc.versions.values()}
     assert set(r["agreement_version_ids"]) == pinned
     assert len(r["input_checksum"]) == len(r["config_hash"]) == 64
@@ -222,7 +222,7 @@ def test_result_detail_carries_the_trace(baseline: dict[str, Any], calc: Scenari
     trace = body["trace"]
     names = [s["step"] for s in trace["steps"]]
     assert names[:2] == ["candidate_versions", "customer_scope"] and "calc" in names and "round" in names
-    assert trace["result"]["claim_amount"] == "2200.00" and trace["engine_version"] == "1.0.0"
+    assert trace["result"]["claim_amount"] == "2200.00" and trace["engine_version"] == "1.1.0"
     assert hashlib.sha256(b"x").hexdigest() and body["inputs_hash"] == one["inputs_hash"]
     runs_page = calc.ws.api.get("/calculation-runs", params={"status": "completed"}).json()
     assert baseline["run"]["id"] in {x["id"] for x in runs_page["data"]}

@@ -2,7 +2,8 @@
 
 Hand values: the three dated cases (price 150.00, quantity 2,080.00, unmatched 75.00) fall due on 2026-09-29. The
 reminders are 14, 7 and 3 days before: 2026-09-15, 2026-09-22, 2026-09-26; the deadline day itself repeats the 3-day
-reminder, which is deduped. The unpaid case (660.00) has no deadline and never reminds. The recipients are the
+reminder, which is deduped. The unpaid case (660.00) falls due 2026-09-03 (submitted 07-05 + 60, D-N2); its reminders would be 08-20, 08-27
+and 08-31, but the earliest sweep here is 2026-09-14, already past that deadline, so it never reminds. The recipients are the
 tenant's active admins and approvers (two users) until a case has an owner. Tests run in file order."""
 
 from datetime import UTC, datetime
@@ -66,7 +67,9 @@ def test_14_day_reminder_notifies_admins_and_approvers_and_mails_one_digest(env:
         assert all(n["read_at"] is None for n in got)
         assert any("150.00" in n["title"] and n["title"].endswith("deadline in 14 days") for n in got)
         assert any("2080.00" in n["title"] for n in got) and any("75.00" in n["title"] for n in got)
-        assert not any("660.00" in n["title"] for n in got)  # the unpaid case has no deadline
+        assert not any(
+            "660.00" in n["title"] for n in got
+        )  # the unpaid case (due 2026-09-03) is past its deadline at every sweep date
     (m,) = digests(email(cases.api))
     assert m["Subject"] == "Veyra Recover: 3 recovery deadline reminder(s)"
     for amount in ("150.00", "2080.00", "75.00"):
@@ -126,3 +129,52 @@ def test_notifications_are_read_by_their_owner_only(cases: Cases) -> None:
     assert cases.api.post(f"/notifications/{other['id']}/read").status_code == 404
     assert len(cases.api.get("/notifications", params={"unread": "true"}).json()["data"]) == 6
     assert UUID(first["id"])
+
+
+def sweep_on(env: Env, cases: Cases, month: int, day: int, key: str) -> None:
+    """One sweep as of noon on that day (the chain's own sweeps are not due this early, so enqueue one)."""
+    env.clock.t = datetime(2026, month, day, 12, 0, tzinfo=UTC)
+    with transaction(env.engine, cases.story.tenant) as db:
+        enqueue(db, service.SWEEP_JOB, tenant_id=cases.story.tenant, payload={}, dedupe_key=key)
+    drain(env.app)
+    env.clock.t = NOW
+
+
+def test_the_unpaid_case_reminds_from_its_submission_based_deadline(env: Env, cases: Cases) -> None:
+    """D-N2: the unpaid case (660.00) is due 2026-07-05 + 60 = 2026-09-03 (Jul 31 = +26, Aug 31 = +57, Sep 3 = +60),
+    so the 14-day reminder is 2026-08-20 (Aug 20 + 11 = Aug 31, + 3 = Sep 3), the 7-day one 2026-08-27 and the 3-day
+    one 2026-08-31. The case has no owner: the recipients are the admin and the approver, one notification each.
+    Dedupe keys are ``<case>:deadline_reminder:<offset>``. The other three cases (due 09-29) are 40 days away."""
+    unpaid = str(cases.unpaid)
+
+    def of(api: Api) -> list[dict[str, Any]]:
+        return [n for n in mine(api) if n["entity_id"] == unpaid]
+
+    before = {a: len(digests(email(a))) for a in (cases.api, cases.approver)}
+    assert of(cases.api) == [] and of(cases.approver) == []
+    total = {a: len(mine(a)) for a in (cases.api, cases.approver)}
+
+    sweep_on(env, cases, 8, 20, "unpaid-2026-08-20")
+    for api in (cases.api, cases.approver):
+        (n,) = of(api)
+        assert n["kind"] == "deadline_reminder" and n["due_date"] == "2026-09-03"
+        assert n["title"].startswith("Unpaid 660.00 (") and n["title"].endswith("deadline in 14 days")
+        assert len(mine(api)) == total[api] + 1  # nothing for the three cases due 09-29
+        assert len(digests(email(api))) == before[api] + 1
+    sweep_on(env, cases, 8, 20, "unpaid-2026-08-20-again")
+    assert len(of(cases.api)) == 1 and len(of(cases.approver)) == 1
+    assert len(digests(email(cases.api))) == before[cases.api] + 1
+
+    sweep_on(env, cases, 8, 27, "unpaid-2026-08-27")
+    for api in (cases.api, cases.approver):
+        assert sorted(n["title"].rsplit(": ", 1)[1] for n in of(api)) == [
+            "deadline in 14 days",
+            "deadline in 7 days",
+        ]
+    with transaction(env.engine, cases.story.tenant) as db:
+        keys = db.scalars(
+            text("SELECT dedupe_key FROM notifications WHERE entity_id = :c ORDER BY dedupe_key"),
+            {"c": cases.unpaid},
+        ).all()
+    assert sorted(set(keys)) == [f"{unpaid}:deadline_reminder:14", f"{unpaid}:deadline_reminder:7"]
+    assert len(keys) == 4  # two reminders x two recipients

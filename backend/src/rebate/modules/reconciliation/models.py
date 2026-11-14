@@ -1,5 +1,5 @@
-"""Remittance and reconciliation tables (RLS; DATABASE_SCHEMA.md §3.9). Mirror of migrations 20261117_0900 and
-20261117_0910 for ``alembic check``. CHECKs and triggers live only in the migrations."""
+"""Remittance and reconciliation tables (RLS; DATABASE_SCHEMA.md §3.9). Mirror of migrations 20261117_0900,
+20261117_0910 and 20261118_0900 for ``alembic check``. CHECKs and triggers live only in the migrations."""
 
 from datetime import date, datetime
 from decimal import Decimal
@@ -121,6 +121,12 @@ class RemittanceLine(Base, _LineColumns):
     reason_code: Mapped[str | None] = mapped_column(
         Text, ForeignKey("reason_codes.code", name="fk_remittance_lines_reason_codes")
     )
+    # a person's decision that an unmatched line is an unmatched payment (migration 20261118_0900; BL §10.3)
+    category: Mapped[str | None] = mapped_column(Text)
+    categorised_by: Mapped[UUID | None] = mapped_column(
+        ForeignKey("users.id", name="fk_remittance_lines_users_categorised")
+    )
+    categorised_at: Mapped[datetime | None] = mapped_column(TS)
 
 
 class RemittanceStagingLine(Base, _LineColumns):

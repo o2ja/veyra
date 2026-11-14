@@ -173,6 +173,9 @@ def test_d8_unknown_tenant_sees_nothing(app_engine: Engine, world: World) -> Non
         "UPDATE audit_log SET action = 'x.y'",
         "DELETE FROM audit_log",
         "TRUNCATE audit_log",
+        "UPDATE audit_seals SET seal_hash = repeat('b', 64)",
+        "DELETE FROM audit_seals",
+        "TRUNCATE audit_seals",
     ],
 )
 def test_d9_app_role_cannot_bypass_rls(app_engine: Engine, world: World, statement: str) -> None:
@@ -374,6 +377,7 @@ S8_UPDATABLE = {
     "remittance_documents": "status = status",
     "remittance_extraction_staging": "corrected = corrected",
     "reconciliation_matches": "status = status",
+    "remittance_lines": "category = category",
 }
 
 
@@ -409,6 +413,7 @@ def test_every_tenant_isolated_table_is_in_the_isolation_suite(admin_engine: Eng
         "memberships",
         "invitations",
         "audit_log",
+        "audit_seals",
         "idempotency_keys",
         "file_objects",
     }
@@ -846,8 +851,33 @@ def test_d3_s8_update_foreign_row_affects_nothing(app_engine: Engine, world: Wor
     assert got == "n=0", breach(f"A updated B's {table} row ({got})")
 
 
-@pytest.mark.parametrize("table", sorted(S8_ROWS))
+def test_s8_the_app_role_cannot_change_remittance_line_evidence(app_engine: Engine, world: World) -> None:
+    """Only the three categorisation columns are granted; the money and identifiers of a line are evidence."""
+    with as_app(app_engine, world.a.tenant_id) as conn:
+        got = _outcome(
+            conn,
+            "UPDATE remittance_lines SET amount_paid = 1 WHERE id = :id",
+            {"id": world.a.s8["rline"]},
+        )
+    assert got.startswith("error: permission denied"), got
+
+
+S8_INSERT_AS_NEW = {  # what a copy must change so that the table's own BEFORE INSERT trigger lets it reach the policy
+    "remittance_documents": "'status', 'uploaded', 'accepted_by', NULL, 'accepted_at', NULL",
+}
+
+
+TRIGGER_GUARDED = {  # their BEFORE INSERT trigger reads a parent row as the caller, so no foreign insert reaches the policy
+    "reconciliation_matches": "matches can be added only to an accepted remittance",
+    "case_attachments": "only a clean-scanned attachment file can be attached",
+}
+
+
+@pytest.mark.parametrize("table", sorted(set(S8_ROWS) - set(TRIGGER_GUARDED)))
 def test_d5_s8_insert_into_foreign_tenant_is_rejected(app_engine: Engine, world: World, table: str) -> None:
+    """The copy must get past the table's own triggers, so that only the row-level-security policy can refuse it
+    (with RLS off it then fails on a foreign key instead, and the test reports a breach)."""
+    extra = S8_INSERT_AS_NEW.get(table)
     with as_app(app_engine, world.a.tenant_id) as conn:
         cols = ", ".join(
             conn.execute(
@@ -861,36 +891,55 @@ def test_d5_s8_insert_into_foreign_tenant_is_rejected(app_engine: Engine, world:
         got = _outcome(
             conn,
             f"INSERT INTO {table} ({cols}) SELECT {cols} FROM jsonb_populate_record(NULL::{table}, "
-            f"(SELECT to_jsonb(x) || jsonb_build_object('tenant_id', CAST(:b AS uuid), 'id', gen_random_uuid()) "
-            f"FROM {table} x WHERE tenant_id = :a LIMIT 1))",
+            f"(SELECT to_jsonb(x) || jsonb_build_object('tenant_id', CAST(:b AS uuid), 'id', gen_random_uuid()"
+            f"{', ' + extra if extra else ''}) FROM {table} x WHERE tenant_id = :a LIMIT 1))",
             {"a": world.a.tenant_id, "b": world.b.tenant_id},
         )
-    # the copy keeps its source status / foreign line: the table's own insert trigger may refuse it before RLS does
-    refused = got == "rls" or "accepted remittance" in got or "a new document is uploaded" in got
-    assert refused, breach(f"insert of a {table} row into tenant B was not rejected ({got})")
+    assert got == "rls", breach(f"insert of a {table} row into tenant B was not rejected ({got})")
 
 
-@pytest.mark.parametrize("table", sorted(S8_ROWS))
-def test_d9_s8_delete_and_tenant_column_rules(app_engine: Engine, world: World, table: str) -> None:
-    """Documents and lines are never deleted (no privilege); staging and matches carry DELETE only for the own
-    tenant (a foreign row is invisible; the triggers decide what may go); the tenant column cannot be moved."""
+S8_DELETABLE = ("remittance_extraction_staging", "reconciliation_matches")
+
+
+@pytest.mark.parametrize("table", sorted(set(S8_ROWS) - set(S8_DELETABLE)))
+def test_d9_s8_documents_and_lines_are_never_deleted(app_engine: Engine, world: World, table: str) -> None:
+    """No DELETE privilege on documents and lines (independent of RLS)."""
     column, key = S8_ROWS[table]
-    deletable = table in ("remittance_extraction_staging", "reconciliation_matches")
     with as_app(app_engine, world.a.tenant_id) as conn:
-        foreign = _outcome(conn, f"DELETE FROM {table} WHERE {column} = :id", {"id": world.b.s8[key]})
-        moved = _outcome(
+        got = _outcome(conn, f"DELETE FROM {table} WHERE {column} = :id", {"id": world.b.s8[key]})
+    assert got.startswith("error: permission denied"), got
+
+
+@pytest.mark.parametrize("table", sorted(set(S8_ROWS) - {"remittance_extraction_staging"}))
+def test_d9_s8_the_tenant_column_cannot_be_updated(app_engine: Engine, world: World, table: str) -> None:
+    """No UPDATE privilege on the tenant column (independent of RLS); staging carries it and is covered by D3."""
+    column, key = S8_ROWS[table]
+    with as_app(app_engine, world.a.tenant_id) as conn:
+        got = _outcome(
             conn,
             f"UPDATE {table} SET tenant_id = :b WHERE {column} = :id",
             {"b": world.b.tenant_id, "id": world.a.s8[key]},
         )
-    if deletable:
-        assert foreign == "n=0", breach(f"A deleted B's {table} row ({foreign})")
-    else:
-        assert foreign.startswith("error: permission denied"), foreign
-    if table == "remittance_extraction_staging":
-        assert moved == "rls", moved
-    else:
-        assert moved.startswith("error: permission denied"), moved
+    assert got.startswith("error: permission denied"), got
+
+
+@pytest.mark.parametrize("table", sorted(S8_DELETABLE))
+def test_d3_s8_delete_foreign_row_affects_nothing(app_engine: Engine, world: World, table: str) -> None:
+    """Staging and matches carry DELETE for the own tenant only: a foreign row is invisible (RLS)."""
+    column, key = S8_ROWS[table]
+    with as_app(app_engine, world.a.tenant_id) as conn:
+        got = _outcome(conn, f"DELETE FROM {table} WHERE {column} = :id", {"id": world.b.s8[key]})
+    assert got == "n=0", breach(f"A deleted B's {table} row ({got})")
+
+
+def test_d3_s8_staging_row_cannot_be_moved_to_another_tenant(app_engine: Engine, world: World) -> None:
+    with as_app(app_engine, world.a.tenant_id) as conn:
+        got = _outcome(
+            conn,
+            "UPDATE remittance_extraction_staging SET tenant_id = :b WHERE id = :id",
+            {"b": world.b.tenant_id, "id": world.a.s8["stg"]},
+        )
+    assert got == "rls", breach(f"A moved a staging row into tenant B ({got})")
 
 
 # ---- S9 attacks ------------------------------------------------------------------------------------------
@@ -917,8 +966,9 @@ def test_d3_s9_update_foreign_row_affects_nothing(app_engine: Engine, world: Wor
     assert got == "n=0", breach(f"A updated B's {table} row ({got})")
 
 
-@pytest.mark.parametrize("table", sorted(S9_ROWS))
+@pytest.mark.parametrize("table", sorted(set(S9_ROWS) - set(TRIGGER_GUARDED)))
 def test_d5_s9_insert_into_foreign_tenant_is_rejected(app_engine: Engine, world: World, table: str) -> None:
+    extra = None
     with as_app(app_engine, world.a.tenant_id) as conn:
         cols = ", ".join(
             conn.execute(
@@ -932,13 +982,33 @@ def test_d5_s9_insert_into_foreign_tenant_is_rejected(app_engine: Engine, world:
         got = _outcome(
             conn,
             f"INSERT INTO {table} ({cols}) SELECT {cols} FROM jsonb_populate_record(NULL::{table}, "
+            f"(SELECT to_jsonb(x) || jsonb_build_object('tenant_id', CAST(:b AS uuid), 'id', gen_random_uuid()"
+            f"{', ' + extra if extra else ''}) FROM {table} x WHERE tenant_id = :a LIMIT 1))",
+            {"a": world.a.tenant_id, "b": world.b.tenant_id},
+        )
+    assert got == "rls", breach(f"insert of a {table} row into tenant B was not rejected ({got})")
+
+
+@pytest.mark.parametrize("table", sorted(TRIGGER_GUARDED))
+def test_d10_trigger_guarded_tables_refuse_a_copy_into_a_foreign_tenant(
+    app_engine: Engine, world: World, table: str
+) -> None:
+    """Not an RLS test (it passes with RLS off too): the table's own BEFORE INSERT trigger looks up the parent row
+    (remittance, file) as the caller and finds none in the other tenant, so the copy never reaches the policy."""
+    cols_sql = (
+        "SELECT column_name FROM information_schema.columns WHERE table_schema = 'public' "
+        "AND table_name = :t AND is_generated = 'NEVER' ORDER BY ordinal_position"
+    )
+    with as_app(app_engine, world.a.tenant_id) as conn:
+        cols = ", ".join(conn.execute(text(cols_sql), {"t": table}).scalars())
+        got = _outcome(
+            conn,
+            f"INSERT INTO {table} ({cols}) SELECT {cols} FROM jsonb_populate_record(NULL::{table}, "
             f"(SELECT to_jsonb(x) || jsonb_build_object('tenant_id', CAST(:b AS uuid), 'id', gen_random_uuid()) "
             f"FROM {table} x WHERE tenant_id = :a LIMIT 1))",
             {"a": world.a.tenant_id, "b": world.b.tenant_id},
         )
-    # the copy keeps its source file: the attachment insert trigger may refuse it (no such file in B) before RLS does
-    refused = got == "rls" or "only a clean-scanned attachment" in got
-    assert refused, breach(f"insert of a {table} row into tenant B was not rejected ({got})")
+    assert TRIGGER_GUARDED[table] in got, got
 
 
 @pytest.mark.parametrize("table", sorted(S9_ROWS))
