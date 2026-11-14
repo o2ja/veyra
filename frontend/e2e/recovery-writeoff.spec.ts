@@ -47,6 +47,11 @@ test("S9 write-off: propose, same user disabled, second approver completes, anal
     await approverB.getByRole("button", { name: "Approve write-off" }).click();
     const completeDialog = approverB.getByRole("dialog");
     await expect(completeDialog).toBeVisible();
+    const reasonField = completeDialog.getByLabel(/Reason proposed by/);
+    await expect(reasonField).toBeVisible();
+    await expect(reasonField).toHaveValue("Manufacturer will not accept the claim");
+    await expect(reasonField).toHaveAttribute("readonly");
+    await expect(reasonField).not.toBeEditable();
     await completeDialog.getByRole("button", { name: "Approve write-off" }).click();
     await expect(approverB.getByText("Case written off.")).toBeVisible();
     await expect(approverB.getByLabel("Case status")).toHaveText("Written off");

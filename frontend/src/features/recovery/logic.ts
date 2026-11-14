@@ -121,6 +121,41 @@ export const notificationCaseLink = (notification: NotificationOut): string | nu
   return `/recovery/${notification.entity_id}`;
 };
 
+/**
+ * Forbidden control characters in free text (reasons, notes).
+ * Matches backend `NO_CONTROL_TEXT = r"^[^\x00-\x08\x0b\x0c\x0e-\x1f\x7f]+$"`.
+ */
+// eslint-disable-next-line no-control-regex
+export const CONTROL_CHAR_REGEX = /[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]/;
+
+/** Validates write-off proposal reason (1..1000 characters, no control characters, non-blank). */
+export function isValidWriteOffReason(reason: string): boolean {
+  const trimmed = reason.trim();
+  if (trimmed.length < 1 || trimmed.length > 1000) return false;
+  return !CONTROL_CHAR_REGEX.test(reason);
+}
+
+/**
+ * Formats the read-only proposal label for write-off approval:
+ * "Reason proposed by <name/email if available> on <date>".
+ */
+export function writeOffProposalLabel(
+  proposer: { full_name?: string | null; email?: string | null } | string | null | undefined,
+  proposedAt: string | null | undefined,
+): string {
+  const who =
+    typeof proposer === "object" && proposer !== null
+      ? proposer.full_name?.trim() || proposer.email?.trim() || null
+      : typeof proposer === "string" && proposer.trim() !== ""
+        ? proposer.trim()
+        : null;
+  const dateStr = usDate(proposedAt);
+  if (who) {
+    return `Reason proposed by ${who} on ${dateStr}`;
+  }
+  return `Reason proposed on ${dateStr}`;
+}
+
 /** A batch id in an error detail, when the server supplies one (reclaim_included). */
 export function batchIdFromDetails(details: { field: string; message: string }[]): string | null {
   for (const detail of details) {
