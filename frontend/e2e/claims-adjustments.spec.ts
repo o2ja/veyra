@@ -376,6 +376,9 @@ test("S7 claims adjustments: queue, four-eyes approval, rejection, carry into ba
 
   // 12. Rejection: reject another proposal, and it appears under Rejected
   await approver2Page.getByRole("tab", { name: "Proposed" }).click();
+  // The tab can first show cached rows; wait until the approved proposal has left the list, or the positional
+  // row below would shift between reading its reference and clicking it (CI-only flake).
+  await expect(approver2Page.getByRole("row", { name: firstRefRe })).toHaveCount(0);
   const secondAdjRow = approver2Page
     .getByRole("table", { name: "Claim adjustments" })
     .getByRole("row")
