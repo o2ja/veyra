@@ -5,6 +5,7 @@ No live API keys, no network calls. Key strings must never appear in logs or exc
 """
 
 import json
+from decimal import Decimal
 from typing import Any
 
 import httpx
@@ -13,6 +14,7 @@ import structlog
 from pydantic import SecretStr
 
 from rebate.core.config import Settings
+from rebate.modules.extraction import prompts
 from rebate.modules.extraction.gateway import (
     GeminiProvider,
     NotConfigured,
@@ -300,6 +302,29 @@ def test_gemini_timeout_mapped_to_retryable_provider_call_error() -> None:
     assert err.retryable is True
 
 
+def test_gemini_transport_error_mapped_to_retryable_provider_call_error() -> None:
+    def handler(_req: httpx.Request) -> httpx.Response:
+        raise httpx.ConnectError("connection refused")
+
+    client = _mock_client(handler)
+    provider = GeminiProvider(DUMMY_KEY, http_client=client)
+
+    with pytest.raises(ProviderCallError) as exc_info:
+        provider.complete(
+            model="gemini-2.5-flash",
+            system="sys",
+            user="usr",
+            tool_name="tool",
+            schema=SAMPLE_SCHEMA,
+            max_tokens=1000,
+            timeout=10.0,
+        )
+
+    err = exc_info.value
+    assert err.code == "timeout"
+    assert err.retryable is True
+
+
 def test_gemini_key_never_appears_in_logs_or_exceptions() -> None:
     secret_key = "test-gemini-mock-key-must-never-leak-99"
 
@@ -407,6 +432,34 @@ def test_make_provider_anthropic_default_preserved() -> None:
     )
     provider = make_provider(settings)
     assert provider.name == "anthropic"
+
+
+def test_settings_empty_environment_variables_fallback_to_defaults(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("APP_ENV", "ci")
+    monkeypatch.setenv("SECRET_KEY", "0123456789012345678901234567890123456789")
+    monkeypatch.setenv("DATABASE_URL", "postgresql+psycopg://a@b/c")
+    monkeypatch.setenv("ENCRYPTION_KEYS", "k1:AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=")
+
+    # Empty strings matching compose ${VAR:-}
+    monkeypatch.setenv("AI_PROVIDER", "")
+    monkeypatch.setenv("AI_MODEL", "")
+    monkeypatch.setenv("AI_PRICE_INPUT_PER_MTOK", "")
+    monkeypatch.setenv("AI_PRICE_OUTPUT_PER_MTOK", "")
+    monkeypatch.setenv("GEMINI_API_KEY", "")
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "")
+
+    s = Settings()
+    assert s.ai_provider == "anthropic"
+    assert s.ai_model == "claude-sonnet-5-5"
+    assert s.ai_price_input_per_mtok == Decimal("3.00")
+    assert s.ai_price_output_per_mtok == Decimal("15.00")
+    assert s.gemini_api_key is None
+    assert s.anthropic_api_key is None
+
+    with pytest.raises(NotConfigured):
+        make_provider(s)
 
 
 # --------------------------------------------------------------------------------------------------
@@ -524,3 +577,78 @@ def test_convert_schema_handles_enum_with_none() -> None:
     assert status["enum"] == ["draft", "active"]
     assert status["nullable"] is True
     assert status["type"] == "string"
+
+
+def test_convert_schema_raises_on_multitype_union() -> None:
+    bad_schema = {
+        "type": "object",
+        "properties": {
+            "ambiguous": {
+                "anyOf": [
+                    {"type": "string"},
+                    {"type": "integer"},
+                ]
+            }
+        },
+    }
+    with pytest.raises(
+        ValueError, match=r"anyOf/oneOf with multiple non-null branches.*properties\.ambiguous"
+    ):
+        convert_schema(bad_schema)
+
+    bad_oneof = {
+        "type": "object",
+        "properties": {
+            "choice": {
+                "oneOf": [
+                    {"type": "object", "properties": {"a": {"type": "string"}}},
+                    {"type": "object", "properties": {"b": {"type": "integer"}}},
+                ]
+            }
+        },
+    }
+    with pytest.raises(ValueError, match=r"anyOf/oneOf with multiple non-null branches.*properties\.choice"):
+        convert_schema(bad_oneof)
+
+
+def test_convert_schema_with_real_extraction_schema() -> None:
+    schema = prompts.extraction_schema()
+    converted = convert_schema(schema)
+
+    def _assert_clean_gemini_schema(node: Any, path: str = "$") -> None:
+        if not isinstance(node, dict):
+            return
+        for forbidden in (
+            "$ref",
+            "$defs",
+            "definitions",
+            "anyOf",
+            "oneOf",
+            "allOf",
+            "const",
+            "additionalProperties",
+        ):
+            assert forbidden not in node, f"Forbidden key '{forbidden}' found at {path}"
+
+        if "properties" in node and isinstance(node["properties"], dict):
+            for prop_name, prop_schema in node["properties"].items():
+                prop_path = f"{path}.properties.{prop_name}"
+                if isinstance(prop_schema, dict):
+                    assert "type" in prop_schema, f"Property '{prop_name}' at {prop_path} missing 'type'"
+                _assert_clean_gemini_schema(prop_schema, prop_path)
+
+        if "items" in node:
+            items_schema = node["items"]
+            items_path = f"{path}.items"
+            if isinstance(items_schema, dict):
+                assert "type" in items_schema, f"Items at {items_path} missing 'type'"
+            _assert_clean_gemini_schema(items_schema, items_path)
+
+    _assert_clean_gemini_schema(converted)
+    assert converted.get("type") == "object"
+    assert "schema_version" in converted["properties"]
+    assert "header" in converted["properties"]
+    assert "rules" in converted["properties"]
+    assert "customers" in converted["properties"]
+    assert "items" in converted["properties"]
+    assert "tiers" in converted["properties"]

@@ -191,34 +191,57 @@ def convert_schema(schema: dict[str, Any]) -> dict[str, Any]:
                 return {}
         return dict(target) if isinstance(target, dict) else {}
 
-    def _convert(node: Any) -> Any:
+    def _convert(node: Any, path: str = "$") -> Any:
         if not isinstance(node, dict):
             return node
 
         if "$ref" in node and isinstance(node["$ref"], str):
             resolved = _resolve_ref(node["$ref"])
             merged = {**resolved, **{k: v for k, v in node.items() if k != "$ref"}}
-            return _convert(merged)
+            return _convert(merged, path)
 
         out: dict[str, Any] = {}
 
-        if "anyOf" in node and isinstance(node["anyOf"], list):
-            any_of = node["anyOf"]
+        union_key = "anyOf" if "anyOf" in node else ("oneOf" if "oneOf" in node else None)
+        if union_key is not None and isinstance(node[union_key], list):
+            union_branches = node[union_key]
             is_nullable = any(
-                isinstance(s, dict) and (s.get("type") == "null" or s.get("type") == ["null"]) for s in any_of
+                isinstance(s, dict) and (s.get("type") == "null" or s.get("type") == ["null"])
+                for s in union_branches
             )
             non_null = [
                 s
-                for s in any_of
+                for s in union_branches
                 if isinstance(s, dict) and s.get("type") != "null" and s.get("type") != ["null"]
             ]
-            if non_null:
-                base = _convert(non_null[0])
+            if len(non_null) > 1:
+                converted_branches = [_convert(b, f"{path}.{union_key}[{i}]") for i, b in enumerate(non_null)]
+                first = converted_branches[0]
+                if any(b != first for b in converted_branches[1:]):
+                    raise ValueError(
+                        f"anyOf/oneOf with multiple non-null branches of different shapes at {path}: {non_null}"
+                    )
+                base = dict(first)
+                if is_nullable:
+                    base["nullable"] = True
+                return base
+            elif len(non_null) == 1:
+                base = _convert(non_null[0], f"{path}.{union_key}[0]")
                 if is_nullable and isinstance(base, dict):
                     base["nullable"] = True
                 return base
             elif is_nullable:
                 return {"nullable": True}
+
+        if "allOf" in node and isinstance(node["allOf"], list):
+            merged_all: dict[str, Any] = {}
+            for i, part in enumerate(node["allOf"]):
+                c_part = _convert(part, f"{path}.allOf[{i}]")
+                if isinstance(c_part, dict):
+                    merged_all.update(c_part)
+            clean_node = {k: v for k, v in node.items() if k != "allOf"}
+            merged_all.update(clean_node)
+            return _convert(merged_all, path)
 
         raw_type = node.get("type")
         if isinstance(raw_type, list):
@@ -257,10 +280,12 @@ def convert_schema(schema: dict[str, Any]) -> dict[str, Any]:
                     out["type"] = "string"
 
         if "properties" in node and isinstance(node["properties"], dict):
-            out["properties"] = {k: _convert(v) for k, v in node["properties"].items()}
+            out["properties"] = {
+                k: _convert(v, f"{path}.properties.{k}") for k, v in node["properties"].items()
+            }
 
         if "items" in node:
-            out["items"] = _convert(node["items"])
+            out["items"] = _convert(node["items"], f"{path}.items")
 
         if "required" in node and isinstance(node["required"], list):
             out["required"] = list(node["required"])
@@ -323,12 +348,8 @@ class GeminiProvider:
         client = self._client or httpx.Client()
         try:
             resp = client.post(url, json=payload, headers=headers, timeout=timeout)
-        except (httpx.TimeoutException, httpx.NetworkError) as exc:
+        except httpx.TransportError as exc:
             raise ProviderCallError("timeout", retryable=True) from exc
-        except Exception as exc:
-            if "Timeout" in type(exc).__name__ or "Connect" in type(exc).__name__:
-                raise ProviderCallError("timeout", retryable=True) from exc
-            raise
 
         if resp.is_error:
             retry_after: float | None = None

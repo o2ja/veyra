@@ -38,7 +38,7 @@ def parse_encryption_keys(raw: str) -> dict[str, bytes]:
 
 
 class Settings(BaseSettings):
-    model_config = SettingsConfigDict(extra="ignore", frozen=True)
+    model_config = SettingsConfigDict(extra="ignore", frozen=True, env_ignore_empty=True)
 
     app_env: AppEnv
     secret_key: SecretStr = Field(min_length=32)
