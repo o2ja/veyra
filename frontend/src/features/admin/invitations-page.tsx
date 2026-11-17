@@ -101,40 +101,42 @@ export function InvitationsPage() {
         ) : !list.data?.data.length ? (
           <Empty>No invitations yet.</Empty>
         ) : (
-          <table className="w-full text-left text-sm">
-            <thead className="text-muted">
-              <tr>
-                <th className="py-2">Email</th>
-                <th>Role</th>
-                <th>Status</th>
-                <th>Expires</th>
-                <th>
-                  <span className="sr-only">Actions</span>
-                </th>
-              </tr>
-            </thead>
-            <tbody>
-              {list.data.data.map((i) => (
-                <tr key={i.id} className="border-t border-line">
-                  <td className="py-2">{i.email}</td>
-                  <td>{i.role}</td>
-                  <td>{state(i)}</td>
-                  <td>{new Date(i.expires_at).toLocaleDateString("en-US")}</td>
-                  <td>
-                    {state(i) === "Open" && (
-                      <button
-                        type="button"
-                        className="text-brand underline"
-                        onClick={() => revoke.mutate(i.id)}
-                      >
-                        Revoke
-                      </button>
-                    )}
-                  </td>
+          <div className="overflow-x-auto" tabIndex={0} role="region" aria-label="Invitations table">
+            <table className="w-full text-left text-sm">
+              <thead className="text-muted">
+                <tr>
+                  <th className="py-2">Email</th>
+                  <th>Role</th>
+                  <th>Status</th>
+                  <th>Expires</th>
+                  <th>
+                    <span className="sr-only">Actions</span>
+                  </th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
+              </thead>
+              <tbody>
+                {list.data.data.map((i) => (
+                  <tr key={i.id} className="border-t border-line">
+                    <td className="py-2">{i.email}</td>
+                    <td>{i.role}</td>
+                    <td>{state(i)}</td>
+                    <td>{new Date(i.expires_at).toLocaleDateString("en-US")}</td>
+                    <td>
+                      {state(i) === "Open" && (
+                        <button
+                          type="button"
+                          className="text-brand underline"
+                          onClick={() => revoke.mutate(i.id)}
+                        >
+                          Revoke
+                        </button>
+                      )}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
         )}
       </Card>
     </div>

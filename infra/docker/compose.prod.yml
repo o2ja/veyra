@@ -53,6 +53,9 @@ services:
     <<: *hardened
     image: postgres:16.15-trixie@sha256:f9a7b9ebf6f56201f949db745e47bc423c0f0f8294bafe991cc10bf74b029657
     # no `ports:` -- the database is not reachable from the host network
+    mem_limit: ${POSTGRES_MEM_LIMIT:-4g}
+    cpus: ${POSTGRES_CPUS:-2}
+    pids_limit: 512
     environment:
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set in env file}
     read_only: true
@@ -91,6 +94,9 @@ services:
     <<: *hardened
     image: chrislusf/seaweedfs:4.50@sha256:c2658820e763294a9e9de7b36c81e59b879e3459148351aee4e31a126ca64860
     entrypoint: ["sh", "/opt/seaweedfs/start.sh"]
+    mem_limit: ${SEAWEEDFS_MEM_LIMIT:-1g}
+    cpus: ${SEAWEEDFS_CPUS:-1}
+    pids_limit: 256
     environment:
       S3_ACCESS_KEY_ID: ${S3_ACCESS_KEY_ID:?set in env file}
       S3_SECRET_ACCESS_KEY: ${S3_SECRET_ACCESS_KEY:?set in env file}
@@ -115,6 +121,9 @@ services:
     <<: *hardened
     image: clamav/clamav:1.4.6-debian13-slim@sha256:aedee9daad6b069b26adad61af7ec50a41efe33fd8eff7f985c1f31e3a6ae9de
     # signatures are refreshed daily by freshclamd, which needs outbound access: join `edge` (egress only)
+    mem_limit: ${CLAMAV_MEM_LIMIT:-3g}  # clamd holds the whole signature set in memory (~1.5-2 GB)
+    cpus: ${CLAMAV_CPUS:-2}
+    pids_limit: 128
     volumes:
       - ../clamav/clamd.conf:/etc/clamav/clamd.conf:ro
       - clamdb:/var/lib/clamav
@@ -128,6 +137,9 @@ services:
   api:
     <<: [*hardened, *app-image]
     command: ["gunicorn", "rebate.api.asgi:app", "-k", "uvicorn.workers.UvicornWorker", "--bind", "0.0.0.0:8000", "--workers", "2"]
+    mem_limit: ${API_MEM_LIMIT:-2g}
+    cpus: ${API_CPUS:-2}
+    pids_limit: 256
     environment: *app-env
     read_only: true
     tmpfs: ["/tmp"]
@@ -170,6 +182,9 @@ services:
     build:
       context: ../../frontend
       target: static
+    mem_limit: ${CADDY_MEM_LIMIT:-256m}
+    cpus: ${CADDY_CPUS:-0.5}
+    pids_limit: 128
     environment:
       APP_DOMAIN: ${APP_DOMAIN:?set in env file}
       S3_DOMAIN: ${S3_DOMAIN:?set in env file}

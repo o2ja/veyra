@@ -110,7 +110,7 @@ export async function registerWorkspace(
   email: string,
   name = "Recovery Admin",
   workspace = "Voltara Recovery Co (SYNTHETIC)",
-): Promise<void> {
+): Promise<{ secret: string; codes: string[] }> {
   await page.goto("/register");
   await page.getByLabel("Your name").fill(name);
   await page.getByLabel("Company name").fill(workspace);
@@ -121,7 +121,7 @@ export async function registerWorkspace(
   await page.getByLabel("Password").fill(PASSWORD);
   await page.getByRole("button", { name: "Confirm and create workspace" }).click();
   await signIn(page, email);
-  await enrolMfa(page);
+  return enrolMfa(page);
 }
 
 /** Invite a member, accept the invitation in a fresh context and enrol MFA. */
@@ -335,7 +335,7 @@ async function claimableResultIds(page: Page, runId: string, manufacturerId: str
   });
 }
 
-async function importFile(page: Page, type: string, relPath: string): Promise<void> {
+export async function importFile(page: Page, type: string, relPath: string): Promise<void> {
   await page.goto("/imports/new");
   await page.getByLabel("File to upload").setInputFiles(generated(relPath));
   await page.getByLabel("What the file contains").selectOption({ label: type });
@@ -360,14 +360,22 @@ async function importFile(page: Page, type: string, relPath: string): Promise<vo
 export async function bootstrapRecovery(
   page: Page,
   browser: Browser,
-  options: { twoApprovers?: boolean } = {},
+  options: {
+    twoApprovers?: boolean;
+    adminEmail?: string;
+    approverAEmail?: string;
+    approverBEmail?: string;
+    workspace?: string;
+    onAdminMfa?: (mfa: { secret: string; codes: string[] }) => void;
+  } = {},
 ): Promise<RecoveryFixture> {
-  const admin = uniqueEmail("e2e-recovery-admin");
-  const approverAEmail = uniqueEmail("e2e-recovery-approver-a");
-  const approverBEmail = uniqueEmail("e2e-recovery-approver-b");
+  const admin = options.adminEmail ?? uniqueEmail("e2e-recovery-admin");
+  const approverAEmail = options.approverAEmail ?? uniqueEmail("e2e-recovery-approver-a");
+  const approverBEmail = options.approverBEmail ?? uniqueEmail("e2e-recovery-approver-b");
   const contexts: BrowserContext[] = [];
 
-  await registerWorkspace(page, admin);
+  const adminMfa = await registerWorkspace(page, admin, "Recovery Admin", options.workspace);
+  options.onAdminMfa?.(adminMfa);
 
   // Master data used by the SPA agreement and the CM-7781 claim lines.
   await page.getByRole("link", { name: "Master data" }).click();

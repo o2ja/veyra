@@ -191,7 +191,7 @@ FORMULA_START = ("=", "+", "-", "@", "\t", "\r")
 def _cell(value: object) -> str:
     """CSV export cell with formula-injection protection (SECURITY.md §4)."""
     text = "" if value is None else str(value)
-    return "'" + text if text.startswith(FORMULA_START) else text
+    return "'" + text if text.lstrip(" ").startswith(FORMULA_START) else text
 
 
 def _csv_lines(rows: list[tuple[Any, ...]]) -> Iterator[str]:

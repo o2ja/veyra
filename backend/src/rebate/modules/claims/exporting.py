@@ -106,7 +106,7 @@ class FormatWouldRound(ValueError):
 
 def safe_text(value: str) -> str:
     value = _ILLEGAL.sub(" ", value)
-    return "'" + value if value[:1] in ("=", "+", "-", "@", "\t", "\r") else value
+    return "'" + value if value.lstrip(" ")[:1] in ("=", "+", "-", "@", "\t", "\r") else value
 
 
 def _fixed(value: Decimal, fmt: str) -> Decimal:

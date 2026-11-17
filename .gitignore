@@ -20,3 +20,5 @@ testdata/generated_volume/
 test-results/
 playwright-report/
 junit-e2e.xml
+
+*.local.json

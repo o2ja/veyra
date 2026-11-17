@@ -171,57 +171,59 @@ export function FilesPage() {
         ) : !files.data?.data.length ? (
           <Empty>No files yet.</Empty>
         ) : (
-          <table className="w-full text-left text-sm">
-            <thead className="text-muted">
-              <tr>
-                <th className="py-2">Name</th>
-                <th>Type</th>
-                <th>Size</th>
-                <th>Status</th>
-                <th>
-                  <span className="sr-only">Actions</span>
-                </th>
-              </tr>
-            </thead>
-            <tbody>
-              {files.data.data.map((f) => (
-                <tr key={f.id} className="border-t border-line">
-                  <td className="py-2">
-                    <Link to={`/files/${f.id}`} className="text-brand underline">
-                      {f.original_name}
-                    </Link>
-                  </td>
-                  <td>{f.kind}</td>
-                  <td>
-                    {f.size_bytes < 1024 ? `${f.size_bytes} B` : `${(f.size_bytes / 1024).toFixed(1)} KB`}
-                  </td>
-                  <td
-                    role="status"
-                    className={
-                      f.scan_status === "clean"
-                        ? "text-ok"
-                        : f.scan_status === "pending"
-                          ? "text-muted"
-                          : "text-danger"
-                    }
-                  >
-                    {STATUS_TEXT[f.scan_status] ?? f.scan_status}
-                  </td>
-                  <td>
-                    {f.scan_status === "clean" && (
-                      <button
-                        type="button"
-                        className="text-brand underline"
-                        onClick={() => void download(f.id)}
-                      >
-                        Download
-                      </button>
-                    )}
-                  </td>
+          <div className="overflow-x-auto" tabIndex={0} role="region" aria-label="Files table">
+            <table className="w-full text-left text-sm">
+              <thead className="text-muted">
+                <tr>
+                  <th className="py-2">Name</th>
+                  <th>Type</th>
+                  <th>Size</th>
+                  <th>Status</th>
+                  <th>
+                    <span className="sr-only">Actions</span>
+                  </th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
+              </thead>
+              <tbody>
+                {files.data.data.map((f) => (
+                  <tr key={f.id} className="border-t border-line">
+                    <td className="py-2">
+                      <Link to={`/files/${f.id}`} className="text-brand underline">
+                        {f.original_name}
+                      </Link>
+                    </td>
+                    <td>{f.kind}</td>
+                    <td>
+                      {f.size_bytes < 1024 ? `${f.size_bytes} B` : `${(f.size_bytes / 1024).toFixed(1)} KB`}
+                    </td>
+                    <td
+                      role="status"
+                      className={
+                        f.scan_status === "clean"
+                          ? "text-ok"
+                          : f.scan_status === "pending"
+                            ? "text-muted"
+                            : "text-danger"
+                      }
+                    >
+                      {STATUS_TEXT[f.scan_status] ?? f.scan_status}
+                    </td>
+                    <td>
+                      {f.scan_status === "clean" && (
+                        <button
+                          type="button"
+                          className="text-brand underline"
+                          onClick={() => void download(f.id)}
+                        >
+                          Download
+                        </button>
+                      )}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
         )}
       </Card>
     </div>
