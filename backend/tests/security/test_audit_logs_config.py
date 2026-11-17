@@ -226,6 +226,29 @@ def test_hosted_environments_require_smtp_starttls(env: str) -> None:
         )
 
 
+@pytest.mark.parametrize("env", ["staging", "production"])
+@pytest.mark.parametrize(
+    ("database_url", "extra", "name"),
+    [
+        ("postgresql+psycopg://x:replace-me@y/z", {}, "DATABASE_URL"),
+        ("postgresql+psycopg://x@y/z", {"s3_secret_access_key": "replace-me"}, "S3_SECRET_ACCESS_KEY"),
+    ],
+)
+def test_hosted_environments_reject_placeholder_secrets(
+    env: str, database_url: str, extra: dict[str, Any], name: str
+) -> None:
+    with pytest.raises(ValidationError, match=f"{name} still holds"):
+        make_settings(
+            database_url,
+            app_env=env,
+            smtp_starttls=True,
+            trusted_proxy_ips="10.0.0.1",
+            public_base_url="https://app.example.com",
+            s3_access_key_id="real-key",
+            **{"s3_secret_access_key": "real-secret", **extra},
+        )
+
+
 @pytest.mark.parametrize(
     ("overrides", "message"),
     [

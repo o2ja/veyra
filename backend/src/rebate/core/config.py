@@ -16,6 +16,16 @@ from pydantic import Field, SecretStr, field_validator, model_validator
 from pydantic_settings import BaseSettings, NoDecode, SettingsConfigDict
 
 AppEnv = Literal["local", "ci", "staging", "production"]
+PLACEHOLDER = "replace-me"  # the value shipped in .env.example / .env.prod.example
+PLACEHOLDER_CHECKED = (
+    "secret_key",
+    "database_url",
+    "database_url_ai",
+    "encryption_keys",
+    "smtp_password",
+    "s3_access_key_id",
+    "s3_secret_access_key",
+)
 
 
 def parse_encryption_keys(raw: str) -> dict[str, bytes]:
@@ -178,6 +188,10 @@ class Settings(BaseSettings):
             raise ValueError("SMTP_STARTTLS must be on in staging/production (no plaintext SMTP)")
         if hosted and not self.trusted_proxy_ips:
             raise ValueError("TRUSTED_PROXY_IPS must list the reverse proxy in staging/production")
+        for name in PLACEHOLDER_CHECKED:
+            value = getattr(self, name)
+            if hosted and value is not None and PLACEHOLDER in value.get_secret_value():
+                raise ValueError(f"{name.upper()} still holds the '{PLACEHOLDER}' placeholder")
         url = urlsplit(self.public_base_url)
         if url.scheme not in ("http", "https") or not url.netloc or url.path not in ("", "/"):
             raise ValueError("PUBLIC_BASE_URL must be an origin such as https://app.example.com")

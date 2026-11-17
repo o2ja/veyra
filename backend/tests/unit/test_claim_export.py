@@ -68,6 +68,7 @@ def test_csv_escapes_text_but_not_numbers() -> None:
 def test_every_dangerous_lead_character_is_prefixed(lead: str) -> None:
     assert exporting.safe_text(f"{lead}x") == f"'{lead}x"
     assert exporting.safe_text("x=") == "x="
+    assert exporting.safe_text("  =cmd") == "'  =cmd"  # leading spaces must not hide the formula
     assert exporting.safe_text("") == ""
 
 

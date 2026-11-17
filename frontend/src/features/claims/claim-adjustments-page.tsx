@@ -185,7 +185,7 @@ export function ClaimAdjustmentsPage() {
             <div
               role="tablist"
               aria-label="Adjustment status"
-              className="flex border-b border-line"
+              className="flex overflow-x-auto border-b border-line"
               onKeyDown={onTabKeyDown}
             >
               {STATUS_TABS.map((tab) => {
