@@ -1,8 +1,8 @@
 import { readFileSync, writeFileSync } from "node:fs";
 
-import { test, totp } from "./support";
+import { test, totp } from "../support";
 
-// Manual audit, not CI: `AUDIT_WALK=1 npx playwright test audit-walkthrough`. Needs seed-credentials.local.json.
+// Manual audit, not CI: `E2E_MANUAL=1 AUDIT_WALK=1 npx playwright test audit-walkthrough`. Needs seed-credentials.local.json.
 test.skip(!process.env.AUDIT_WALK, "manual audit, set AUDIT_WALK=1");
 
 const ROUTES = [

@@ -8,7 +8,7 @@ set -euo pipefail
 : "${REBATE_APP_PASSWORD:?must be set}"
 : "${REBATE_AI_WRITER_PASSWORD:?must be set}"
 : "${REBATE_READONLY_PASSWORD:?must be set}"
-DB="${REBATE_DB:-rebate}"
+DB="${REBATE_DB_NAME:-${REBATE_DB:-rebate}}"
 
 psql -X -v ON_ERROR_STOP=1 -v db="$DB" --dbname postgres <<'SQL'
 \getenv owner_pw REBATE_OWNER_PASSWORD

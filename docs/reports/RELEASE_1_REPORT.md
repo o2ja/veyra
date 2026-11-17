@@ -29,4 +29,4 @@ S0 foundation, S1 identity/tenancy/audit, S2 files and job queue, S3 master data
 - **CI flake root causes fixed:** the sign-in raced the accept-invitation request (all specs now wait for the login redirect); a positional locator in the adjustments spec shifted with cached rows.
 
 ## How to run and verify
-`make up`, `make ci-local` (six jobs) or push a ready PR (GitHub Actions). AI: set `AI_PROVIDER` and the matching key in the local `.env` only; synthetic documents only until OD-2.
+`make up`, `make test` / `make lint`, or push a ready PR (GitHub Actions). AI: set `AI_PROVIDER` and the matching key in the local `.env` only; synthetic documents only until OD-2.

@@ -29,7 +29,7 @@
 
 S1 signed off by the owner 2026-11-10. Evidence and open points: `docs/reports/S1_COMPLETION_REPORT.md`. CI green on `main` (jobs: backend incl. isolation negative control, frontend, e2e (Playwright W1–W2 + axe), api-contract, secrets, images).
 
-**CI and merging (owner, 2026-11-13):** GitHub Actions is unpaid; the merge gate is `make ci-local` (6/6 on the exact commit, posted as a PR comment with the SHA) after merging latest `main`, plus the required reviews; nothing skipped or failing. Workflow runs only on ready-for-review PRs and pushes to `main`, with path filters; WIP PRs are drafts. At most 2 agents; full suite + Playwright once per merge; never two full suites at once. Full text: `CLAUDE.md` §19.
+**CI and merging (updated 2026-11-18):** the repo is public, so GitHub Actions is free and is the merge gate again (the 2026-11-13 `make ci-local` workaround was retired). Merge after latest `main` is merged in, every job that ran is green on the exact commit, and the required reviews passed. Workflow runs only on ready-for-review PRs and pushes to `main`, with path filters; WIP PRs are drafts. At most 2 agents; never two full suites at once. Full text: `CLAUDE.md` §19.
 
 **Resume point (2026-11-14):** Release 1 build merged (backend S0-S10, UI S3-S10). Remaining work:
 - S11.2 performance: the 1M-line run never completed; measure 100k/250k per D-N9.
@@ -142,3 +142,4 @@ Top items only; full list in the analysis and `SECURITY.md` §12.
 | 2026-11-13 | Owner decision D-N10: a return netted into a frozen claim and later reduced or voided → claimed original evaluated on q − min(netted, current returns); shortfall proposed as `agreement_change`, carried by a later batch |
 | 2026-11-14 | Owner decision D-N11: a later payment's negative adjustment line is allocated to its own claim line (CL-4), not to the original invoice line (INV-10020): the invoice shows no short-pay from an adjustment already carried and resolved in its own batch |
 | 2026-11-14 | S7-S10 integrated (#25) and UIs S7-S10 merged (#30-#33); S11.1 (#21), S11.3 (#22), D-N8 tooling (#24), Gemini and OpenRouter providers (#26) merged; status docs and `IMPLEMENTATION_PLAN.md` ticks brought up to date; dependency/licence audit `docs/reports/DEPENDENCY_AUDIT_2026-11.md`; Dependabot #27-#29 decided not merged for Release 1. AI providers: Anthropic, Gemini, OpenRouter selectable by `AI_PROVIDER`, synthetic documents only until OD-2 |
+| 2026-11-18 | CI: repo is public, GitHub Actions is free again; make ci-local and infra/scripts/ci-local.sh retired (archived locally), GitHub CI is the merge gate (CLAUDE.md §19). Manual Playwright seed/audit specs moved to rontend/e2e/manual/ (CI ignores them unless E2E_MANUAL=1) |

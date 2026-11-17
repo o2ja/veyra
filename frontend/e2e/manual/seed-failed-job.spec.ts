@@ -2,9 +2,9 @@ import { readFileSync } from "node:fs";
 
 import { expect } from "@playwright/test";
 
-import { test, totp } from "./support";
+import { test, totp } from "../support";
 
-// Manual, not CI: `SEED_FAILED=1 npx playwright test seed-failed-job`. Expects one failed job row in the tenant
+// Manual, not CI: `E2E_MANUAL=1 SEED_FAILED=1 npx playwright test seed-failed-job`. Expects one failed job row in the tenant
 // (injected by SQL: uploads are validated, so no real failure is reachable); /extractions/usage renders empty (AI off).
 test.skip(!process.env.SEED_FAILED, "manual seed, set SEED_FAILED=1");
 

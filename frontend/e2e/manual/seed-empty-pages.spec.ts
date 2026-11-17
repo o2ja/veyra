@@ -4,13 +4,13 @@ import { join } from "node:path";
 
 import { expect, type ConsoleMessage, type Page, type Response } from "@playwright/test";
 
-import { apiJson, generated, importFile, inviteMember, test, totp, uniqueEmail } from "./support";
+import { apiJson, generated, importFile, inviteMember, test, totp, uniqueEmail } from "../support";
 
-// Manual seed, not CI: `$env:SEED_EMPTY="1"; npx playwright test seed-empty-pages`. Needs seed-credentials.local.json.
+// Manual seed, not CI: `$env:E2E_MANUAL="1"; $env:SEED_EMPTY="1"; npx playwright test seed-empty-pages`. Needs seed-credentials.local.json.
 test.skip(!process.env.SEED_EMPTY, "manual seed");
 
 const creds = JSON.parse(
-  readFileSync(new URL("../../seed-credentials.local.json", import.meta.url), "utf8"),
+  readFileSync(new URL("../../../seed-credentials.local.json", import.meta.url), "utf8"),
 ) as { adminEmail: string; password: string; totpSecret: string };
 
 interface Report {

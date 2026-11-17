@@ -1,8 +1,8 @@
 import { writeFileSync } from "node:fs";
 
-import { bootstrapRecovery, PASSWORD, test } from "./support";
+import { bootstrapRecovery, PASSWORD, test } from "../support";
 
-// Not part of CI: run on demand with `SEED_ACCOUNT=1 npx playwright test seed-test-account`.
+// Not part of CI: run on demand with `E2E_MANUAL=1 SEED_ACCOUNT=1 npx playwright test seed-test-account`.
 // Creates a clearly synthetic workspace through the real UI/API flow and saves the login to a git-ignored file.
 test.skip(!process.env.SEED_ACCOUNT, "manual seed, set SEED_ACCOUNT=1");
 

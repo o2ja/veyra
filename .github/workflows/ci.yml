@@ -1,8 +1,8 @@
 name: ci
 
-# Owner rule 2026-11-13: runs only for pull requests that are ready for review (drafts never run) and for
-# pushes to main. Per-job path filters come from the `changes` job. A job skipped by a filter is NOT green
-# for the merge gate: run `make ci-local` (all six jobs) on the commit instead (CLAUDE.md §19).
+# Runs for pull requests that are ready for review (drafts never run) and for pushes to main. This workflow
+# is the merge gate (CLAUDE.md §19). Per-job path filters come from the `changes` job; a job skipped by a
+# filter had no relevant changes, a failed job is red.
 on:
   push:
     branches: [main]
