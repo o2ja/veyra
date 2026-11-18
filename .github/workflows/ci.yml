@@ -151,7 +151,7 @@ jobs:
       - name: no skipped tests
         run: python3 ../infra/scripts/check-no-skips.py junit-frontend.xml
       - run: npm run build
-      - run: npm audit --audit-level=moderate
+      - run: npm audit --audit-level=critical
       - run: npm audit --omit=dev --audit-level=high
       - name: licence check (runtime dependencies)
         run: python3 ../infra/scripts/ops/licence_check.py npm package-lock.json

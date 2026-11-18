@@ -189,7 +189,7 @@ def test_a_positive_carried_adjustment_is_not_split_off_the_payment(
 ) -> None:
     """Only a NEGATIVE adjustment is split (a credit netted inside the payment). With the ADJ forced to +25.00 (fixture
     edit, triggers off for that statement), B2 paid 312.50 on one line: all 312.50 goes to INV-10020 and the adjustment
-    item gets no allocation (unchanged by D-N11). OPEN POINT, not a correct outcome (docs/reports/notes/dn11-open-points.md,
+    item gets no allocation (unchanged by D-N11). OPEN POINT, not a correct outcome (archived note dn11-open-points.md (not in repo),
     b): an UNPAID positive carried adjustment is silent (claimed - collected = 25.00, short-paid 0), and a manufacturer
     that pays B2 in full leaves INV-10020 overpaid; the owner has not decided how to treat it."""
     ws = story.ws

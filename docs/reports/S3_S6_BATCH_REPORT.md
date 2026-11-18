@@ -29,13 +29,13 @@ Date: 2026-11-12. Batch started 2026-11-10 after S2 approval. PRs #2–#14, #16 
 ## 2. Tests and reviews
 - Backend full suite on `main` c41e448: see §5 (run 2026-11-12). Isolation suite + negative control green in CI.
 - Golden ground truth: all 23 calculation scenarios + GL-R1a/R1b/R2/R3 match `testdata/generated/ground_truth`
-  (`docs/reports/notes/c1-s5-runs.md`, #13). Caveat: GL-R5 `mismatch` lines carry no SPA result in the engine tests
+  (`archived note c1-s5-runs.md (not in repo)`, #13). Caveat: GL-R5 `mismatch` lines carry no SPA result in the engine tests
   (only the integration test proves exclusion). "No financial discrepancy" covers computed values; the split-period
   rule was left to the owner (decision 3).
 - CI on every merge: backend, frontend, e2e (Playwright + axe), api-contract, secrets, images — green (run ids on
   each PR). The 8-spec e2e suite passes in CI in one run (43235690790); locally it is run in ≤4-spec batches with a
   dev rate-limit reset in between (the external agent's own full run failed on that limit).
-- Reviews (independent subagent; results in `docs/reports/notes/overnight-log.md` and as comments on each PR): S3 security + DB (2 passes), S4 security + DB (2 passes), S6 security + DB
+- Reviews (independent subagent; results in `archived note overnight-log.md (not in repo)` and as comments on each PR): S3 security + DB (2 passes), S4 security + DB (2 passes), S6 security + DB
   (3 passes), engine + S5 financial (2 passes each, **no financial discrepancy**), D2 financial (PASS), S4 UI (2),
   S5/S6 UI (2). All blockers/serious findings fixed; dispositions recorded on each PR.
 - Performance (`docs/reports/PERFORMANCE_BASELINES.md`): import 1M rows 1,372 s; calc 1M lines 762 s. Caveats:

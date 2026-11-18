@@ -338,6 +338,6 @@ def upgrade() -> None:
     # the old 'period_end' meant the month end of the line's claim date (SPA lines): keep the meaning, new name;
     # the revision moves on so open settings forms see the change
     # Not audited: a migration has no actor or tenant context (audit_log is tenant-scoped, written by the app);
-    # the change is recorded here, in the revision's docstring and in docs/reports/notes/c1-s5-runs.md.
+    # the change is recorded here, in the revision's docstring and in archived note c1-s5-runs.md (not in repo).
     for statement in PERIOD_END_STEPS:
         op.execute(statement)

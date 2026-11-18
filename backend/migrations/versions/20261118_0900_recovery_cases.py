@@ -3,7 +3,7 @@
 DATABASE_SCHEMA.md §3.10; BUSINESS_LOGIC.md §10.3, §12, §12.1. Tenant tables: composite FKs, RLS ENABLE + FORCE via
 the shared helper.
 
-Deviations from the schema doc (also in docs/reports/notes/j1-s9-recovery.md):
+Deviations from the schema doc (also in archived note j1-s9-recovery.md (not in repo)):
 
 - ``case_type`` has no ``deadline_unknown`` value: an unknown deadline is ``deadline_date IS NULL`` (BUSINESS_LOGIC §12
   calls it a flag, not a type); ``deadline_basis`` is then NULL too.

@@ -1,6 +1,6 @@
 """S8 large remittance: the ground-truth CM-7781 lines plus 4,994 payment lines of 10.00 that no claim explains (5,000
 lines, hand total 7545.00 + 4994 * 10.00 = 57,485.00) are ingested and reconciled through the real job queue. The
-timings are printed (``pytest -s``) and recorded in docs/reports/notes/i1-s8-reconciliation.md; the bound only guards
+timings are printed (``pytest -s``) and recorded in archived note i1-s8-reconciliation.md (not in repo); the bound only guards
 against a regression to quadratic behaviour. The claim side is the 8 ground-truth claim lines (a limitation, noted)."""
 
 import time

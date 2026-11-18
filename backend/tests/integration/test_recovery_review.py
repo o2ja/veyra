@@ -1,4 +1,4 @@
-"""Review fixes of S9 (docs/reports/notes/s9-review-1.md): a write-off retires the case's reclaim, a four-eyes proposal
+"""Review fixes of S9 (archived note s9-review-1.md (not in repo)): a write-off retires the case's reclaim, a four-eyes proposal
 does not outlive a status change, reminders go to active members only, titles state the days really left, the
 submission_date basis, blank text. Fresh workspace (the CM-7781 cases); tests run in file order."""
 
