@@ -3,6 +3,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 import { NavLink, Outlet, useNavigate } from "react-router-dom";
 
+import { Logo } from "../components/ui";
 import { api } from "../lib/api/client";
 import { unwrap } from "../lib/api/errors";
 import { useSession } from "../lib/session";
@@ -154,21 +155,16 @@ export function AppLayout() {
       {signedIn && (
         <aside
           className={`${open ? "flex" : "hidden"} fixed inset-y-0 left-0 z-30 w-64 shrink-0 flex-col
-            bg-rail text-rail-ink lg:sticky lg:top-0 lg:flex lg:h-dvh`}
+            border-r border-line bg-panel text-ink lg:sticky lg:top-0 lg:flex lg:h-dvh`}
         >
-          <div className="flex h-16 items-center gap-2.5 px-5">
-            <span
-              aria-hidden="true"
-              className="grid size-8 place-items-center rounded-lg bg-brand text-sm font-bold text-panel"
-            >
-              V
-            </span>
-            <span className="font-semibold tracking-tight text-white">Veyra Recover</span>
-          </div>
+          <NavLink to="/" className="flex h-16 items-center gap-2.5 border-b border-line px-5" aria-label="Veyra Recover home">
+            <Logo className="h-5" />
+            <span className="text-xs font-medium tracking-[0.18em] text-muted uppercase">Recover</span>
+          </NavLink>
           <nav aria-label="Main" className="flex-1 overflow-y-auto px-3 pb-6 text-sm">
             {groups.map((g) => (
-              <div key={g.title} className="mt-5 first:mt-1">
-                <p className="px-2 pb-1.5 text-xs font-medium text-rail-ink/60">{g.title}</p>
+              <div key={g.title} className="mt-5">
+                <p className="px-2.5 pb-1.5 text-[11px] font-semibold tracking-wider text-muted uppercase">{g.title}</p>
                 <ul className="flex flex-col gap-0.5">
                   {g.items.map((n) => (
                     <li key={n.to}>
@@ -177,10 +173,10 @@ export function AppLayout() {
                         end={n.to === "/"}
                         onClick={() => setOpen(false)}
                         className={({ isActive }) =>
-                          `block rounded-lg px-2.5 py-2 transition-colors ${
+                          `block rounded-lg px-2.5 py-1.5 transition-colors duration-150 ${
                             isActive
-                              ? "bg-white/12 font-medium text-white"
-                              : "text-rail-ink hover:bg-white/8 hover:text-white"
+                              ? "bg-brand font-medium text-panel"
+                              : "text-muted hover:bg-brand-soft hover:text-ink"
                           }`
                         }
                       >
@@ -205,7 +201,7 @@ export function AppLayout() {
       <div className="flex min-w-0 flex-1 flex-col">
         <header className="sticky top-0 z-10 border-b border-line bg-panel/90 backdrop-blur">
           <div className="flex h-16 items-center gap-3 px-4 sm:px-8">
-            {signedIn ? (
+            {signedIn && (
               <button
                 type="button"
                 aria-label="Open menu"
@@ -215,8 +211,6 @@ export function AppLayout() {
               >
                 <span aria-hidden="true">☰</span>
               </button>
-            ) : (
-              <span className="font-semibold tracking-tight">Veyra Recover</span>
             )}
             <div className="ml-auto flex items-center gap-3">
               {signedIn && <WorkspaceSwitcher />}

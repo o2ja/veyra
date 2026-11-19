@@ -202,7 +202,7 @@ export function ExtractionDetailPage() {
             draftId ? (
               <Link
                 to={`/agreement-drafts/${draftId}`}
-                className="inline-flex items-center justify-center rounded-md bg-brand px-3 py-2 text-sm font-medium text-white hover:opacity-90"
+                className="inline-flex items-center justify-center rounded-md bg-brand px-3 py-2 text-sm font-medium text-panel hover:opacity-90"
               >
                 Open draft
               </Link>

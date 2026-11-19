@@ -708,7 +708,7 @@ export function RemittanceDetailPage() {
                     aria-pressed={stateFilter === st}
                     className={`rounded-full px-3 py-1 font-medium transition-colors ${
                       stateFilter === st
-                        ? "bg-brand text-white"
+                        ? "bg-brand text-panel"
                         : "border border-line bg-surface text-muted hover:text-ink"
                     }`}
                     onClick={() => setStateFilter(st)}

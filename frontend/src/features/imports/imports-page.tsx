@@ -37,7 +37,7 @@ export function ImportsPage() {
       title="Imports"
       actions={
         can("import.run") && (
-          <Link to="/imports/new" className="rounded-md bg-brand px-3 py-2 text-sm font-medium text-white">
+          <Link to="/imports/new" className="rounded-md bg-brand px-3 py-2 text-sm font-medium text-panel">
             New import
           </Link>
         )
