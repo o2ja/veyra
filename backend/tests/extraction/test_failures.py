@@ -140,6 +140,23 @@ def test_provider_outage_is_retried_by_the_job_then_fails_visibly(
     assert enabled.api.post("/agreement-drafts", json={"source": "manual"}).status_code == 201
 
 
+@pytest.mark.parametrize(
+    ("status", "code", "fragment"),
+    [
+        (400, "provider_request_rejected", "rejected the request (HTTP 400)"),
+        (401, "provider_auth_failed", "rejected the API key (HTTP 401)"),
+    ],
+)
+def test_a_permanent_provider_rejection_fails_at_once_and_says_why(
+    enabled: Workspace, replay: Replay, status: int, code: str, fragment: str
+) -> None:
+    replay.script.extend([error(status)] * 12)
+    ex = extract(enabled, golden_file(enabled, SPA_884))  # one drain: no job-level retry is queued
+    assert ex["status"] == "failed" and ex["error_code"] == code, ex
+    assert fragment in ex["error_detail"] and "could not be reached" not in ex["error_detail"]
+    assert len(replay.calls) == 1 and ex["draft_id"] is None
+
+
 def test_a_retry_does_not_pay_for_a_finished_pass_twice(
     enabled: Workspace, replay: Replay, clk: FakeClock
 ) -> None:

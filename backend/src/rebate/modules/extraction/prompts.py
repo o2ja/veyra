@@ -9,7 +9,7 @@ from typing import Any
 
 from rebate.modules.extraction.documents import Document, PdfText
 
-PROMPT_VERSION = "agreement-v1"
+PROMPT_VERSION = "agreement-v2"
 MAPPING_PROMPT_VERSION = "mapping-v1"
 TOOL_NAME = "record_extraction"
 MAPPING_TOOL_NAME = "record_mapping"
@@ -29,8 +29,16 @@ Rules:
 - Every non-null value needs evidence: {"page": N, "quote": "..."} for PDFs or
   {"sheet": "...", "cell": "A1", "quote": "..."} for spreadsheets. The quote must be copied verbatim from
   the document at that location and must contain the value (or the words that state it).
-- Dates as written in the quote are fine; the backend parses them. Enumerated fields use the allowed
-  values in the schema only when the document clearly states the corresponding term; otherwise null.
+- Write every date (valid_from, valid_to, measurement_period) as ISO YYYY-MM-DD, for example "2026-01-01":
+  convert the date printed in the document, but keep the quote exactly as printed. If the day/month order is
+  ambiguous, use null. Enumerated fields use the allowed values in the schema only when the document clearly
+  states the corresponding term; otherwise null.
+- Rounding: "rounded to the nearest cent" (no tie rule given) is mode "half_up" with scale 2; "nearest dollar"
+  is scale 0. Set timing to "per_line" or "per_document" only when the document says per line or per
+  invoice/document; if the document does not describe rounding or its timing, use null for rounding.
+- For an enumerated field and for each customer, quote the sentence that states the term itself (the
+  sentence naming the cost the credit is based on, or the one saying who the agreement applies to), not
+  only a table or a list of names.
 - Put things you could not place into extractor_notes (free text for the human reviewer)."""
 
 _TASK_A = "Read the document from start to finish and fill in the schema field by field."
@@ -65,6 +73,12 @@ def _wrapped(value: dict[str, Any]) -> dict[str, Any]:
 
 
 _STR: dict[str, Any] = {"type": ["string", "null"]}
+_DATE_REQ: dict[str, Any] = {
+    "type": "string",
+    "pattern": r"^\d{4}-\d{2}-\d{2}$",
+    "description": "ISO date YYYY-MM-DD",
+}
+_DATE: dict[str, Any] = {**_DATE_REQ, "type": ["string", "null"]}
 
 
 def _enum(*values: str) -> dict[str, Any]:
@@ -83,7 +97,7 @@ _ROUNDING: dict[str, Any] = {
 }
 _PERIOD: dict[str, Any] = {
     "type": ["object", "null"],
-    "properties": {"kind": {"type": "string"}, "start": {"type": "string"}, "end": {"type": "string"}},
+    "properties": {"kind": {"type": "string"}, "start": _DATE_REQ, "end": _DATE_REQ},
     "required": ["kind", "start", "end"],
     "additionalProperties": False,
 }
@@ -108,8 +122,8 @@ def extraction_schema() -> dict[str, Any]:
                     "agreement_type": _enum("spa", "rebate"),
                     "external_number": _STR,
                     "manufacturer_name": _STR,
-                    "valid_from": _STR,
-                    "valid_to": _STR,
+                    "valid_from": _DATE,
+                    "valid_to": _DATE,
                     "date_basis": _enum("invoice_date", "ship_date"),
                 }
             ),

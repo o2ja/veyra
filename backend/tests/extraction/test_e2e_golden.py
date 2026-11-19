@@ -32,7 +32,7 @@ def test_golden_document_through_the_full_job(enabled: Workspace, stem: str) -> 
     ws, truth = enabled, ground_truth(stem)
     ex = extract(ws, golden_file(ws, stem))
     assert ex["status"] == "completed", ex
-    assert ex["prompt_version"] == "agreement-v1" and ex["model"] == "claude-sonnet-5-5"
+    assert ex["prompt_version"] == "agreement-v2" and ex["model"] == "claude-sonnet-5-5"
     draft = draft_of(ws, ex)
     assert draft["source"] == "ai_extraction" and draft["status"] == "draft"
     ExtractionResult.model_validate(ex["result"])  # the published OpenAPI shape is the stored shape

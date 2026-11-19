@@ -42,8 +42,8 @@ def message(
     }
 
 
-def error(status: int, headers: dict[str, str] | None = None) -> Step:
-    body = {"type": "error", "error": {"type": "api_error", "message": "scripted failure"}}
+def error(status: int, headers: dict[str, str] | None = None, message: str = "scripted failure") -> Step:
+    body = {"type": "error", "error": {"type": "api_error", "message": message}}
     return lambda _b: httpx2.Response(status, json=body, headers=headers)
 
 

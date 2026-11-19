@@ -1,6 +1,6 @@
 """S6.2 the AI gateway: the single place that talks to an LLM (AI_PROCESSING.md §2, §4, §9, §10).
 
-* ``Provider`` is the interface; ``AnthropicProvider`` (forced tool call) and ``GeminiProvider``
+* ``Provider`` is the interface; ``AnthropicProvider`` (forced tool call; ``auto`` for models that reject it) and ``GeminiProvider``
   (structured output via REST generateContent and responseSchema) are the adapters.
 * ``Gateway.call`` enforces, in order: the per-workspace opt-in (``ai_enabled`` from tenant settings), the
   per-tenant daily cost/token caps, retries with exponential backoff and jitter (``tenacity``, ``Retry-After``
@@ -69,6 +69,26 @@ class ProviderBusy(GatewayError):
     code = "provider_busy"
 
 
+class ProviderRejected(GatewayError):
+    """A permanent 4xx from the provider (bad key, rejected request or model): retrying cannot help."""
+
+    code = "provider_request_rejected"
+
+    def __init__(self, status: int) -> None:
+        self.http_status = status
+        if status in (401, 403):
+            self.code = "provider_auth_failed"
+            super().__init__(
+                f"The AI provider rejected the API key (HTTP {status}); ask an administrator to check it. "
+                "Enter the agreement manually meanwhile."
+            )
+        else:
+            super().__init__(
+                f"The AI provider rejected the request (HTTP {status}); this is a configuration problem, "
+                "not an outage. Enter the agreement manually meanwhile."
+            )
+
+
 class ProviderFailure(GatewayError):
     code = "provider_error"
 
@@ -85,6 +105,16 @@ class ProviderCallError(Exception):
     def __init__(self, code: str, *, retryable: bool, retry_after: float | None = None) -> None:
         super().__init__(code)
         self.code, self.retryable, self.retry_after = code, retryable, retry_after
+
+    @property
+    def status(self) -> int | None:
+        digits = self.code.removeprefix("http_")
+        return int(digits) if digits.isdigit() else None
+
+    @property
+    def permanent(self) -> bool:
+        """A non-retryable HTTP 4xx (400, 401, 403, 404, 422, ...): the same request will never succeed."""
+        return not self.retryable and self.status is not None and 400 <= self.status < 500
 
 
 @dataclass(frozen=True)
@@ -110,12 +140,42 @@ class Provider(Protocol):
     ) -> ProviderResponse: ...
 
 
+# Models that answered 400 to a forced ``tool_choice`` (the Claude 5.5 family): later calls use "auto".
+_AUTO_TOOL_CHOICE: set[str] = set()
+
+
 class AnthropicProvider:
     name = "anthropic"
 
     def __init__(self, api_key: str, http_client: Any = None) -> None:
         # retries are ours (tenacity), so the SDK must not retry on its own
         self._client = anthropic.Anthropic(api_key=api_key, max_retries=0, http_client=http_client)
+
+    def _send(
+        self,
+        *,
+        forced: bool,
+        model: str,
+        system: str,
+        user: str,
+        tool_name: str,
+        schema: dict[str, Any],
+        max_tokens: int,
+        timeout: float,
+    ) -> Any:
+        # forced: the model must call the tool. auto: for models that reject that, an instruction does it;
+        # either way the tool input is validated strictly by the caller, so nothing unchecked gets through.
+        return self._client.messages.create(
+            model=model,
+            max_tokens=max_tokens,
+            system=system if forced else f"{system}\n\nAnswer only by calling the {tool_name} tool.",
+            messages=[{"role": "user", "content": user}],
+            tools=[
+                {"name": tool_name, "description": "Record the extraction result.", "input_schema": schema}
+            ],
+            tool_choice={"type": "tool", "name": tool_name} if forced else {"type": "auto"},
+            timeout=timeout,
+        )
 
     def complete(
         self,
@@ -128,22 +188,18 @@ class AnthropicProvider:
         max_tokens: int,
         timeout: float,
     ) -> ProviderResponse:
+        call: dict[str, Any] = dict(
+            model=model, system=system, user=user, tool_name=tool_name, schema=schema,
+            max_tokens=max_tokens, timeout=timeout,
+        )  # fmt: skip
         try:
-            msg = self._client.messages.create(
-                model=model,
-                max_tokens=max_tokens,
-                system=system,
-                messages=[{"role": "user", "content": user}],
-                tools=[
-                    {
-                        "name": tool_name,
-                        "description": "Record the extraction result.",
-                        "input_schema": schema,
-                    }
-                ],
-                tool_choice={"type": "tool", "name": tool_name},
-                timeout=timeout,
-            )
+            try:
+                msg = self._send(forced=model not in _AUTO_TOOL_CHOICE, **call)
+            except anthropic.BadRequestError as exc:
+                if model in _AUTO_TOOL_CHOICE or "tool_choice" not in str(exc.message):
+                    raise
+                _AUTO_TOOL_CHOICE.add(model)  # this model rejects a forced tool: remember it for the process
+                msg = self._send(forced=False, **call)
         except (anthropic.APITimeoutError, anthropic.APIConnectionError) as exc:
             raise ProviderCallError("timeout", retryable=True) from exc
         except anthropic.APIStatusError as exc:
@@ -758,7 +814,10 @@ class Gateway:
             try:
                 resp = self._attempt(model, system, user, tool, schema, attempts, timeout)
             except ProviderCallError as exc:
-                status, code, failure = "error", exc.code, ProviderUnavailable(exc.code)
+                status, code = "error", exc.code
+                failure = (
+                    ProviderRejected(exc.status or 400) if exc.permanent else ProviderUnavailable(exc.code)
+                )
             except Exception as exc:  # SDK or response-parsing failure: still a ledger row and a GatewayError
                 status, code, failure = (
                     "error",
@@ -836,6 +895,15 @@ class Gateway:
             problem = str(first)[:1000]
         if not repair:
             raise InvalidOutput(problem[:500])
+        # the validator's message names paths and shapes, not document text; bounded like the error detail
+        log.info(
+            "ai.repair",
+            tenant_id=str(tenant_id),
+            extraction_id=str(extraction_id) if extraction_id else None,
+            purpose=purpose,
+            model=model,
+            reason=problem[:300],
+        )
         repair_user = (
             f"{user}\n\nYour previous answer was rejected by the validator: {problem}\n"
             "Return a corrected answer through the tool. Do not add anything the document does not state."

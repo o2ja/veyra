@@ -4,6 +4,7 @@ Documents are built in the test (SYNTHETIC); expected outcomes follow AI_PROCESS
 """
 
 import dataclasses
+from datetime import date
 from typing import Any
 
 import pytest
@@ -18,11 +19,14 @@ from rebate.modules.extraction import (
     flatten,
     run_verification,
 )
+from rebate.modules.extraction.injection import detect
 from rebate.modules.extraction.verification import (
     CandidateField,
     Evidence,
     Status,
+    canonical,
     find_quote,
+    spec_for,
     verify_field,
 )
 from tests.extraction.pdfgen import Run, build_pdf
@@ -145,6 +149,118 @@ def test_customer_scope_comes_from_the_naming_sentence(doc: PdfText) -> None:
     )
     status, reasons = check(doc, "customers[0].scope", "include", "Not eligible: Foxhall Industrial.")
     assert status is Status.unsupported and reasons == ("value_contradicts_evidence",)
+
+
+def test_written_dates_are_normalised_but_only_when_unambiguous(doc: PdfText) -> None:
+    sentence = "Effective March 1, 2026 through June 30, 2026."
+    r = verify_field(doc, field("header.valid_from", "March 1, 2026", sentence))
+    assert r.status is Status.verified and canonical(spec_for("header.valid_from"), r.value) == date(
+        2026, 3, 1
+    )
+    assert check(doc, "header.valid_to", "June 30, 2026", sentence)[0] is Status.verified
+    # a normalised date must still be the one the quote states
+    assert check(doc, "header.valid_to", "June 29, 2026", sentence)[0] is Status.unsupported
+    # day/month order unclear, or a range instead of one date: not guessed
+    for bad in ("03/01/2026", "March 1, 2026 through June 30, 2026"):
+        status, reasons = check(doc, "header.valid_from", bad, sentence)
+        assert status is Status.unsupported and reasons[0] == "value_invalid", bad
+    period = {"kind": "calendar_year", "start": "January 1, 2026", "end": "December 31, 2026"}
+    assert check(doc, "rules.measurement_period", period, "calendar year 2026")[0] is Status.verified
+
+
+CTX = [
+    "SYNTHETIC SPA-CTX-2026-002",
+    "1. Eligible Customers. This SPA applies only to sales to:",
+    "Alder Electric LLC and Bluff City Mechanical.",
+    "2. Pricing. The credit is the difference between Standard Cost and SPA Cost.",
+    "3. Claims are submitted within 60 days of the invoice date.",
+]
+
+
+@pytest.fixture(scope="module")
+def ctx_doc() -> PdfText:
+    result = extract_pdf(build_pdf([[Run(t, y=740 - 20 * i) for i, t in enumerate(CTX)]]))
+    assert isinstance(result, PdfText)
+    return result
+
+
+def test_terms_implied_by_the_page_are_accepted_at_medium_confidence(ctx_doc: PdfText) -> None:
+    names = "Alder Electric LLC and Bluff City Mechanical."
+    for path, value, quote in (
+        ("customers[0].scope", "include", names),  # the list is quoted, "applies only to" is the line above
+        ("rules.cost_source", "agreement_reference", "3. Claims are submitted within 60 days"),
+    ):
+        r = verify_field(ctx_doc, field(path, value, quote))
+        assert r.status is Status.verified and r.reasons == ("derived_from_context",), (path, r)
+    # both passes agree: usable, but below high so the reviewer acknowledges it, and never blocking
+    one = {
+        "schema_version": 1,
+        "customers": [{"name": w("Alder Electric LLC", names), "scope": "include"}],
+        "rules": {"cost_source": w("agreement_reference", "3. Claims are submitted within 60 days")},
+    }
+    report = run_verification(ctx_doc, one, one)
+    for key in ("customers[alder electric llc].scope", "rules.cost_source"):
+        f = report.fields[key]
+        assert f.confidence is Confidence.medium and f.value is not None, key
+        assert "derived_from_context" in f.reasons and key in report.needs_acknowledgement
+    assert report.blocking == ()
+
+
+def test_context_never_overrides_a_contradiction_or_an_unlisted_term(ctx_doc: PdfText, doc: PdfText) -> None:
+    names = "Alder Electric LLC and Bluff City Mechanical."
+    # the page states "include", so "exclude" is not supported
+    assert check(ctx_doc, "customers[0].scope", "exclude", names) == (
+        Status.unsupported,
+        ("value_not_derivable",),
+    )
+    # the page states Standard Cost, so another cost source is not supported
+    assert check(ctx_doc, "rules.cost_source", "line_cost", "3. Claims are submitted within 60 days")[1] == (
+        "value_not_derivable",
+    )
+    # a page that states both readings (eligible AND not eligible) stays flagged
+    assert check(doc, "customers[0].scope", "include", "Alder Electric LLC")[1] == ("value_not_derivable",)
+    # other enumerated terms keep the strict rule: the quoted words must state them
+    assert check(doc, "header.date_basis", "ship_date", "Rounded to the nearest cent per line.")[1] == (
+        "value_not_derivable",
+    )
+
+
+def test_the_two_passes_agree_on_a_name_written_two_ways() -> None:
+    heading = "VOLTARA ELECTRIC (SYNTHETIC) - SPECIAL PRICING AGREEMENT"
+    named = extract_pdf(build_pdf([[Run(heading, y=700), Run("Distributor: Northwind HVAC", y=680)]]))
+    assert isinstance(named, PdfText)
+
+    def pass_with(name: str) -> dict[str, Any]:
+        return {"schema_version": 1, "header": {"manufacturer_name": w(name, heading)}}
+
+    report = run_verification(named, pass_with("VOLTARA ELECTRIC (SYNTHETIC)"), pass_with("Voltara Electric"))
+    f = report.fields["header.manufacturer_name"]
+    assert f.confidence is Confidence.high and f.value == "VOLTARA ELECTRIC (SYNTHETIC)"  # pass A's wording
+    assert "passes_disagree" not in f.reasons
+    # a different party is still a conflict
+    other = {
+        "schema_version": 1,
+        "header": {"manufacturer_name": w("Northwind HVAC", "Distributor: Northwind HVAC")},
+    }
+    f = run_verification(named, pass_with("Voltara Electric"), other).fields["header.manufacturer_name"]
+    assert f.confidence is Confidence.conflict and f.value is None
+
+
+def test_hidden_text_on_the_page_disables_the_context_rule() -> None:
+    page = [
+        Run("1. Eligible Customers. This SPA applies only to sales to:", y=700),
+        Run("Alder Electric LLC and Bluff City Mechanical.", y=680),
+        Run("Standard Cost is the reference", y=640, rgb=(1, 1, 1)),
+        Run("3. Claims are submitted within 60 days.", y=600),
+    ]
+    hidden = extract_pdf(build_pdf([page]))
+    assert isinstance(hidden, PdfText)
+    r = verify_field(
+        hidden,
+        field("rules.cost_source", "agreement_reference", "3. Claims are submitted within 60 days"),
+        detect(hidden),
+    )
+    assert r.status is Status.unsupported and r.reasons == ("value_not_derivable",)
 
 
 def test_ambiguous_and_underivable_interpretations_fail_closed(doc: PdfText) -> None:

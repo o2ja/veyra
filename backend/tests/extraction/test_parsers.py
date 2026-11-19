@@ -113,6 +113,45 @@ def test_parse_iso_date() -> None:
             p.parse_iso_date(bad)
 
 
+@pytest.mark.parametrize(
+    ("value", "expected"),
+    [
+        ("2026-01-01", date(2026, 1, 1)),
+        ("January 1, 2026", date(2026, 1, 1)),
+        ("Dec. 31st, 2026", date(2026, 12, 31)),
+        ("5 March 2026", date(2026, 3, 5)),
+        ("12/31/2026", date(2026, 12, 31)),  # US numeric, unambiguous: the day cannot be 12
+        ("04/04/2026", date(2026, 4, 4)),  # same either way
+    ],
+)
+def test_parse_date_normalises_written_dates_to_iso(value: str, expected: date) -> None:
+    assert p.parse_date(value) == expected
+
+
+@pytest.mark.parametrize(
+    "bad",
+    [
+        "03/01/2026",  # March 1st or January 3rd: never guessed
+        "January 1, 2026 through December 31, 2026",  # two dates, not one
+        "calendar year 2026",  # two dates
+        "2026-02-30",
+        "February 30, 2026",
+        "sometime in spring",
+        20260101,
+        None,
+    ],
+)
+def test_parse_date_refuses_to_guess(bad: object) -> None:
+    with pytest.raises(ValueError):
+        p.parse_date(bad)
+
+
+def test_name_key_ignores_case_punctuation_and_the_dataset_label() -> None:
+    assert p.name_key("VOLTARA ELECTRIC (SYNTHETIC)") == p.name_key("Voltara Electric") == "voltara electric"
+    assert p.name_key("Alder  Electric, LLC.") == "alder electric llc"
+    assert p.name_key("Alder Electric") != p.name_key("Alder Electric LLC")  # different words stay different
+
+
 def test_uoms_and_parse_uom() -> None:
     assert p.uoms("Allowance is per foot shipped") == {"FT"}
     assert p.uoms("each unit; reels of 500 ft") == {"EA", "RL", "FT"}

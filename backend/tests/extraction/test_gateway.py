@@ -2,6 +2,7 @@
 the transport-level replay. Expected costs are hand-derived from the configured prices
 ($3 / $15 per million tokens): 1000 in + 200 out = 0.003 + 0.003 = 0.006."""
 
+from collections.abc import Iterator
 from decimal import Decimal
 from typing import Any
 from uuid import UUID
@@ -102,6 +103,19 @@ def test_request_forces_one_tool_and_sends_no_credentials_beyond_the_header(rig:
     )
 
 
+def test_prompt_and_tool_schema_require_iso_dates() -> None:
+    import re
+
+    assert "YYYY-MM-DD" in SYSTEM and prompts.PROMPT_VERSION == "agreement-v2"
+    props = prompts.extraction_schema()["properties"]
+    dates = [props["header"]["properties"][k]["properties"]["value"] for k in ("valid_from", "valid_to")]
+    period = props["rules"]["properties"]["measurement_period"]["properties"]["value"]["properties"]
+    dates += [period["start"], period["end"]]
+    for node in dates:
+        assert re.fullmatch(node["pattern"], "2026-01-01")
+        assert not re.fullmatch(node["pattern"], "January 1, 2026")
+
+
 def test_retries_with_exponential_backoff_then_succeeds(
     ws: Workspace, replay: Replay, migrated_db: DbUrls
 ) -> None:
@@ -132,11 +146,88 @@ def test_gives_up_after_the_configured_attempts_and_records_the_failure(rig: Rig
     assert (row["status"], row["error_code"], row["cost_usd"]) == ("error", "http_503", Decimal(0))
 
 
-def test_client_errors_are_not_retried(rig: Rig, replay: Replay) -> None:
-    replay.script.append(error(400))
-    with pytest.raises(gateway.ProviderUnavailable):
+@pytest.mark.parametrize(
+    ("status", "code"),
+    [
+        (400, "provider_request_rejected"),
+        (401, "provider_auth_failed"),
+        (403, "provider_auth_failed"),
+        (404, "provider_request_rejected"),
+        (422, "provider_request_rejected"),
+    ],
+)
+def test_permanent_client_errors_fail_fast_with_their_own_category(
+    rig: Rig, replay: Replay, status: int, code: str
+) -> None:
+    replay.script.extend([error(status)] * 4)
+    with pytest.raises(gateway.ProviderRejected) as caught:
         rig.call()
-    assert len(replay.calls) == 1
+    assert len(replay.calls) == 1 and rig.sleeps == []  # no retry, no backoff
+    assert caught.value.code == code and f"HTTP {status}" in str(caught.value)
+    assert not isinstance(caught.value, gateway.ProviderUnavailable)
+    assert "could not be reached" not in str(caught.value)
+    (row,) = rig.ledger()
+    assert (row["status"], row["error_code"], row["cost_usd"]) == ("error", f"http_{status}", Decimal(0))
+
+
+@pytest.mark.parametrize("status", [408, 409, 429, 500, 529])
+def test_transient_statuses_are_still_retried_and_stay_unavailable(
+    rig: Rig, replay: Replay, status: int
+) -> None:
+    replay.script.extend([error(status), ok(VALID)])
+    assert rig.call().data == VALID
+    assert len(replay.calls) == 2
+
+
+NO_FORCED_TOOL = 'tool_choice: type "tool" and "any" are not supported for this model.'
+
+
+@pytest.fixture(autouse=True)
+def _forget_models_that_reject_forced_tools() -> Iterator[None]:
+    gateway._AUTO_TOOL_CHOICE.clear()
+    yield
+    gateway._AUTO_TOOL_CHOICE.clear()  # process-wide state: never leak into other modules
+
+
+def test_models_that_reject_a_forced_tool_are_called_with_auto_and_remembered(
+    rig: Rig, replay: Replay
+) -> None:
+    replay.script.extend([error(400, message=NO_FORCED_TOOL), ok(VALID), ok(VALID)])
+    assert rig.call().data == VALID
+    first, second = replay.calls
+    assert first["tool_choice"] == {"type": "tool", "name": "record_extraction"}
+    assert second["tool_choice"] == {"type": "auto"}
+    assert second["system"].endswith("Answer only by calling the record_extraction tool.")
+    assert [r["status"] for r in rig.ledger()] == ["ok"]  # one logical call, one ledger row, real tokens
+    rig.call()  # the next call does not repeat the rejected request
+    assert [c["tool_choice"]["type"] for c in replay.calls] == ["tool", "auto", "auto"]
+
+
+def test_auto_tool_choice_still_validates_the_output_strictly(rig: Rig, replay: Replay) -> None:
+    replay.script.extend([error(400, message=NO_FORCED_TOOL), ok({"bogus": 1}), ok({"bogus": 2})])
+    with pytest.raises(gateway.InvalidOutput):
+        rig.call(validate=_validate)
+    assert all(c["tool_choice"]["type"] == "auto" for c in replay.calls[1:])
+
+
+def test_auto_without_a_tool_call_is_a_refusal_not_a_guess(rig: Rig, replay: Replay) -> None:
+    from httpx2 import Response
+
+    text_only = {
+        "id": "m", "type": "message", "role": "assistant", "model": "claude-sonnet-5-5",
+        "content": [{"type": "text", "text": "Here is the answer in prose."}],
+        "stop_reason": "end_turn", "stop_sequence": None, "usage": {"input_tokens": 50, "output_tokens": 9},
+    }  # fmt: skip
+    replay.script.extend([error(400, message=NO_FORCED_TOOL), lambda _b: Response(200, json=text_only)])
+    with pytest.raises(gateway.ProviderRefused):
+        rig.call()
+
+
+def test_an_unrelated_400_does_not_trigger_the_auto_fallback(rig: Rig, replay: Replay) -> None:
+    replay.script.append(error(400, message="max_tokens: too large"))
+    with pytest.raises(gateway.ProviderRejected):
+        rig.call()
+    assert len(replay.calls) == 1 and not gateway._AUTO_TOOL_CHOICE
 
 
 def test_invalid_output_gets_exactly_one_repair_attempt(rig: Rig, replay: Replay) -> None:
@@ -146,6 +237,24 @@ def test_invalid_output_gets_exactly_one_repair_attempt(rig: Rig, replay: Replay
     assert [r["purpose"] for r in rig.ledger()] == ["agreement_pass_a", "agreement_repair"]
     repair_prompt = replay.calls[1]["messages"][0]["content"]
     assert "rejected by the validator" in repair_prompt and "schema_version must be 1" in repair_prompt
+
+
+def test_the_reason_for_a_repair_is_logged_without_document_text(rig: Rig, replay: Replay) -> None:
+    replay.script.extend([ok({"bogus": 1}), ok(VALID)])
+    with structlog.testing.capture_logs() as logs:
+        rig.call(validate=_validate)
+    (repair,) = [e for e in logs if e["event"] == "ai.repair"]
+    assert "schema_version must be 1" in repair["reason"] and repair["purpose"] == "agreement_pass_a"
+    assert repair["model"] == "claude-sonnet-5-5" and len(repair["reason"]) <= 300
+    assert "SECRET DOCUMENT BODY 4711" not in str(logs)
+    replay.script.append(ok(VALID))
+    with structlog.testing.capture_logs() as logs:
+        rig.call(validate=_validate)
+    assert not [e for e in logs if e["event"] == "ai.repair"]  # a valid first answer logs nothing
+
+
+def test_prompt_maps_nearest_cent_to_half_up() -> None:
+    assert '"rounded to the nearest cent"' in SYSTEM and '"half_up"' in SYSTEM and "scale 2" in SYSTEM
 
 
 def test_repair_that_still_fails_is_an_error_not_a_guess(rig: Rig, replay: Replay) -> None:
@@ -223,7 +332,9 @@ def test_disabled_workspace_never_reaches_the_provider(rig: Rig, replay: Replay)
 
 
 def test_without_a_key_there_is_no_provider(migrated_db: DbUrls) -> None:
-    settings = make_settings(migrated_db.app)
+    settings = make_settings(
+        migrated_db.app, anthropic_api_key=None
+    )  # a key in the dev .env must not leak in
     with pytest.raises(gateway.NotConfigured):
         gateway.make_provider(settings)
 
