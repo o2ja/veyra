@@ -64,7 +64,7 @@ make lint       # ruff, mypy, import-linter, bandit, pip-audit, ESLint, tsc, npm
 Open http://localhost:5173: the shell shows "API: live" once the API answers through the Vite proxy.
 `uv run --directory backend pre-commit install` enables the ruff and gitleaks hooks.
 
-> These instructions are **not yet verified on a clean checkout** (S0.6 is pending Docker on the development machine). CI (`.github/workflows/ci.yml`) runs the same gates on every push to `main` and every pull request.
+> These instructions are **not yet verified on a clean checkout** (S0.6 is pending Docker on the development machine). CI (`.github/workflows/ci.yml`, the merge gate) runs the same gates on every push to `main` and every ready-for-review pull request.
 
 ## How development will run
 

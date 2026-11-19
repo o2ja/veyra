@@ -188,11 +188,10 @@ Prefer the smallest vertical slice that proves the design, test it, then extend.
 4. **Stage sign-off:** the owner personally approves **S1, S5 and S8**. For every other stage, if all tests and CI are green, the reviewer has no unresolved serious finding, and nothing from item 2 is open, start the next stage automatically and send the owner a short digest (built, tested, issues). Otherwise stop and wait.
 5. **Every report starts with a 5-line summary of what the owner needs to decide** (or "nothing"). Honesty rules (§3) still apply: say what was not tested.
 
-## 19. CI, merging and local load (owner rules, 2026-11-13)
+## 19. CI, merging and local load (updated 2026-11-18: repo is public, GitHub Actions is the gate again)
 
-GitHub Actions minutes are not paid for and the repo stays private, so the gate works without them.
-
-1. **`make ci-local`** (`infra/scripts/ci-local.sh`) runs the same steps as the six CI jobs (api-contract, backend incl. isolation suite and RLS-off control, frontend, e2e, images, secrets) against the dev stack, on a clean working tree, stops at the first failure and prints pass/fail per job with the SHA.
-2. **GitHub workflow** runs only on pull requests that are ready for review and on pushes to `main`; per-job path filters (frontend jobs when `frontend/` changes, backend jobs when `backend/` incl. migrations, `infra/`, `testdata/` or `BUSINESS_LOGIC.md` change); concurrency cancels in-progress runs. Open work-in-progress PRs as **drafts**.
-3. **Merge rule:** merge only after (a) the latest `main` is merged into the branch, (b) 6/6 green on that exact commit — GitHub CI if minutes are available, otherwise `make ci-local` with its result posted as a PR comment naming the SHA — and (c) the required reviews passed. A job that was skipped (by a path filter or anything else) or failed is not green. Never merge with anything skipped or failing.
-4. **Local load (weak laptop):** at most 2 agents at once. While building, run only the tests for the changed code; the full suite and Playwright run once per merge (inside `make ci-local`). Never two full suites at the same time (`ci-local` holds a lock).
+1. **GitHub Actions is the merge gate.** `.github/workflows/ci.yml` runs six jobs (api-contract, backend incl. isolation suite and RLS-off control, frontend, e2e, images, secrets). Run the relevant tests locally while building (`make test`, `make lint`); the full suite is CI's job.
+2. **Workflow triggers:** pull requests that are ready for review and pushes to `main`; per-job path filters (frontend jobs when `frontend/` changes, backend jobs when `backend/` incl. migrations, `infra/`, `testdata/` or `BUSINESS_LOGIC.md` change; a change to `.github/` or `Makefile` runs everything); concurrency cancels in-progress runs. Open work-in-progress PRs as **drafts**.
+3. **Merge rule:** merge only after (a) the latest `main` is merged into the branch, (b) every job that ran is green on that exact commit (a job skipped by a path filter had no relevant changes; a failed job is never green), and (c) the required reviews passed. Never merge with a failing job.
+4. **Manual Playwright specs** (`frontend/e2e/manual/`: seed and audit walkthroughs) are not part of CI; run them with `E2E_MANUAL=1` plus the spec's own flag.
+5. **Local load (weak laptop):** at most 2 agents at once; never two full suites at the same time.

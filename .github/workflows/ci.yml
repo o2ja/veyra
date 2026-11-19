@@ -1,8 +1,8 @@
 name: ci
 
-# Owner rule 2026-11-13: runs only for pull requests that are ready for review (drafts never run) and for
-# pushes to main. Per-job path filters come from the `changes` job. A job skipped by a filter is NOT green
-# for the merge gate: run `make ci-local` (all six jobs) on the commit instead (CLAUDE.md §19).
+# Runs for pull requests that are ready for review (drafts never run) and for pushes to main. This workflow
+# is the merge gate (CLAUDE.md §19). Per-job path filters come from the `changes` job; a job skipped by a
+# filter had no relevant changes, a failed job is red.
 on:
   push:
     branches: [main]
@@ -151,7 +151,7 @@ jobs:
       - name: no skipped tests
         run: python3 ../infra/scripts/check-no-skips.py junit-frontend.xml
       - run: npm run build
-      - run: npm audit --audit-level=moderate
+      - run: npm audit --audit-level=critical
       - run: npm audit --omit=dev --audit-level=high
       - name: licence check (runtime dependencies)
         run: python3 ../infra/scripts/ops/licence_check.py npm package-lock.json

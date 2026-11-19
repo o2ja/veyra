@@ -5,7 +5,7 @@ the second SPA-line signal), then the rebate agreements. One run per tenant exec
 a failed run keeps its already committed rows but readers only see ``completed`` runs (partial runs are invisible).
 
 Memory: one engine call per manufacturer holds that manufacturer's lines and traces in memory. Measured numbers
-for the 1M-line baseline are in ``docs/reports/notes/c1-s5-runs.md``.
+for the 1M-line baseline are in ``archived note c1-s5-runs.md (not in repo)``.
 """
 
 import hashlib

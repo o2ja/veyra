@@ -4,6 +4,8 @@ import { defineConfig } from "@playwright/test";
 // origin must be PUBLIC_BASE_URL (http://localhost:5173): Origin check and __Host- cookies depend on it.
 export default defineConfig({
   testDir: "e2e",
+  // e2e/manual holds on-demand seed and audit specs that need local credential files; CI never runs them
+  testIgnore: process.env.E2E_MANUAL ? [] : ["**/manual/**"],
   timeout: 120_000,
   workers: 1,
   retries: 0,

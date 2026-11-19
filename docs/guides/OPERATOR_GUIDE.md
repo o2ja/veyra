@@ -27,13 +27,13 @@ The repository maintains two compose configurations: `infra/docker/compose.dev.y
 
 | Dimension | Development (`compose.dev.yml`) | Production (`compose.prod.yml`) | Source Reference |
 |---|---|---|---|
-| **Networking** | Default bridge network; publishes ports `5432` (Postgres), `8000` (API), `5173` (Vite), `1080` (Mailpit), `8333` (SeaweedFS). | Two networks: `internal` (`172.30.1.0/24`, `internal: true`, no internet route) and `edge` (`172.30.0.0/24`, outbound internet). Only Caddy exposes host ports `80` and `443`. | `compose.prod.yml:networks` |
+| **Networking** | Default bridge network; publishes ports `5432` (Postgres), `8000` (API), `5173` (Vite), `8025` (Mailpit), `8333` (SeaweedFS). | Two networks: `internal` (`172.30.1.0/24`, `internal: true`, no internet route) and `edge` (`172.30.0.0/24`, outbound internet). Only Caddy exposes host ports `80` and `443`. | `compose.prod.yml:networks` |
 | **Proxy Architecture** | Vite dev server proxies `/api` directly to `api:8000`. | Caddy reverse proxies `/api` to `api:8000` on fixed internal IP `172.30.1.2`, serves static files, enforces CSP and HTTPS. | `compose.prod.yml:caddy` |
 | **Security Hardening** | Standard containers, root user permitted, host bind mounts for hot reloading. | `x-hardened` template: `restart: unless-stopped`, `no-new-privileges: true`, `cap_drop: ALL`, `read_only: true` filesystems with bounded `tmpfs`. | `compose.prod.yml:x-hardened` |
 | **Worker Isolation** | Uncapped CPU and RAM, shared volumes. | Resource bounds: `mem_limit: 3g`, `cpus: 2`, `pids_limit: 256` to ensure hostile spreadsheets or OCR processing cannot exhaust host memory. | `compose.prod.yml:worker` |
 | **API Execution** | `uvicorn --reload` mounted directly to host source code. | Gunicorn with 2 Uvicorn workers (`uvicorn.workers.UvicornWorker`), packaged in production Docker image. | `compose.prod.yml:api` |
 | **Database Access** | Single database role, exposed on localhost. | Strict role separation (`rebate_owner`, `rebate_app`, `rebate_ai_writer`, `rebate_readonly`). Unexposed to host. Continuous WAL archiving enabled. | `compose.prod.yml:postgres` |
-| **Email Handling** | Mailpit mock SMTP server on port 1025 with web UI on 1080. | Real SMTP over TLS (`SMTP_STARTTLS=true`, port 587) with credentials injected via `.env.prod`. | `compose.prod.yml:worker` |
+| **Email Handling** | Mailpit mock SMTP server on port 1025 with web UI on 8025. | Real SMTP over TLS (`SMTP_STARTTLS=true`, port 587) with credentials injected via `.env.prod`. | `compose.prod.yml:worker` |
 | **Migrations** | Executed manually or via local CLI. | Isolated `migrate` service (`--profile ops`) using temporary container with `rebate_owner` credentials. | `compose.prod.yml:migrate` |
 
 ---

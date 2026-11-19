@@ -45,7 +45,7 @@ def allocate(claim: ClaimLine, paid: Decimal) -> tuple[Allocation, ...]:
     belongs to its own claim line (D-N11), so the claim line is never reduced by it."""
     # Same rule as a same-batch adjustment (always split at face value), except that nothing is split off a payment
     # of 0.00 or less: no money moved, so there is nothing a credit could have been netted from (open point, see
-    # docs/reports/notes/dn11-open-points.md).
+    # archived note dn11-open-points.md (not in repo)).
     carried = claim.carried if paid > 0 else ()
     adj = tuple(Allocation(claim.id, a.amount, a.ref) for a in claim.adjustments)
     adj += tuple(Allocation(a.claim_line_id or claim.id, a.amount, a.ref) for a in carried)

@@ -22,3 +22,8 @@ playwright-report/
 junit-e2e.xml
 
 *.local.json
+
+# local-only holding area for archived agent clutter (nothing is deleted; see docs/reports)
+/_agent_quarantine/
+*.tsbuildinfo
+*.log

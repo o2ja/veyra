@@ -2,9 +2,9 @@ import { readFileSync } from "node:fs";
 
 import { expect, type Page } from "@playwright/test";
 
-import { apiJson, generated, test, totp } from "./support";
+import { apiJson, generated, test, totp } from "../support";
 
-// Manual, not CI: `SEED_AI=1 npx playwright test seed-ai-extraction`. Sends ONE fictional PDF to the real AI
+// Manual, not CI: `E2E_MANUAL=1 SEED_AI=1 npx playwright test seed-ai-extraction`. Sends ONE fictional PDF to the real AI
 // provider (Gemini) and enables AI for the workspace; AI is switched off again at the end.
 test.skip(!process.env.SEED_AI, "manual seed, set SEED_AI=1");
 test.setTimeout(300_000);
