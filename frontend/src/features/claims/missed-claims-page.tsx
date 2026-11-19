@@ -10,7 +10,6 @@ import { DataTable, ManufacturerSelect, PagerControls, usePager } from "../maste
 import { ClaimsNav, ConfirmDialog, FileDownloadButton, ValidationDetailsAlert } from "./common";
 import {
   ADJUSTMENT_TYPE_LABELS,
-  formatDecimal,
   getJobRefetchInterval,
   type AccrualOut,
   type AdjustmentOut,
@@ -20,6 +19,7 @@ import {
   type MissedList,
   type MissedOut,
 } from "./logic";
+import { formatDate, formatMoney, formatQty } from "../../lib/format";
 
 export function MissedClaimsPage() {
   const { can } = useSession();
@@ -371,7 +371,7 @@ export function MissedClaimsPage() {
                   <div className="rounded-lg border border-line p-3">
                     <dt className="text-muted">Total claimable amount</dt>
                     <dd className="font-mono text-lg font-semibold text-ok">
-                      {formatDecimal(summary.data.totals.amount)}
+                      {formatMoney(summary.data.totals.amount)}
                     </dd>
                   </div>
                   <div className="rounded-lg border border-line p-3">
@@ -383,7 +383,7 @@ export function MissedClaimsPage() {
                   <div className="rounded-lg border border-line p-3">
                     <dt className="text-muted">Lost to expiry (amount)</dt>
                     <dd className="font-mono text-lg font-semibold text-danger">
-                      {formatDecimal(summary.data.lost_to_expiry.amount)}
+                      {formatMoney(summary.data.lost_to_expiry.amount)}
                     </dd>
                   </div>
                 </dl>
@@ -422,7 +422,7 @@ export function MissedClaimsPage() {
                               <td className="py-2 pr-4">{g.agreement_number ?? "—"}</td>
                               <td className="py-2 pr-4 text-right font-mono">{g.lines}</td>
                               <td className="py-2 pr-4 text-right font-mono font-medium">
-                                {formatDecimal(g.amount)}
+                                {formatMoney(g.amount)}
                               </td>
                             </tr>
                           ))}
@@ -457,7 +457,7 @@ export function MissedClaimsPage() {
                               <td className="py-2 pr-4 font-mono text-xs">{ex.code ?? "—"}</td>
                               <td className="py-2 pr-4 text-right font-mono">{ex.lines}</td>
                               <td className="py-2 pr-4 text-right font-mono font-medium">
-                                {formatDecimal(ex.stored_amount)}
+                                {formatMoney(ex.stored_amount)}
                               </td>
                             </tr>
                           ))}
@@ -535,7 +535,7 @@ export function MissedClaimsPage() {
                 {
                   header: "Amount",
                   cell: (a: AdjustmentOut) => (
-                    <span className="block text-right font-mono font-medium">{formatDecimal(a.amount)}</span>
+                    <span className="block text-right font-mono font-medium">{formatMoney(a.amount)}</span>
                   ),
                 },
                 {
@@ -633,25 +633,25 @@ export function MissedClaimsPage() {
                   ),
                 },
                 { header: "Line", cell: (r) => r.line_number },
-                { header: "Invoice date", cell: (r) => r.invoice_date },
+                { header: "Invoice date", cell: (r) => formatDate(r.invoice_date) },
                 {
                   header: "Eligible qty",
                   cell: (r) => (
-                    <span className="block text-right font-mono">{formatDecimal(r.eligible_quantity)}</span>
+                    <span className="block text-right font-mono">{formatQty(r.eligible_quantity)}</span>
                   ),
                 },
                 { header: "UoM", cell: (r) => r.claim_uom ?? "—" },
                 {
                   header: "Unit amount",
                   cell: (r) => (
-                    <span className="block text-right font-mono">{formatDecimal(r.claim_unit_amount)}</span>
+                    <span className="block text-right font-mono">{formatMoney(r.claim_unit_amount)}</span>
                   ),
                 },
                 {
                   header: "Claim amount",
                   cell: (r) => (
                     <span className="block text-right font-mono font-medium">
-                      {formatDecimal(r.claim_amount)}
+                      {formatMoney(r.claim_amount)}
                     </span>
                   ),
                 },
@@ -734,16 +734,16 @@ export function MissedClaimsPage() {
                 },
                 {
                   header: "Period",
-                  cell: (a: AccrualOut) => `${a.period_start} – ${a.period_end}`,
+                  cell: (a: AccrualOut) => `${formatDate(a.period_start)} – ${formatDate(a.period_end)}`,
                 },
                 {
                   header: "Tier rate",
-                  cell: (a: AccrualOut) => (a.tier_rate ? formatDecimal(a.tier_rate) : "—"),
+                  cell: (a: AccrualOut) => (a.tier_rate ? formatQty(a.tier_rate) : "—"),
                 },
                 {
                   header: "Delta",
                   cell: (a: AccrualOut) => (
-                    <span className="block text-right font-mono font-medium">{formatDecimal(a.delta)}</span>
+                    <span className="block text-right font-mono font-medium">{formatMoney(a.delta)}</span>
                   ),
                 },
                 {

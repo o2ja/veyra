@@ -16,8 +16,6 @@ import { useSession } from "../../lib/session";
 
 // Shared pieces for the master-data, import and line-browser screens (S3).
 
-export const utc = (ts: string | null | undefined) => (ts ? ts.replace("T", " ").slice(0, 19) : "—");
-
 /** Keyset pagination (API_SPECIFICATION.md §1.2): a stack of cursors, so "Previous" needs no offsets. */
 export interface Pager {
   stack: (string | null)[];

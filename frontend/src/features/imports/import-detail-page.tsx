@@ -7,7 +7,7 @@ import { Alert, Button, Card, ErrorAlert, Field, Loading, fieldError } from "../
 import { api } from "../../lib/api/client";
 import { ApiError, unwrap } from "../../lib/api/errors";
 import { useSession } from "../../lib/session";
-import { Checkbox, DataTable, PagerControls, SelectField, usePager, utc } from "../masterdata/common";
+import { Checkbox, DataTable, PagerControls, SelectField, usePager } from "../masterdata/common";
 import {
   type Mapping,
   STATUS_TEXT,
@@ -20,6 +20,7 @@ import {
   unmappedRequired,
   usableSuggestion,
 } from "./logic";
+import { formatDateTime } from "../../lib/format";
 
 type ImportOut = components["schemas"]["ImportOut"];
 type Preview = components["schemas"]["PreviewOut"];
@@ -493,12 +494,12 @@ export function ImportDetailPage() {
                   .filter(Boolean)
                   .join(", ") || "—"}
               </dd>
-              <dt className="text-muted">Started (UTC)</dt>
-              <dd>{utc(i.created_at)}</dd>
+              <dt className="text-muted">Started</dt>
+              <dd>{formatDateTime(i.created_at)}</dd>
               {i.completed_at && (
                 <>
-                  <dt className="text-muted">Completed (UTC)</dt>
-                  <dd>{utc(i.completed_at)}</dd>
+                  <dt className="text-muted">Completed</dt>
+                  <dd>{formatDateTime(i.completed_at)}</dd>
                 </>
               )}
             </dl>

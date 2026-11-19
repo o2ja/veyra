@@ -6,7 +6,8 @@ import type { components } from "../../api/schema";
 import { Alert, Button, Card, ErrorAlert, PermissionDenied } from "../../components/ui";
 import { api } from "../../lib/api/client";
 import { ApiError, unwrap } from "../../lib/api/errors";
-import { DataTable, EntityPicker, MasterDataNav, PagerControls, SelectField, usePager, utc } from "./common";
+import { DataTable, EntityPicker, MasterDataNav, PagerControls, SelectField, usePager } from "./common";
+import { formatDateTime } from "../../lib/format";
 
 type Entry = components["schemas"]["UnmappedOut"];
 type Status = "open" | "resolved" | "ignored";
@@ -125,7 +126,7 @@ export function UnmappedPage() {
             { header: "Kind", cell: (e) => (e.entity_type === "customer" ? "Customer" : "Product") },
             { header: "Value in file", cell: (e) => <span className="font-mono">{e.external_value}</span> },
             { header: "Example name", cell: (e) => e.example_name ?? "—" },
-            { header: "Seen", cell: (e) => `${e.seen_count}×, last ${utc(e.last_seen_at)}` },
+            { header: "Seen", cell: (e) => `${e.seen_count}×, last ${formatDateTime(e.last_seen_at)}` },
             {
               header: "First import",
               cell: (e) =>
@@ -149,7 +150,7 @@ export function UnmappedPage() {
                     }}
                   />
                 ) : (
-                  `${e.status === "resolved" ? "Mapped" : "Ignored"} ${utc(e.resolved_at)}`
+                  `${e.status === "resolved" ? "Mapped" : "Ignored"} ${formatDateTime(e.resolved_at)}`
                 ),
             },
           ]}

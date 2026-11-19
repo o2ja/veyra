@@ -21,7 +21,6 @@ import {
   CONTROL_CHAR_REGEX,
   DEADLINE_BASIS_LABELS,
   TRANSITION_STATUSES,
-  amountText,
   batchIdFromDetails,
   caseTypeLabel,
   isValidWriteOffReason,
@@ -29,13 +28,12 @@ import {
   ownerText,
   reasonLabel,
   statusLabel,
-  usDate,
-  usDateTime,
   writeOffProposalLabel,
   type AttachmentOut,
   type CaseOut,
   type EventOut,
 } from "./logic";
+import { formatDate, formatDateTime, formatMoney } from "../../lib/format";
 
 type DialogName = "assign" | "status" | "reclaim" | "writeoff" | null;
 
@@ -429,7 +427,7 @@ export function RecoveryCasePage() {
                         Unknown deadline
                       </span>
                     ) : (
-                      usDate(item.deadline_date)
+                      formatDate(item.deadline_date)
                     )}
                   </dd>
                 </div>
@@ -470,15 +468,15 @@ export function RecoveryCasePage() {
                 </div>
                 <div>
                   <dt className="text-muted">Created</dt>
-                  <dd>{usDateTime(item.created_at)}</dd>
+                  <dd>{formatDateTime(item.created_at)}</dd>
                 </div>
                 <div>
                   <dt className="text-muted">Closed</dt>
-                  <dd>{item.closed_at ? usDateTime(item.closed_at) : "—"}</dd>
+                  <dd>{item.closed_at ? formatDateTime(item.closed_at) : "—"}</dd>
                 </div>
                 <div>
                   <dt className="text-muted">Written off</dt>
-                  <dd>{item.written_off_at ? usDateTime(item.written_off_at) : "—"}</dd>
+                  <dd>{item.written_off_at ? formatDateTime(item.written_off_at) : "—"}</dd>
                 </div>
                 {item.write_off_reason && (
                   <div className="sm:col-span-2">
@@ -491,14 +489,14 @@ export function RecoveryCasePage() {
               {proposalMine && (
                 <Alert tone="info">
                   You proposed this write-off
-                  {item.write_off_proposed_at ? ` on ${usDateTime(item.write_off_proposed_at)}` : ""}. A
+                  {item.write_off_proposed_at ? ` on ${formatDateTime(item.write_off_proposed_at)}` : ""}. A
                   different approver must complete it.
                 </Alert>
               )}
               {proposalOther && (
                 <Alert tone="info">
                   A write-off was proposed
-                  {item.write_off_proposed_at ? ` on ${usDateTime(item.write_off_proposed_at)}` : ""} and
+                  {item.write_off_proposed_at ? ` on ${formatDateTime(item.write_off_proposed_at)}` : ""} and
                   awaits a second approver.
                 </Alert>
               )}
@@ -528,7 +526,7 @@ export function RecoveryCasePage() {
                 <li key={event.id} className="border-l-2 border-line pl-4 text-sm">
                   <div className="flex flex-wrap items-baseline gap-2">
                     <span className="font-medium">{reasonLabel(event.event_type)}</span>
-                    <span className="text-xs text-muted">{usDateTime(event.created_at)}</span>
+                    <span className="text-xs text-muted">{formatDateTime(event.created_at)}</span>
                   </div>
                   {(event.from_status || event.to_status) && (
                     <p className="mt-1">
@@ -652,7 +650,7 @@ export function RecoveryCasePage() {
                   {attachmentRows.map((attachment) => (
                     <tr key={attachment.id} className="border-t border-line">
                       <td className="py-2 pr-4 font-mono text-xs">{attachment.file_id}</td>
-                      <td className="py-2 pr-4">{usDateTime(attachment.added_at)}</td>
+                      <td className="py-2 pr-4">{formatDateTime(attachment.added_at)}</td>
                       <td className="py-2 pr-4 font-mono text-xs">{attachment.added_by}</td>
                       <td className="py-2 pr-4">
                         <AttachmentDownloadButton fileId={attachment.file_id} />
@@ -847,7 +845,7 @@ function Amount({ label, value }: { label: string; value: string | null }) {
     <div>
       <dt className="text-muted">{label}</dt>
       <dd className="font-mono font-medium" aria-label={`${label} amount`}>
-        {amountText(value)}
+        {formatMoney(value)}
       </dd>
     </div>
   );

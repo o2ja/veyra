@@ -6,7 +6,6 @@ import {
   ADJUSTMENT_TYPE_LABELS,
   ADJUSTMENT_TYPES,
   canApproveBatch,
-  formatDecimal,
   getFormatOptionsForSource,
   getJobRefetchInterval,
   isJobActive,
@@ -16,16 +15,6 @@ import {
   TEMPLATE_SOURCES,
   type BatchOut,
 } from "./logic";
-
-test("formatDecimal groups thousands without rounding", () => {
-  expect(formatDecimal("1234567.8900")).toBe("1,234,567.8900");
-  expect(formatDecimal("-42000.5")).toBe("-42,000.5");
-  expect(formatDecimal("999")).toBe("999");
-  expect(formatDecimal("0.0000")).toBe("0.0000");
-  expect(formatDecimal(null)).toBe("—");
-  expect(formatDecimal(undefined)).toBe("—");
-  expect(formatDecimal("")).toBe("—");
-});
 
 test("TEMPLATE_SOURCES and SOURCE_KIND_MAP map field kinds accurately", () => {
   expect(TEMPLATE_SOURCES.length).toBeGreaterThan(15);

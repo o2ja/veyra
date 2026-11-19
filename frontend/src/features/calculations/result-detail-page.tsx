@@ -6,7 +6,8 @@ import { api } from "../../lib/api/client";
 import { ApiError } from "../../lib/api/errors";
 import { unwrap } from "../../lib/api/errors";
 import { CalculationsNav, KeyValueGrid, TraceTree } from "./common";
-import { RESULT_STATUS_LABELS, formatDecimal } from "./logic";
+import { RESULT_STATUS_LABELS } from "./logic";
+import { formatDate, formatMoney, formatQty } from "../../lib/format";
 
 export function ResultDetailPage() {
   const { resultId = "" } = useParams();
@@ -74,7 +75,7 @@ export function ResultDetailPage() {
                   </div>
                   <div>
                     <dt className="text-muted">Invoice date</dt>
-                    <dd className="font-medium">{detail.data.invoice_date}</dd>
+                    <dd className="font-medium">{formatDate(detail.data.invoice_date)}</dd>
                   </div>
                   <div>
                     <dt className="text-muted">Exception code</dt>
@@ -86,19 +87,19 @@ export function ResultDetailPage() {
                   </div>
                   <div>
                     <dt className="text-muted">Claim amount</dt>
-                    <dd className="font-mono font-medium">{formatDecimal(detail.data.claim_amount)}</dd>
+                    <dd className="font-mono font-medium">{formatMoney(detail.data.claim_amount)}</dd>
                   </div>
                   <div>
                     <dt className="text-muted">Claim unit amount</dt>
-                    <dd className="font-mono">{formatDecimal(detail.data.claim_unit_amount)}</dd>
+                    <dd className="font-mono">{formatMoney(detail.data.claim_unit_amount)}</dd>
                   </div>
                   <div>
                     <dt className="text-muted">Eligible quantity</dt>
-                    <dd className="font-mono">{formatDecimal(detail.data.eligible_quantity)}</dd>
+                    <dd className="font-mono">{formatQty(detail.data.eligible_quantity)}</dd>
                   </div>
                   <div>
                     <dt className="text-muted">Excess quantity</dt>
-                    <dd className="font-mono">{formatDecimal(detail.data.excess_quantity)}</dd>
+                    <dd className="font-mono">{formatQty(detail.data.excess_quantity)}</dd>
                   </div>
                   <div>
                     <dt className="text-muted">Flags</dt>

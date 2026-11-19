@@ -1,17 +1,6 @@
 import { expect, test } from "vitest";
 
-import { buildTraceTree, collectExpandableIds, flattenKeyValues, formatDecimal } from "./logic";
-
-test("formatDecimal groups thousands and preserves exact fractional digits", () => {
-  expect(formatDecimal("1234567.8900")).toBe("1,234,567.8900");
-  expect(formatDecimal("-42000.5")).toBe("-42,000.5");
-  expect(formatDecimal("999")).toBe("999");
-  expect(formatDecimal("0.0000")).toBe("0.0000");
-  expect(formatDecimal(null)).toBe("—");
-  expect(formatDecimal(undefined)).toBe("—");
-  expect(formatDecimal("")).toBe("—");
-  expect(formatDecimal("N/A")).toBe("N/A");
-});
+import { buildTraceTree, collectExpandableIds, flattenKeyValues } from "./logic";
 
 test("flattenKeyValues flattens nested objects without computing anything", () => {
   expect(

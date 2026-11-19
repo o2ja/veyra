@@ -7,7 +7,8 @@ import { ApiError, unwrap } from "../../lib/api/errors";
 import { useSession } from "../../lib/session";
 import { ManufacturerSelect } from "../masterdata/common";
 import { ReportingNav } from "./common";
-import { formatDecimal, jobPollDecision, type BatchOut } from "./logic";
+import { jobPollDecision, type BatchOut } from "./logic";
+import { formatMoney } from "../../lib/format";
 
 export function AuditPackPage() {
   const { can } = useSession();
@@ -157,7 +158,7 @@ export function AuditPackPage() {
                     <option value="">Select a submitted batch…</option>
                     {batches.map((b: BatchOut) => (
                       <option key={b.id} value={b.id}>
-                        {b.batch_number} ({b.line_count} lines, {formatDecimal(b.total_amount)})
+                        {b.batch_number} ({b.line_count} lines, {formatMoney(b.total_amount)})
                       </option>
                     ))}
                   </select>

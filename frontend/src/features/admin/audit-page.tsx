@@ -4,6 +4,7 @@ import { useState } from "react";
 import { Button, Card, Empty, ErrorAlert, Field, Loading, PermissionDenied } from "../../components/ui";
 import { api } from "../../lib/api/client";
 import { ApiError, unwrap } from "../../lib/api/errors";
+import { formatDateTime } from "../../lib/format";
 
 interface Filters {
   action: string;
@@ -96,7 +97,7 @@ export function AuditPage() {
           <table className="w-full text-left text-sm">
             <thead className="text-muted">
               <tr>
-                <th className="py-2">Time (UTC)</th>
+                <th className="py-2">Time</th>
                 <th>Action</th>
                 <th>Actor</th>
                 <th>Entity</th>
@@ -106,7 +107,7 @@ export function AuditPage() {
             <tbody>
               {rows.map((r) => (
                 <tr key={r.id} className="border-t border-line align-top">
-                  <td className="py-2 whitespace-nowrap">{r.occurred_at.replace("T", " ").slice(0, 19)}</td>
+                  <td className="py-2 whitespace-nowrap">{formatDateTime(r.occurred_at)}</td>
                   <td className="font-mono">{r.action}</td>
                   <td className="text-xs">
                     {r.actor_name ? (

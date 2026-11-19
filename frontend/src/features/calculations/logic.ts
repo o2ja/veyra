@@ -37,22 +37,6 @@ export const RESULT_STATUS_LABELS: Record<string, string> = {
   not_applicable: "Not applicable",
 };
 
-/**
- * Format a server decimal string with thousands grouping only.
- * Never parses to float or rounds; preserves exact fractional digits.
- */
-export function formatDecimal(value: string | null | undefined): string {
-  if (value === null || value === undefined || value === "") return "—";
-  const trimmed = value.trim();
-  // eslint-disable-next-line security/detect-unsafe-regex -- linear: no overlapping repetition; input is a server decimal string
-  const match = /^(-?)(\d+)(\.\d+)?$/.exec(trimmed);
-  if (!match) return trimmed;
-  const [, sign, intPart, fracPart] = match;
-  // eslint-disable-next-line security/detect-unsafe-regex -- thousands grouping on the integer part of a server decimal (bounded length)
-  const grouped = (intPart ?? "").replace(/\B(?=(\d{3})+(?!\d))/g, ",");
-  return `${sign ?? ""}${grouped}${fracPart ?? ""}`;
-}
-
 export function isPlainObject(v: unknown): v is Record<string, unknown> {
   return v !== null && typeof v === "object" && !Array.isArray(v);
 }

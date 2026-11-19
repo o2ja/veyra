@@ -17,14 +17,18 @@ function split(value: string | number | null | undefined) {
   return { sign, grouped, frac };
 }
 
-/** `$3,412.50`. At least 2 decimals; extra digits are kept only when non-zero (unit rates like `$0.1234`). */
-export function formatMoney(value: string | number | null | undefined): string {
+/**
+ * `$3,412.50`. At least 2 decimals; extra digits are kept only when non-zero (unit rates like `$0.1234`).
+ * A non-USD currency is shown as a suffix instead of `$` (`1,200.00 EUR`).
+ */
+export function formatMoney(value: string | number | null | undefined, currency = "USD"): string {
   const p = split(value);
   if (!p) return DASH;
   if ("raw" in p) return p.raw;
   const frac = p.frac.replace(/0+$/, "").padEnd(2, "0");
   const negative = p.sign === "-" && /[1-9]/.test(p.grouped + frac);
-  return `${negative ? "-" : ""}$${p.grouped}.${frac}`;
+  const sign = negative ? "-" : "";
+  return currency === "USD" ? `${sign}$${p.grouped}.${frac}` : `${sign}${p.grouped}.${frac} ${currency}`;
 }
 
 /** `60`, `2.5`, `1,200`: trailing zeros trimmed. */

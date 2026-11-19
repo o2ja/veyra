@@ -15,7 +15,7 @@ import {
 import { api } from "../../lib/api/client";
 import { ApiError, unwrap } from "../../lib/api/errors";
 import { useSession } from "../../lib/session";
-import { DataTable, PagerControls, usePager, utc } from "../masterdata/common";
+import { DataTable, PagerControls, usePager } from "../masterdata/common";
 import {
   ConfirmDialog,
   EvidenceTree,
@@ -30,7 +30,6 @@ import {
   REMITTANCE_CHANNEL_LABELS,
   REMITTANCE_DOC_TYPE_LABELS,
   REMITTANCE_STATUS_LABELS,
-  formatDecimal,
   type FindingOut,
   type LineCorrection,
   type ManualMatchIn,
@@ -38,6 +37,7 @@ import {
   type ReconciliationLineOut,
   type RemittanceAcceptIn,
 } from "./logic";
+import { formatDate, formatDateTime, formatMoney } from "../../lib/format";
 
 export function RemittanceDetailPage() {
   const { remittanceId = "" } = useParams();
@@ -438,7 +438,7 @@ export function RemittanceDetailPage() {
             </div>
             <div>
               <dt className="text-muted">Total amount</dt>
-              <dd className="font-mono text-lg font-semibold text-ok">{formatDecimal(r.total_amount)}</dd>
+              <dd className="font-mono text-lg font-semibold text-ok">{formatMoney(r.total_amount)}</dd>
             </div>
             <div>
               <dt className="text-muted">Channel / Doc type</dt>
@@ -449,19 +449,19 @@ export function RemittanceDetailPage() {
             </div>
             <div>
               <dt className="text-muted">Document date</dt>
-              <dd>{r.document_date ?? "—"}</dd>
+              <dd>{formatDate(r.document_date)}</dd>
             </div>
             <div>
               <dt className="text-muted">Payment date</dt>
-              <dd>{r.payment_date ?? "—"}</dd>
+              <dd>{formatDate(r.payment_date)}</dd>
             </div>
             <div>
               <dt className="text-muted">Created at</dt>
-              <dd>{utc(r.created_at)}</dd>
+              <dd>{formatDateTime(r.created_at)}</dd>
             </div>
             <div>
               <dt className="text-muted">Accepted at</dt>
-              <dd>{r.accepted_at ? utc(r.accepted_at) : "—"}</dd>
+              <dd>{r.accepted_at ? formatDateTime(r.accepted_at) : "—"}</dd>
             </div>
           </dl>
         </Card>
@@ -569,10 +569,10 @@ export function RemittanceDetailPage() {
                                 : "—"}
                             </td>
                             <td className="py-2 pr-4 text-right font-mono font-medium">
-                              {formatDecimal(line.amount_paid)}
+                              {formatMoney(line.amount_paid)}
                             </td>
                             <td className="py-2 pr-4 text-right font-mono">
-                              {formatDecimal(line.amount_claimed_stated)}
+                              {formatMoney(line.amount_claimed_stated)}
                             </td>
                             <td className="py-2 pr-4 font-mono text-xs">
                               {line.external_reason_code ?? "—"}
@@ -753,9 +753,9 @@ export function RemittanceDetailPage() {
                         </div>
                         <div className="flex items-center gap-4 text-xs font-mono">
                           <span>
-                            Paid: <strong className="text-ink">{formatDecimal(row.line.amount_paid)}</strong>
+                            Paid: <strong className="text-ink">{formatMoney(row.line.amount_paid)}</strong>
                           </span>
-                          <span>Claimed: {formatDecimal(row.line.amount_claimed_stated)}</span>
+                          <span>Claimed: {formatMoney(row.line.amount_claimed_stated)}</span>
                         </div>
                       </div>
 
@@ -842,7 +842,7 @@ export function RemittanceDetailPage() {
                                     {m.allocations.map((al, idx) => (
                                       <li key={idx} className="font-mono">
                                         {al.claim_reference ?? al.claim_line_id ?? al.claim_adjustment_id}:{" "}
-                                        <strong>{formatDecimal(al.allocated_amount)}</strong>
+                                        <strong>{formatMoney(al.allocated_amount)}</strong>
                                       </li>
                                     ))}
                                   </ul>
@@ -945,7 +945,7 @@ export function RemittanceDetailPage() {
                     <option value="">Select a batch…</option>
                     {(batchesQuery.data?.data ?? []).map((b) => (
                       <option key={b.id} value={b.id}>
-                        {b.batch_number} ({b.line_count} lines, {formatDecimal(b.total_amount)})
+                        {b.batch_number} ({b.line_count} lines, {formatMoney(b.total_amount)})
                       </option>
                     ))}
                   </select>
@@ -971,7 +971,7 @@ export function RemittanceDetailPage() {
                         {(batchLinesQuery.data?.data ?? []).map((l) => (
                           <option key={l.id} value={l.id}>
                             {l.claim_reference} (Line #{l.line_number ?? 1}, Claimed:{" "}
-                            {formatDecimal(l.claim_amount)})
+                            {formatMoney(l.claim_amount)})
                           </option>
                         ))}
                       </select>
@@ -995,7 +995,7 @@ export function RemittanceDetailPage() {
                           <option value="">None</option>
                           {(batchAdjustmentsQuery.data?.data ?? []).map((a) => (
                             <option key={a.id} value={a.id}>
-                              {a.claim_reference ?? a.id} ({formatDecimal(a.amount)}, {a.reason})
+                              {a.claim_reference ?? a.id} ({formatMoney(a.amount)}, {a.reason})
                             </option>
                           ))}
                         </select>
@@ -1081,23 +1081,21 @@ export function RemittanceDetailPage() {
                       header: "Claimed",
                       cell: (f: FindingOut) => (
                         <span className="block text-right font-mono">
-                          {f.claimed ? formatDecimal(f.claimed) : "—"}
+                          {f.claimed ? formatMoney(f.claimed) : "—"}
                         </span>
                       ),
                     },
                     {
                       header: "Paid",
                       cell: (f: FindingOut) => (
-                        <span className="block text-right font-mono font-medium">
-                          {formatDecimal(f.paid)}
-                        </span>
+                        <span className="block text-right font-mono font-medium">{formatMoney(f.paid)}</span>
                       ),
                     },
                     {
                       header: "Variance",
                       cell: (f: FindingOut) => (
                         <span className="block text-right font-mono font-medium">
-                          {formatDecimal(f.amount)}
+                          {formatMoney(f.amount)}
                         </span>
                       ),
                     },
@@ -1144,7 +1142,7 @@ export function RemittanceDetailPage() {
                     header: "Amount paid",
                     cell: (row: ReconciliationLineOut) => (
                       <span className="block text-right font-mono font-medium">
-                        {formatDecimal(row.line.amount_paid)}
+                        {formatMoney(row.line.amount_paid)}
                       </span>
                     ),
                   },
@@ -1152,7 +1150,7 @@ export function RemittanceDetailPage() {
                     header: "Claimed stated",
                     cell: (row: ReconciliationLineOut) => (
                       <span className="block text-right font-mono">
-                        {formatDecimal(row.line.amount_claimed_stated)}
+                        {formatMoney(row.line.amount_claimed_stated)}
                       </span>
                     ),
                   },

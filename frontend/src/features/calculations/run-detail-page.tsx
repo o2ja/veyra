@@ -15,23 +15,16 @@ import {
 import { api } from "../../lib/api/client";
 import { ApiError, unwrap } from "../../lib/api/errors";
 import { useSession } from "../../lib/session";
-import {
-  DataTable,
-  ManufacturerSelect,
-  PagerControls,
-  SelectField,
-  usePager,
-  utc,
-} from "../masterdata/common";
+import { DataTable, ManufacturerSelect, PagerControls, SelectField, usePager } from "../masterdata/common";
 import { CalculationsNav, KeyValueGrid, ValidationDetailsAlert } from "./common";
 import {
   RESULT_STATUSES,
   RESULT_STATUS_LABELS,
   RUN_STATUS_LABELS,
-  formatDecimal,
   type AdjustmentOut,
   type ResultOut,
 } from "./logic";
+import { formatDate, formatDateTime, formatMoney, formatQty } from "../../lib/format";
 
 export function RunDetailPage() {
   const { runId = "" } = useParams();
@@ -177,15 +170,15 @@ export function RunDetailPage() {
                   </div>
                   <div>
                     <dt className="text-muted">Run date</dt>
-                    <dd className="font-medium">{run.data.run_date}</dd>
+                    <dd className="font-medium">{formatDate(run.data.run_date)}</dd>
                   </div>
                   <div>
                     <dt className="text-muted">As of</dt>
-                    <dd className="font-medium">{utc(run.data.as_of)}</dd>
+                    <dd className="font-medium">{formatDateTime(run.data.as_of)}</dd>
                   </div>
                   <div>
                     <dt className="text-muted">Data cutoff</dt>
-                    <dd className="font-medium">{utc(run.data.data_cutoff)}</dd>
+                    <dd className="font-medium">{formatDateTime(run.data.data_cutoff)}</dd>
                   </div>
                   <div>
                     <dt className="text-muted">Engine version</dt>
@@ -193,15 +186,15 @@ export function RunDetailPage() {
                   </div>
                   <div>
                     <dt className="text-muted">Created</dt>
-                    <dd>{utc(run.data.created_at)}</dd>
+                    <dd>{formatDateTime(run.data.created_at)}</dd>
                   </div>
                   <div>
                     <dt className="text-muted">Started</dt>
-                    <dd>{utc(run.data.started_at)}</dd>
+                    <dd>{formatDateTime(run.data.started_at)}</dd>
                   </div>
                   <div>
                     <dt className="text-muted">Completed</dt>
-                    <dd>{utc(run.data.completed_at)}</dd>
+                    <dd>{formatDateTime(run.data.completed_at)}</dd>
                   </div>
                 </dl>
 
@@ -249,7 +242,7 @@ export function RunDetailPage() {
                       {
                         header: "Amount",
                         cell: (a) => (
-                          <span className="block text-right font-mono">{formatDecimal(a.amount)}</span>
+                          <span className="block text-right font-mono">{formatMoney(a.amount)}</span>
                         ),
                       },
                       { header: "Status", cell: (a) => a.status },
@@ -344,31 +337,31 @@ export function RunDetailPage() {
                   ),
                 },
                 { header: "Line", cell: (r) => r.line_number },
-                { header: "Invoice date", cell: (r) => r.invoice_date },
+                { header: "Invoice date", cell: (r) => formatDate(r.invoice_date) },
                 { header: "Status", cell: (r) => RESULT_STATUS_LABELS[r.status] ?? r.status },
                 { header: "Exception", cell: (r) => r.exception_code ?? "—" },
                 {
                   header: "Claim amount",
                   cell: (r) => (
-                    <span className="block text-right font-mono">{formatDecimal(r.claim_amount)}</span>
+                    <span className="block text-right font-mono">{formatMoney(r.claim_amount)}</span>
                   ),
                 },
                 {
                   header: "Unit amount",
                   cell: (r) => (
-                    <span className="block text-right font-mono">{formatDecimal(r.claim_unit_amount)}</span>
+                    <span className="block text-right font-mono">{formatMoney(r.claim_unit_amount)}</span>
                   ),
                 },
                 {
                   header: "Eligible qty",
                   cell: (r) => (
-                    <span className="block text-right font-mono">{formatDecimal(r.eligible_quantity)}</span>
+                    <span className="block text-right font-mono">{formatQty(r.eligible_quantity)}</span>
                   ),
                 },
                 {
                   header: "Excess qty",
                   cell: (r) => (
-                    <span className="block text-right font-mono">{formatDecimal(r.excess_quantity)}</span>
+                    <span className="block text-right font-mono">{formatQty(r.excess_quantity)}</span>
                   ),
                 },
                 {

@@ -6,7 +6,6 @@ import { Alert, Button, Card, Empty, ErrorAlert, Loading, PermissionDenied } fro
 import { api } from "../../lib/api/client";
 import { ApiError, unwrap } from "../../lib/api/errors";
 import { KeyValueGrid } from "../calculations/common";
-import { utc } from "../masterdata/common";
 import { ExtractionsNav } from "./common";
 import {
   EXTRACTION_STATUS_LABELS,
@@ -17,6 +16,7 @@ import {
   parseExtractionResult,
   type ExtractionFieldView,
 } from "./logic";
+import { formatDateTime } from "../../lib/format";
 
 function FieldRow({
   field,
@@ -241,11 +241,11 @@ export function ExtractionDetailPage() {
                   </div>
                   <div>
                     <dt className="text-muted">Created</dt>
-                    <dd>{utc(detail.data.created_at)}</dd>
+                    <dd>{formatDateTime(detail.data.created_at)}</dd>
                   </div>
                   <div>
                     <dt className="text-muted">Completed</dt>
-                    <dd>{utc(detail.data.completed_at)}</dd>
+                    <dd>{formatDateTime(detail.data.completed_at)}</dd>
                   </div>
                   <div>
                     <dt className="text-muted">Document</dt>

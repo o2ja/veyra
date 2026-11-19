@@ -5,7 +5,8 @@ import { Alert, Button, Card, ErrorAlert, Field, fieldError } from "../../compon
 import { api } from "../../lib/api/client";
 import { ApiError, unwrap } from "../../lib/api/errors";
 import { useSession } from "../../lib/session";
-import { DataTable, FormGrid, MasterDataNav, PagerControls, usePager, utc } from "./common";
+import { DataTable, FormGrid, MasterDataNav, PagerControls, usePager } from "./common";
+import { formatDateTime } from "../../lib/format";
 
 export function BranchesPage() {
   const client = useQueryClient();
@@ -75,7 +76,7 @@ export function BranchesPage() {
             columns={[
               { header: "Code", cell: (b) => b.code },
               { header: "Name", cell: (b) => b.name },
-              { header: "Added (UTC)", cell: (b) => utc(b.created_at) },
+              { header: "Added", cell: (b) => formatDateTime(b.created_at) },
             ]}
           />
           <PagerControls pager={pager} page={list.data?.page} />

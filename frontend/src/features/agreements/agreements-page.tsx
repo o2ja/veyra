@@ -9,6 +9,7 @@ import { useSession } from "../../lib/session";
 import { DataTable, ManufacturerSelect, PagerControls, SelectField, usePager } from "../masterdata/common";
 import { AgreementsNav, useManufacturerMap } from "./common";
 import { VERSION_STATUS_LABELS } from "./logic";
+import { formatDate } from "../../lib/format";
 
 export function AgreementsPage() {
   const { can } = useSession();
@@ -106,7 +107,7 @@ export function AgreementsPage() {
               header: "Current version",
               cell: (a) =>
                 a.current_version
-                  ? `v${a.current_version.version_number} (${a.current_version.valid_from} – ${a.current_version.valid_to})`
+                  ? `v${a.current_version.version_number} (${formatDate(a.current_version.valid_from)} – ${formatDate(a.current_version.valid_to)})`
                   : "None",
             },
             {

@@ -5,6 +5,7 @@ import { Card, ErrorAlert, Loading, PermissionDenied } from "../../components/ui
 import { api } from "../../lib/api/client";
 import { ApiError, unwrap } from "../../lib/api/errors";
 import { STATUS_TEXT } from "./files-page";
+import { formatDateTime } from "../../lib/format";
 
 /** One file's metadata and scan result (S2.3). Polls while the scan is pending. */
 export function FileDetailPage() {
@@ -52,12 +53,12 @@ export function FileDetailPage() {
             <dd className="break-all font-mono text-xs">{f.sha256}</dd>
           </div>
           <div className="contents">
-            <dt className="text-muted">Uploaded (UTC)</dt>
-            <dd>{f.created_at.replace("T", " ").slice(0, 19)}</dd>
+            <dt className="text-muted">Uploaded</dt>
+            <dd>{formatDateTime(f.created_at)}</dd>
           </div>
           <div className="contents">
-            <dt className="text-muted">Scanned (UTC)</dt>
-            <dd>{f.scanned_at?.replace("T", " ").slice(0, 19) ?? "—"}</dd>
+            <dt className="text-muted">Scanned</dt>
+            <dd>{formatDateTime(f.scanned_at)}</dd>
           </div>
         </dl>
       )}

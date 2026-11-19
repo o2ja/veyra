@@ -16,9 +16,10 @@ import {
 import { api } from "../../lib/api/client";
 import { ApiError, unwrap } from "../../lib/api/errors";
 import { useSession } from "../../lib/session";
-import { DataTable, PagerControls, SelectField, usePager, utc } from "../masterdata/common";
+import { DataTable, PagerControls, SelectField, usePager } from "../masterdata/common";
 import { AgreementsNav, useManufacturerMap } from "./common";
 import { buildAmendmentPayload, type ItemOut, VERSION_STATUS_LABELS } from "./logic";
+import { formatDate, formatDateTime } from "../../lib/format";
 
 async function fetchAllVersionItems(versionId: string): Promise<ItemOut[]> {
   const items: ItemOut[] = [];
@@ -200,7 +201,9 @@ export function AgreementDetailPage() {
                       <dt className="text-muted">Status</dt>
                       <dd className="font-medium">
                         {agreement.data.cancelled_at ? (
-                          <span className="text-danger">Cancelled ({utc(agreement.data.cancelled_at)})</span>
+                          <span className="text-danger">
+                            Cancelled ({formatDateTime(agreement.data.cancelled_at)})
+                          </span>
                         ) : agreement.data.current_version ? (
                           (VERSION_STATUS_LABELS[agreement.data.current_version.status] ??
                           agreement.data.current_version.status)
@@ -310,9 +313,9 @@ export function AgreementDetailPage() {
                     ),
                   },
                   { header: "Status", cell: (v) => VERSION_STATUS_LABELS[v.status] ?? v.status },
-                  { header: "Valid from", cell: (v) => v.valid_from },
-                  { header: "Valid to", cell: (v) => v.valid_to },
-                  { header: "Activated", cell: (v) => utc(v.activated_at) },
+                  { header: "Valid from", cell: (v) => formatDate(v.valid_from) },
+                  { header: "Valid to", cell: (v) => formatDate(v.valid_to) },
+                  { header: "Activated", cell: (v) => formatDateTime(v.activated_at) },
                   {
                     header: "Lineage",
                     cell: (v) => (

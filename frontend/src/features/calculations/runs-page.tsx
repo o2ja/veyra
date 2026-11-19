@@ -14,10 +14,10 @@ import {
   SelectField,
   useManufacturers,
   usePager,
-  utc,
 } from "../masterdata/common";
 import { CalculationsNav } from "./common";
 import { RUN_STATUSES, RUN_STATUS_LABELS, flattenKeyValues, isPlainObject, type RunOut } from "./logic";
+import { formatDate, formatDateTime } from "../../lib/format";
 
 function formatRunError(err: Record<string, unknown> | null | undefined): string {
   if (!err || !isPlainObject(err)) return "—";
@@ -270,9 +270,9 @@ export function RunsPage() {
                   </span>
                 ),
               },
-              { header: "Run date", cell: (r) => r.run_date },
-              { header: "As of", cell: (r) => utc(r.as_of) },
-              { header: "Data cutoff", cell: (r) => utc(r.data_cutoff) },
+              { header: "Run date", cell: (r) => formatDate(r.run_date) },
+              { header: "As of", cell: (r) => formatDateTime(r.as_of) },
+              { header: "Data cutoff", cell: (r) => formatDateTime(r.data_cutoff) },
               {
                 header: "Scope",
                 cell: (r) => {
@@ -306,7 +306,7 @@ export function RunsPage() {
                 header: "Engine",
                 cell: (r) => <span className="font-mono text-xs">{r.engine_version}</span>,
               },
-              { header: "Created", cell: (r) => utc(r.created_at) },
+              { header: "Created", cell: (r) => formatDateTime(r.created_at) },
             ]}
           />
           <PagerControls pager={pager} page={list.data?.page} />

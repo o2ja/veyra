@@ -5,7 +5,8 @@ import { Alert, Button, Card, Empty, Field } from "../../components/ui";
 import { api } from "../../lib/api/client";
 import { ApiError, unwrap } from "../../lib/api/errors";
 import { KeyValueGrid, TraceTree, ValidationDetailsAlert } from "./common";
-import { RESULT_STATUS_LABELS, formatDecimal, type DraftPreviewLine } from "./logic";
+import { RESULT_STATUS_LABELS, type DraftPreviewLine } from "./logic";
+import { formatDate, formatMoney, formatQty } from "../../lib/format";
 
 export function DraftPreviewPanel({ draftId }: { draftId: string }) {
   const [limitInput, setLimitInput] = useState("");
@@ -80,7 +81,7 @@ export function DraftPreviewPanel({ draftId }: { draftId: string }) {
               </div>
               <div>
                 <dt className="text-muted">Run date</dt>
-                <dd className="font-medium">{preview.data.run_date}</dd>
+                <dd className="font-medium">{formatDate(preview.data.run_date)}</dd>
               </div>
               <div>
                 <dt className="text-muted">Sample size</dt>
@@ -100,22 +101,21 @@ export function DraftPreviewPanel({ draftId }: { draftId: string }) {
                   <div>
                     <dt className="text-muted">Period</dt>
                     <dd>
-                      {preview.data.accrual.period_start} – {preview.data.accrual.period_end}
+                      {formatDate(preview.data.accrual.period_start)} –{" "}
+                      {formatDate(preview.data.accrual.period_end)}
                     </dd>
                   </div>
                   <div>
                     <dt className="text-muted">Cumulative qualifying</dt>
-                    <dd className="font-mono">{formatDecimal(preview.data.accrual.cumulative_qualifying)}</dd>
+                    <dd className="font-mono">{formatQty(preview.data.accrual.cumulative_qualifying)}</dd>
                   </div>
                   <div>
                     <dt className="text-muted">Cumulative payout base</dt>
-                    <dd className="font-mono">
-                      {formatDecimal(preview.data.accrual.cumulative_payout_base)}
-                    </dd>
+                    <dd className="font-mono">{formatMoney(preview.data.accrual.cumulative_payout_base)}</dd>
                   </div>
                   <div>
                     <dt className="text-muted">Cumulative earned</dt>
-                    <dd className="font-mono">{formatDecimal(preview.data.accrual.cumulative_earned)}</dd>
+                    <dd className="font-mono">{formatMoney(preview.data.accrual.cumulative_earned)}</dd>
                   </div>
                   <div>
                     <dt className="text-muted">Tier</dt>
@@ -177,14 +177,12 @@ export function DraftPreviewPanel({ draftId }: { draftId: string }) {
                         <tr key={line.line_id} className="border-t border-line align-top">
                           <td className="py-2 pr-4">{line.document_number}</td>
                           <td className="py-2 pr-4">{line.line_number}</td>
-                          <td className="py-2 pr-4">{line.invoice_date}</td>
+                          <td className="py-2 pr-4">{formatDate(line.invoice_date)}</td>
                           <td className="py-2 pr-4">{RESULT_STATUS_LABELS[line.status] ?? line.status}</td>
                           <td className="py-2 pr-4">{line.exception_code ?? "—"}</td>
+                          <td className="py-2 pr-4 text-right font-mono">{formatMoney(line.claim_amount)}</td>
                           <td className="py-2 pr-4 text-right font-mono">
-                            {formatDecimal(line.claim_amount)}
-                          </td>
-                          <td className="py-2 pr-4 text-right font-mono">
-                            {formatDecimal(line.eligible_quantity)}
+                            {formatQty(line.eligible_quantity)}
                           </td>
                           <td className="py-2 pr-4">
                             <Button

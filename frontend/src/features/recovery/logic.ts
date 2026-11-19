@@ -1,4 +1,5 @@
 import type { components } from "../../api/schema";
+import { formatDate } from "../../lib/format";
 
 export type CaseOut = components["schemas"]["CaseOut"];
 export type SummaryOut = components["schemas"]["SummaryOut"];
@@ -60,46 +61,6 @@ export const caseTypeLabel = (caseType: string): string => CASE_TYPE_LABELS[case
 
 export const reasonLabel = (code: string): string => code.replaceAll("_", " ");
 
-/**
- * Display-only formatting. Amounts are server strings and are never recomputed;
- * dates are shown in US style (the only formatting the brief allows).
- */
-export function usDate(value: string | null | undefined): string {
-  if (!value) return "—";
-  const date = new Date(value.length === 10 ? `${value}T00:00:00Z` : value);
-  if (Number.isNaN(date.getTime())) return value;
-  return new Intl.DateTimeFormat("en-US", {
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit",
-    timeZone: "UTC",
-  }).format(date);
-}
-
-export function usDateTime(value: string | null | undefined): string {
-  if (!value) return "—";
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return value;
-  return new Intl.DateTimeFormat("en-US", {
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit",
-    hour: "2-digit",
-    minute: "2-digit",
-    timeZone: "UTC",
-  }).format(date);
-}
-
-/**
- * Server amount, lossless: the API sends 4 decimal places ("150.0000"); trailing zeros beyond 2 are dropped.
- * The UI never adds, subtracts or rounds it.
- */
-export function amountText(value: string | null | undefined): string {
-  if (value == null) return "—";
-  const [whole = "", fraction = ""] = value.split(".");
-  return `${whole}.${fraction.replace(/0+$/, "").padEnd(2, "0")}`;
-}
-
 export const ownerText = (
   ownerUserId: string | null | undefined,
   currentUserId: string | null | undefined,
@@ -149,7 +110,7 @@ export function writeOffProposalLabel(
       : typeof proposer === "string" && proposer.trim() !== ""
         ? proposer.trim()
         : null;
-  const dateStr = usDate(proposedAt);
+  const dateStr = formatDate(proposedAt);
   if (who) {
     return `Reason proposed by ${who} on ${dateStr}`;
   }

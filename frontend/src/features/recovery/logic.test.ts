@@ -2,7 +2,6 @@ import { describe, expect, it } from "vitest";
 
 import {
   TRANSITION_STATUSES,
-  amountText,
   batchIdFromDetails,
   isValidWriteOffReason,
   newestFirst,
@@ -10,8 +9,6 @@ import {
   ownerText,
   reasonLabel,
   statusLabel,
-  usDate,
-  usDateTime,
   writeOffProposalLabel,
   type EventOut,
   type NotificationOut,
@@ -29,21 +26,6 @@ const event = (id: string, createdAt: string): EventOut => ({
 });
 
 describe("recovery display helpers", () => {
-  it("formats server dates in US style and never invents one", () => {
-    expect(usDate("2026-11-13")).toBe("11/13/2026");
-    expect(usDate(null)).toBe("—");
-    expect(usDateTime("2026-11-13T14:05:00Z")).toBe("11/13/2026, 02:05 PM");
-  });
-
-  it("shows amounts exactly as the server sent them", () => {
-    expect(amountText("150.00")).toBe("150.00");
-    expect(amountText("0.00")).toBe("0.00");
-    expect(amountText("150.0000")).toBe("150.00");
-    expect(amountText("0.0000")).toBe("0.00");
-    expect(amountText("12.3450")).toBe("12.345");
-    expect(amountText(null)).toBe("—");
-  });
-
   it("offers every transition target except written_off", () => {
     expect(TRANSITION_STATUSES).toEqual(["open", "to_reclaim", "submitted", "recovered", "closed_no_action"]);
   });
@@ -106,17 +88,17 @@ describe("recovery display helpers", () => {
         { full_name: "Jane Approver", email: "jane@example.com" },
         "2026-11-14T07:30:00Z",
       ),
-    ).toBe("Reason proposed by Jane Approver on 11/14/2026");
+    ).toBe("Reason proposed by Jane Approver on Nov 14, 2026");
 
     expect(writeOffProposalLabel({ full_name: "", email: "jane@example.com" }, "2026-11-14T07:30:00Z")).toBe(
-      "Reason proposed by jane@example.com on 11/14/2026",
+      "Reason proposed by jane@example.com on Nov 14, 2026",
     );
 
     expect(writeOffProposalLabel("user-uuid-1234", "2026-11-14T07:30:00Z")).toBe(
-      "Reason proposed by user-uuid-1234 on 11/14/2026",
+      "Reason proposed by user-uuid-1234 on Nov 14, 2026",
     );
 
-    expect(writeOffProposalLabel(null, "2026-11-14T07:30:00Z")).toBe("Reason proposed on 11/14/2026");
+    expect(writeOffProposalLabel(null, "2026-11-14T07:30:00Z")).toBe("Reason proposed on Nov 14, 2026");
 
     expect(writeOffProposalLabel({ full_name: "Jane Approver" }, null)).toBe(
       "Reason proposed by Jane Approver on —",

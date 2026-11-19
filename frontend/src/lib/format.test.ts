@@ -12,6 +12,7 @@ describe("formatMoney", () => {
     expect(formatMoney("-0.00")).toBe("$0.00");
     expect(formatMoney("0.1234")).toBe("$0.1234");
     expect(formatMoney("007.10")).toBe("$7.10");
+    expect(formatMoney("1200", "EUR")).toBe("1,200.00 EUR");
   });
   it("passes through empty and non-numeric values", () => {
     expect(formatMoney(null)).toBe("—");

@@ -5,9 +5,10 @@ import { Button, Card, ErrorAlert, PermissionDenied } from "../../components/ui"
 import { api } from "../../lib/api/client";
 import { ApiError, unwrap } from "../../lib/api/errors";
 import { useSession } from "../../lib/session";
-import { DataTable, PagerControls, SelectField, usePager, utc } from "../masterdata/common";
+import { DataTable, PagerControls, SelectField, usePager } from "../masterdata/common";
 import { AgreementsNav } from "./common";
 import { DRAFT_STATUSES, DRAFT_STATUS_LABELS, emptyPayload } from "./logic";
+import { formatDateTime } from "../../lib/format";
 
 type DraftStatus = (typeof DRAFT_STATUSES)[number];
 type FilterStatus = DraftStatus | "all";
@@ -133,7 +134,7 @@ export function DraftsPage() {
                 ),
             },
             { header: "Revision", cell: (d) => `r${d.revision}` },
-            { header: "Updated", cell: (d) => utc(d.updated_at) },
+            { header: "Updated", cell: (d) => formatDateTime(d.updated_at) },
           ]}
         />
         <PagerControls pager={pager} page={list.data?.page} />

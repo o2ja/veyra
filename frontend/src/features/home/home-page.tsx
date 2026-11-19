@@ -5,7 +5,7 @@ import { Badge, Loading } from "../../components/ui";
 import { api } from "../../lib/api/client";
 import { unwrap } from "../../lib/api/errors";
 import { useSession } from "../../lib/session";
-import { formatDecimal } from "../reporting/logic";
+import { formatMoney } from "../../lib/format";
 
 function Kpi({
   label,
@@ -127,7 +127,7 @@ export function HomePage() {
             {missed.data && (
               <Kpi
                 label="Unclaimed rebates"
-                value={formatDecimal(missed.data.totals.amount)}
+                value={formatMoney(missed.data.totals.amount)}
                 hint={`${missed.data.totals.lines} sales lines never claimed`}
                 to="/claims/missed"
                 tone="warn"
@@ -137,20 +137,20 @@ export function HomePage() {
               <>
                 <Kpi
                   label="Claimed"
-                  value={formatDecimal(f.claimed)}
+                  value={formatMoney(f.claimed)}
                   hint="Submitted to manufacturers"
                   to="/dashboard/claimed"
                 />
                 <Kpi
                   label="Collected"
-                  value={formatDecimal(f.collected)}
+                  value={formatMoney(f.collected)}
                   hint="Matched to remittances"
                   to="/dashboard/collected"
                   tone="ok"
                 />
                 <Kpi
                   label="Short paid"
-                  value={formatDecimal(f.short_paid)}
+                  value={formatMoney(f.short_paid)}
                   hint="Paid less than claimed"
                   to="/dashboard/short_paid"
                   tone="warn"

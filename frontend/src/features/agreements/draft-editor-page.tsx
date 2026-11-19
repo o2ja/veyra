@@ -7,7 +7,7 @@ import { api } from "../../lib/api/client";
 import { ApiError, unwrap } from "../../lib/api/errors";
 import { useSession } from "../../lib/session";
 import { uploadWithProgress } from "../files/files-page";
-import { Checkbox, FormGrid, SelectField, orNull, useManufacturers, utc } from "../masterdata/common";
+import { Checkbox, FormGrid, SelectField, orNull, useManufacturers } from "../masterdata/common";
 import { DraftPreviewPanel } from "../calculations/draft-preview-panel";
 import { AgreementsNav } from "./common";
 import {
@@ -36,6 +36,7 @@ import {
   viewPayload,
   intOrRaw,
 } from "./logic";
+import { formatDateTime } from "../../lib/format";
 
 /** Disabled controls cannot take focus; focus their own label or row instead (never the wrapping fieldset), with temporary tabIndex. */
 function focusEl(el: HTMLElement) {
@@ -847,7 +848,7 @@ function ValidationPanel({
           <Alert tone={v.valid ? "ok" : "danger"}>
             {v.valid ? "Validation passed." : `${v.error_count} validation error(s).`}
             {v.warnings.length > 0 ? ` ${v.warnings.length} warning(s).` : ""}
-            <span className="ml-2 text-xs">Checked {utc(v.validated_at)}</span>
+            <span className="ml-2 text-xs">Checked {formatDateTime(v.validated_at)}</span>
           </Alert>
 
           {(v.references.unresolved_customers.length > 0 || v.references.unresolved_skus.length > 0) && (
@@ -1401,7 +1402,7 @@ function DraftEditorForm({ initial }: { initial: DraftOut }) {
             <div className="flex flex-wrap gap-6 text-muted">
               <span>Revision {draft.revision}</span>
               <span>Source: {draft.source}</span>
-              <span>Updated {utc(draft.updated_at)}</span>
+              <span>Updated {formatDateTime(draft.updated_at)}</span>
               {draft.agreement_id && (
                 <Link to={`/agreements/${draft.agreement_id}`} className="text-brand underline">
                   Agreement

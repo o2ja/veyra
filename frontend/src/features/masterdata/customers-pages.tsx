@@ -17,8 +17,8 @@ import {
   SelectField,
   orNull,
   usePager,
-  utc,
 } from "./common";
+import { formatDateTime } from "../../lib/format";
 
 type CustomerType = NonNullable<components["schemas"]["CustomerIn"]["customer_type"]>;
 type Customer = components["schemas"]["CustomerDetail"];
@@ -339,7 +339,7 @@ export function CustomerDetailPage() {
             columns={[
               { header: "Alias", cell: (a) => a.alias },
               { header: "Source", cell: (a) => a.source ?? "—" },
-              { header: "Added (UTC)", cell: (a) => utc(a.created_at) },
+              { header: "Added", cell: (a) => formatDateTime(a.created_at) },
             ]}
           />
           {can("masterdata.write") && <AddCustomerAlias customerId={customerId} />}
