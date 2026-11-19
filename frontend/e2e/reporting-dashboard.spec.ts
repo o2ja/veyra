@@ -198,8 +198,8 @@ test("S10 reporting: dashboard figures, drill-down, trace, audit pack, analyst d
   const batchTotal = (
     await page.locator("dt", { hasText: "Batch total" }).locator("xpath=following-sibling::dd").innerText()
   ).trim();
-  // Ground truth SC-22 (INV-10060 line 1, expected_calculation.json): 30 x 22.00 = 660.00; the API shows 4 decimals.
-  expect(batchTotal).toBe("660.0000");
+  // Ground truth SC-22 (INV-10060 line 1, expected_calculation.json): 30 x 22.00 = 660.00; shown as money.
+  expect(batchTotal).toBe("$660.00");
 
   await approverPage.goto(`/claims/batches/${batchId}`);
   await approverPage.getByRole("button", { name: "Approve batch" }).click();

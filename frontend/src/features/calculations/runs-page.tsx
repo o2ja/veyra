@@ -270,9 +270,10 @@ export function RunsPage() {
                   </span>
                 ),
               },
-              { header: "Run date", cell: (r) => formatDate(r.run_date) },
-              { header: "As of", cell: (r) => formatDateTime(r.as_of) },
-              { header: "Data cutoff", cell: (r) => formatDateTime(r.data_cutoff) },
+              {
+                header: "Run date",
+                cell: (r) => <span className="whitespace-nowrap">{formatDate(r.run_date)}</span>,
+              },
               {
                 header: "Scope",
                 cell: (r) => {
@@ -297,10 +298,9 @@ export function RunsPage() {
                 },
               },
               {
-                header: "Engine",
-                cell: (r) => <span className="font-mono text-xs">{r.engine_version}</span>,
+                header: "Started",
+                cell: (r) => <span className="whitespace-nowrap">{formatDateTime(r.created_at)}</span>,
               },
-              { header: "Created", cell: (r) => formatDateTime(r.created_at) },
             ]}
           />
           <PagerControls pager={pager} page={list.data?.page} />

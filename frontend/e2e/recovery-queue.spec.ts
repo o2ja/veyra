@@ -8,12 +8,7 @@ import {
   test,
   uniqueEmail,
 } from "./support";
-
-// The API sends 4 decimal places; the screen shows them without the extra trailing zeros.
-const money = (value: string): string => {
-  const [whole = "", fraction = ""] = value.split(".");
-  return `${whole}.${fraction.replace(/0+$/, "").padEnd(2, "0")}`;
-};
+import { formatMoney } from "../src/lib/format";
 
 test("S9 recovery queue: server order, unknown deadline first, reason filter, summary, viewer read-only", async ({
   page,
@@ -42,7 +37,7 @@ test("S9 recovery queue: server order, unknown deadline first, reason filter, su
       at_risk: { deadline_within_days: number; count: number; amount: string };
     }>(page, "GET", "/api/v1/cases/summary");
     await expect(summary).toContainText(
-      `At risk within ${serverSummary.at_risk.deadline_within_days} days: ${serverSummary.at_risk.count} cases, ${money(serverSummary.at_risk.amount)}`,
+      `At risk within ${serverSummary.at_risk.deadline_within_days} days: ${serverSummary.at_risk.count} cases, ${formatMoney(serverSummary.at_risk.amount)}`,
     );
 
     const table = page.getByRole("table", { name: "Recovery cases" });

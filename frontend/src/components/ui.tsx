@@ -186,7 +186,7 @@ export function PermissionDenied() {
 export function AuthCard({ title, children }: { title: string; children: ReactNode }) {
   return (
     <div className="mx-auto mt-8 w-full max-w-md sm:mt-16">
-      <Logo className="mx-auto mb-5 h-8" />
+      <Logo className="mx-auto mb-5 block h-8" />
       <p className="mb-6 text-center text-sm text-muted">
         Veyra Recover finds and recovers the rebates manufacturers owe you.
       </p>

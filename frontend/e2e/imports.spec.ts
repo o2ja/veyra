@@ -141,7 +141,7 @@ test("import wizard: master data, layout A sales, re-import no-op, error rows, l
   await noViolations(page, "/lines/sales");
   const row = lines.getByRole("row").filter({ hasText: "INV-10001 / 1" });
   await row.getByRole("link", { name: "INV-10001 / 1" }).click();
-  await expect(page.getByText("100.000000 EA")).toBeVisible();
+  await expect(page.getByText("100 EA")).toBeVisible();
   await noViolations(page, "/lines/sales/:id");
   await page.getByRole("link", { name: "File, row 2" }).click();
   await expect(page.getByRole("heading", { name: "sales_scenarios_layoutA.csv" })).toBeVisible();

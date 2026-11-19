@@ -5,7 +5,9 @@
 
 const DASH = "—";
 
-function split(value: string | number | null | undefined) {
+type Parts = { raw: string } | { sign: string; grouped: string; frac: string };
+
+function split(value: string | number | null | undefined): Parts | null {
   if (value === null || value === undefined || value === "") return null;
   const str = String(value).trim();
   // eslint-disable-next-line security/detect-unsafe-regex -- linear: no overlapping repetition; bounded server decimal
