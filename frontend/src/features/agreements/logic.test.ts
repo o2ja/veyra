@@ -5,7 +5,9 @@ import {
   buildAmendmentPayload,
   emptyPayload,
   flattenRulesEntries,
+  friendlyIssueMessage,
   issueFieldId,
+  issueFieldLabel,
   itemIndexFromIssuePath,
   pageForItemIndex,
   paginateItems,
@@ -209,4 +211,18 @@ test("applyEdit adds or removes one row without filling defaults into the other 
   expect(removed).toEqual([{ sku: "B", rate: 5 }]);
   const removedLast = applyEdit(raw, view, [view[0]]);
   expect(removedLast).toEqual([{ sku: "A" }]);
+});
+
+test("validation issues read as plain English", () => {
+  expect(issueFieldLabel("payload.items[3].sell_price")).toBe("Item 4 · Sell price");
+  expect(issueFieldLabel("header.valid_to")).toBe("Valid to");
+  expect(issueFieldLabel("payload.tiers.0.rate")).toBe("Tier 1 · Rate");
+  expect(friendlyIssueMessage("Field required")).toBe("This is required.");
+  expect(friendlyIssueMessage("Input should be a valid decimal")).toBe("Enter a number, for example 12.50.");
+  expect(friendlyIssueMessage("Input should be greater than 0")).toBe("Must be more than 0.");
+  expect(friendlyIssueMessage("Input should be 'spa' or 'rebate'")).toBe("Choose one of: spa, rebate.");
+  expect(friendlyIssueMessage("Value error, valid_to must be after valid_from")).toBe(
+    "Valid_to must be after valid_from",
+  );
+  expect(friendlyIssueMessage("SKU is listed twice.")).toBe("SKU is listed twice.");
 });

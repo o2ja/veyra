@@ -4,6 +4,7 @@ import { Link, useParams } from "react-router-dom";
 
 import {
   Alert,
+  Badge,
   Button,
   Card,
   Empty,
@@ -23,6 +24,7 @@ import {
   TRANSITION_STATUSES,
   batchIdFromDetails,
   caseTypeLabel,
+  disputeSentences,
   isValidWriteOffReason,
   newestFirst,
   ownerText,
@@ -506,11 +508,7 @@ export function RecoveryCasePage() {
 
         {item && (
           <Card title="Dispute assessment">
-            <GenericTree
-              data={item.dispute_assessment}
-              label="Dispute assessment"
-              empty="No dispute assessment recorded."
-            />
+            <DisputeAssessment doc={item.dispute_assessment} />
           </Card>
         )}
 
@@ -837,6 +835,27 @@ export function RecoveryCasePage() {
         )}
       </div>
     </>
+  );
+}
+
+function DisputeAssessment({ doc }: { doc: Record<string, unknown> | null }) {
+  const read = disputeSentences(doc);
+  if (!read)
+    return <Empty>No dispute assessment: this case has no frozen claim line to check against.</Empty>;
+  return (
+    <div className="flex flex-col gap-3 text-sm">
+      <p className="font-medium">{read.headline}</p>
+      <ul className="flex flex-col gap-1.5">
+        {read.checks.map((c) => (
+          <li key={c.text} className="flex items-start gap-2">
+            <Badge tone={c.passed === null ? "neutral" : c.passed ? "ok" : "danger"}>
+              {c.passed === null ? "Unknown" : c.passed ? "Holds" : "Fails"}
+            </Badge>
+            <span>{c.text}</span>
+          </li>
+        ))}
+      </ul>
+    </div>
   );
 }
 

@@ -5,8 +5,8 @@ import { Alert, Card, ErrorAlert, Loading, PermissionDenied } from "../../compon
 import { api } from "../../lib/api/client";
 import { ApiError } from "../../lib/api/errors";
 import { unwrap } from "../../lib/api/errors";
-import { CalculationsNav, KeyValueGrid, TraceTree } from "./common";
-import { RESULT_STATUS_LABELS } from "./logic";
+import { CalculationsNav, ExceptionCell, KeyValueGrid, TraceTree } from "./common";
+import { RESULT_STATUS_LABELS, explainFormula } from "./logic";
 import { formatDate, formatMoney, formatQty } from "../../lib/format";
 
 export function ResultDetailPage() {
@@ -79,7 +79,9 @@ export function ResultDetailPage() {
                   </div>
                   <div>
                     <dt className="text-muted">Exception code</dt>
-                    <dd className="font-mono text-xs">{detail.data.exception_code ?? "—"}</dd>
+                    <dd>
+                      <ExceptionCell code={detail.data.exception_code} />
+                    </dd>
                   </div>
                   <div>
                     <dt className="text-muted">Claim UoM</dt>
@@ -143,6 +145,9 @@ export function ResultDetailPage() {
 
         {detail.data && (
           <Card title="Explain this number">
+            <p className="mb-4 rounded-lg border border-line bg-surface px-4 py-3 text-sm font-medium">
+              {explainFormula(detail.data)}
+            </p>
             <TraceTree trace={detail.data.trace} />
           </Card>
         )}

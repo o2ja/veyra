@@ -52,7 +52,12 @@ export function AgreementsPage() {
         title="Agreements"
         actions={
           can("agreement.draft") ? (
-            <Button onClick={() => navigate("/agreement-drafts")}>New draft</Button>
+            <div className="flex flex-wrap gap-2">
+              <Button variant="secondary" onClick={() => navigate("/extractions")}>
+                Upload contract PDF
+              </Button>
+              <Button onClick={() => navigate("/agreement-drafts")}>New draft</Button>
+            </div>
           ) : undefined
         }
       >

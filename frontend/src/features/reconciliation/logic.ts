@@ -82,44 +82,6 @@ export const MATCH_METHOD_LABELS: Record<string, string> = {
   manual: "Manual",
 };
 
-export const REASON_CODES: ReasonCodeMappingIn["reason_code"][] = [
-  "rejected_agreement_expired",
-  "rejected_customer_ineligible",
-  "rejected_product_ineligible",
-  "rejected_price_mismatch",
-  "rejected_duplicate_claim",
-  "rejected_outside_claim_window",
-  "rejected_missing_documentation",
-  "rejected_quantity_exceeds_authorization",
-  "rejected_uom_mismatch",
-  "rejected_other",
-  "short_paid_unexplained",
-  "unpaid_no_remittance",
-  "overpaid",
-  "unmatched_payment",
-  "source_changed",
-  "unknown",
-];
-
-export const REASON_CODE_LABELS: Record<ReasonCodeMappingIn["reason_code"], string> = {
-  rejected_agreement_expired: "Rejected: Agreement expired",
-  rejected_customer_ineligible: "Rejected: Customer ineligible",
-  rejected_product_ineligible: "Rejected: Product ineligible",
-  rejected_price_mismatch: "Rejected: Price mismatch",
-  rejected_duplicate_claim: "Rejected: Duplicate claim",
-  rejected_outside_claim_window: "Rejected: Outside claim window",
-  rejected_missing_documentation: "Rejected: Missing documentation",
-  rejected_quantity_exceeds_authorization: "Rejected: Quantity exceeds authorization",
-  rejected_uom_mismatch: "Rejected: UoM mismatch",
-  rejected_other: "Rejected: Other",
-  short_paid_unexplained: "Short-paid: Unexplained",
-  unpaid_no_remittance: "Unpaid: No remittance",
-  overpaid: "Overpaid",
-  unmatched_payment: "Unmatched payment",
-  source_changed: "Source changed",
-  unknown: "Unknown",
-};
-
 export const CASE_TYPE_LABELS: Record<FindingOut["case_type"], string> = {
   rejected: "Rejected",
   short_paid: "Short-paid",

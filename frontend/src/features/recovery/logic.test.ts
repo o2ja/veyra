@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import {
   TRANSITION_STATUSES,
   batchIdFromDetails,
+  disputeSentences,
   isValidWriteOffReason,
   newestFirst,
   notificationCaseLink,
@@ -103,5 +104,28 @@ describe("recovery display helpers", () => {
     expect(writeOffProposalLabel({ full_name: "Jane Approver" }, null)).toBe(
       "Reason proposed by Jane Approver on —",
     );
+  });
+});
+
+describe("disputeSentences", () => {
+  it("turns the stored checks into plain English", () => {
+    const out = disputeSentences({
+      assessment: "supported",
+      reason_code: "rejected_price_mismatch",
+      checks: [
+        {
+          name: "unit_price_matches_sell_price",
+          inputs: { unit_price: "12.5000", sell_price: "12.50", tolerance: "0.01" },
+          passed: true,
+        },
+        { name: "customer_in_scope", inputs: { customer_in_scope: "" }, passed: null },
+      ],
+    });
+    expect(out?.headline).toMatch(/^Worth disputing/);
+    expect(out?.checks[0]?.text).toBe(
+      "Invoiced unit price $12.50 matches the agreed sell price $12.50 (tolerance $0.01).",
+    );
+    expect(out?.checks[1]?.text).toBe("Whether the customer is covered is not on file.");
+    expect(disputeSentences(null)).toBeNull();
   });
 });

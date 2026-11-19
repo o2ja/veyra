@@ -6,7 +6,14 @@ import { Alert, Button, Card, ErrorAlert, Field, Loading, PermissionDenied } fro
 import { api } from "../../lib/api/client";
 import { ApiError, unwrap } from "../../lib/api/errors";
 import { useSession } from "../../lib/session";
-import { DataTable, ManufacturerSelect, PagerControls, usePager } from "../masterdata/common";
+import { ExceptionCell } from "../calculations/common";
+import {
+  AgreementSelect,
+  DataTable,
+  ManufacturerSelect,
+  PagerControls,
+  usePager,
+} from "../masterdata/common";
 import { ClaimsNav, ConfirmDialog, FileDownloadButton, ValidationDetailsAlert } from "./common";
 import {
   ADJUSTMENT_TYPE_LABELS,
@@ -244,6 +251,24 @@ export function MissedClaimsPage() {
     accrualPager.reset();
   }
 
+  /** One click from a summary row: narrow the filter to that manufacturer (and agreement) and confirm a batch. */
+  function claimGroup(groupManufacturerId: string, groupAgreementId: string | null | undefined) {
+    const next = new URLSearchParams(searchParams);
+    next.set("manufacturer_id", groupManufacturerId);
+    if (groupAgreementId) next.set("agreement_id", groupAgreementId);
+    else next.delete("agreement_id");
+    setSearchParams(next, { replace: true });
+    setMfgInput(groupManufacturerId);
+    setAgreeInput(groupAgreementId ?? "");
+    setSelectedIds(new Set());
+    if (groupManufacturerId !== manufacturerId) {
+      setSelectedAdjIds(new Set());
+      setSelectedAccrualIds(new Set());
+    }
+    pager.reset();
+    setCreateBatchMode("filter");
+  }
+
   function toggleSelectRow(id: string, checked: boolean) {
     setSelectedIds((prev) => {
       const next = new Set(prev);
@@ -292,12 +317,7 @@ export function MissedClaimsPage() {
           <form className="flex flex-col gap-4" onSubmit={applyFilters}>
             <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
               <ManufacturerSelect allowAny="All manufacturers" value={mfgInput} onChange={setMfgInput} />
-              <Field
-                label="Agreement ID"
-                value={agreeInput}
-                placeholder="UUID"
-                onChange={(e) => setAgreeInput(e.target.value)}
-              />
+              <AgreementSelect value={agreeInput} onChange={setAgreeInput} />
               <Field
                 label="Invoice from"
                 type="date"
@@ -408,6 +428,11 @@ export function MissedClaimsPage() {
                             <th scope="col" className="py-2 pr-4 text-right font-medium">
                               Amount
                             </th>
+                            {can("claim_batch.create") && (
+                              <th scope="col">
+                                <span className="sr-only">Actions</span>
+                              </th>
+                            )}
                           </tr>
                         </thead>
                         <tbody>
@@ -424,6 +449,21 @@ export function MissedClaimsPage() {
                               <td className="py-2 pr-4 text-right font-mono font-medium">
                                 {formatMoney(g.amount)}
                               </td>
+                              {can("claim_batch.create") && (
+                                <td className="py-1.5 text-right">
+                                  {g.manufacturer_id && (
+                                    <Button
+                                      variant="secondary"
+                                      className="px-2.5 py-1 text-xs"
+                                      onClick={() =>
+                                        g.manufacturer_id && claimGroup(g.manufacturer_id, g.agreement_id)
+                                      }
+                                    >
+                                      Claim these
+                                    </Button>
+                                  )}
+                                </td>
+                              )}
                             </tr>
                           ))}
                         </tbody>
@@ -454,7 +494,9 @@ export function MissedClaimsPage() {
                         <tbody>
                           {summary.data.exceptions.map((ex, idx) => (
                             <tr key={`${ex.code}-${idx}`} className="border-t border-line">
-                              <td className="py-2 pr-4 font-mono text-xs">{ex.code ?? "—"}</td>
+                              <td className="py-2 pr-4">
+                                <ExceptionCell code={ex.code} />
+                              </td>
                               <td className="py-2 pr-4 text-right font-mono">{ex.lines}</td>
                               <td className="py-2 pr-4 text-right font-mono font-medium">
                                 {formatMoney(ex.stored_amount)}

@@ -4,7 +4,7 @@ import { useState } from "react";
 import { Alert, Button, Card, Empty, Field } from "../../components/ui";
 import { api } from "../../lib/api/client";
 import { ApiError, unwrap } from "../../lib/api/errors";
-import { KeyValueGrid, TraceTree, ValidationDetailsAlert } from "./common";
+import { ExceptionCell, KeyValueGrid, TraceTree, ValidationDetailsAlert } from "./common";
 import { RESULT_STATUS_LABELS, type DraftPreviewLine } from "./logic";
 import { formatDate, formatMoney, formatQty } from "../../lib/format";
 
@@ -179,7 +179,9 @@ export function DraftPreviewPanel({ draftId }: { draftId: string }) {
                           <td className="py-2 pr-4">{line.line_number}</td>
                           <td className="py-2 pr-4">{formatDate(line.invoice_date)}</td>
                           <td className="py-2 pr-4">{RESULT_STATUS_LABELS[line.status] ?? line.status}</td>
-                          <td className="py-2 pr-4">{line.exception_code ?? "—"}</td>
+                          <td className="py-2 pr-4">
+                            <ExceptionCell code={line.exception_code} />
+                          </td>
                           <td className="py-2 pr-4 text-right font-mono">{formatMoney(line.claim_amount)}</td>
                           <td className="py-2 pr-4 text-right font-mono">
                             {formatQty(line.eligible_quantity)}

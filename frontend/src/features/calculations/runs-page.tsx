@@ -16,7 +16,7 @@ import {
   usePager,
 } from "../masterdata/common";
 import { CalculationsNav } from "./common";
-import { RUN_STATUSES, RUN_STATUS_LABELS, flattenKeyValues, isPlainObject, type RunOut } from "./logic";
+import { RUN_STATUSES, RUN_STATUS_LABELS, isPlainObject, runSummary, type RunOut } from "./logic";
 import { formatDate, formatDateTime } from "../../lib/format";
 
 function formatRunError(err: Record<string, unknown> | null | undefined): string {
@@ -276,30 +276,24 @@ export function RunsPage() {
               {
                 header: "Scope",
                 cell: (r) => {
-                  const entries = flattenKeyValues(r.scope);
-                  return entries.length === 0 ? (
-                    "—"
-                  ) : (
+                  const s = r.scope as { date_from?: string; date_to?: string; manufacturer_ids?: string[] };
+                  if (!s.date_from) return "—";
+                  const n = s.manufacturer_ids?.length ?? 0;
+                  return (
                     <span className="text-xs text-muted">
-                      {entries.map((e) => `${e.key}: ${e.value}`).join(", ")}
+                      {formatDate(s.date_from)} – {formatDate(s.date_to)} ·{" "}
+                      {n === 0 ? "all manufacturers" : `${n} manufacturer${n === 1 ? "" : "s"}`}
                     </span>
                   );
                 },
               },
               {
-                header: "Totals / Error",
+                header: "Result",
                 cell: (r) => {
                   if (r.status === "failed" && r.error) {
                     return <span className="text-xs text-danger">{formatRunError(r.error)}</span>;
                   }
-                  const entries = flattenKeyValues(r.totals);
-                  return entries.length === 0 ? (
-                    "—"
-                  ) : (
-                    <span className="font-mono text-xs">
-                      {entries.map((e) => `${e.key}: ${e.value}`).join(", ")}
-                    </span>
-                  );
+                  return <span className="text-sm whitespace-nowrap">{runSummary(r.totals)}</span>;
                 },
               },
               {

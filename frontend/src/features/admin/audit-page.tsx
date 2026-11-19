@@ -1,10 +1,11 @@
-import { useInfiniteQuery } from "@tanstack/react-query";
+import { useInfiniteQuery, useQuery } from "@tanstack/react-query";
 import { useState } from "react";
 
 import { Button, Card, Empty, ErrorAlert, Field, Loading, PermissionDenied } from "../../components/ui";
 import { api } from "../../lib/api/client";
 import { ApiError, unwrap } from "../../lib/api/errors";
 import { formatDateTime } from "../../lib/format";
+import { SelectField } from "../masterdata/common";
 
 interface Filters {
   action: string;
@@ -42,6 +43,11 @@ export function AuditPage() {
     getNextPageParam: (last) => last.page.next_cursor,
   });
   const rows = query.data?.pages.flatMap((p) => p.data) ?? [];
+  const members = useQuery({
+    queryKey: ["users"],
+    queryFn: () => unwrap(api.GET("/api/v1/users")),
+    retry: false,
+  });
 
   if ((query.error as ApiError)?.status === 403) return <PermissionDenied />;
 
@@ -66,11 +72,18 @@ export function AuditPage() {
           value={draft.entity_type}
           onChange={(e) => setDraft({ ...draft, entity_type: e.target.value.trim() })}
         />
-        <Field
-          label="Actor user id"
+        <SelectField
+          label="Person"
           value={draft.actor_user_id}
-          onChange={(e) => setDraft({ ...draft, actor_user_id: e.target.value.trim() })}
-        />
+          onChange={(e) => setDraft({ ...draft, actor_user_id: e.target.value })}
+        >
+          <option value="">Anyone</option>
+          {members.data?.data.map((m) => (
+            <option key={m.user_id} value={m.user_id}>
+              {m.full_name || m.email}
+            </option>
+          ))}
+        </SelectField>
         <Field
           label="From"
           type="date"

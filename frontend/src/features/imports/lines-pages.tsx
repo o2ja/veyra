@@ -14,7 +14,7 @@ import {
   SelectField,
   usePager,
 } from "../masterdata/common";
-import { formatDate, formatMoney, formatQty } from "../../lib/format";
+import { formatDate, formatDateTime, formatMoney, formatQty } from "../../lib/format";
 
 type Lineage = components["schemas"]["Lineage"];
 type Kind = "sales" | "purchases";
@@ -112,6 +112,11 @@ export function LinesPage({ kind }: { kind: Kind }) {
     enabled: kind === "purchases",
   });
   const query = kind === "sales" ? sales : purchases;
+  // shortcut: the 50 most recent imports; older ones are still reachable from each import's own page.
+  const imports = useQuery({
+    queryKey: ["imports", "picker"],
+    queryFn: () => unwrap(api.GET("/api/v1/imports", { params: { query: { limit: 50 } } })),
+  });
 
   return (
     <>
@@ -159,11 +164,18 @@ export function LinesPage({ kind }: { kind: Kind }) {
             value={get("date_to")}
             onChange={(e) => set("date_to", e.target.value)}
           />
-          <Field
-            label="Import batch ID"
+          <SelectField
+            label="Import"
             value={get("import_batch_id")}
-            onChange={(e) => set("import_batch_id", e.target.value.trim())}
-          />
+            onChange={(e) => set("import_batch_id", e.target.value)}
+          >
+            <option value="">All imports</option>
+            {imports.data?.data.map((i) => (
+              <option key={i.id} value={i.id}>
+                {formatDateTime(i.created_at)} · {i.import_type} · {i.status.replaceAll("_", " ")}
+              </option>
+            ))}
+          </SelectField>
           {kind === "sales" && (
             <EntityPicker
               kind="customer"

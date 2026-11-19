@@ -278,7 +278,7 @@ function SettingsForm({ manufacturerId, initial }: { manufacturerId: string; ini
   );
 }
 
-function ReasonCodeMappings({ manufacturerId }: { manufacturerId: string }) {
+export function ReasonCodeMappings({ manufacturerId }: { manufacturerId: string }) {
   const { can } = useSession();
   const editable = can("masterdata.write");
   const [rows, setRows] = useState<Mapping[] | null>(null);

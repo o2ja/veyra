@@ -1,13 +1,12 @@
 import { useQuery } from "@tanstack/react-query";
-import { useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 
-import { Button, Card, Empty, ErrorAlert, Field, Loading, PermissionDenied } from "../../components/ui";
+import { Card, Empty, ErrorAlert, Loading, PermissionDenied } from "../../components/ui";
 import { api } from "../../lib/api/client";
 import { ApiError, unwrap } from "../../lib/api/errors";
-import { DataTable, PagerControls, usePager } from "../masterdata/common";
+import { AgreementSelect, DataTable, PagerControls, SelectField, usePager } from "../masterdata/common";
 import { CalculationsNav, ValidationDetailsAlert } from "./common";
-import { type AccrualOut } from "./logic";
+import { runSummary, type AccrualOut } from "./logic";
 import { formatDate, formatMoney, formatQty } from "../../lib/format";
 
 export function RebatesPage() {
@@ -16,8 +15,11 @@ export function RebatesPage() {
   const agreementFilter = searchParams.get("agreement_id") ?? "";
   const runFilter = searchParams.get("run_id") ?? "";
 
-  const [agreementInput, setAgreementInput] = useState(agreementFilter);
-  const [runInput, setRunInput] = useState(runFilter);
+  const runs = useQuery({
+    queryKey: ["calculation-runs", "picker"],
+    queryFn: () =>
+      unwrap(api.GET("/api/v1/calculation-runs", { params: { query: { status: "completed", limit: 50 } } })),
+  });
 
   const tracker = useQuery({
     queryKey: ["rebate-tracker"],
@@ -58,15 +60,10 @@ export function RebatesPage() {
     );
   }
 
-  function applyFilters(e: React.FormEvent) {
-    e.preventDefault();
+  function setFilter(key: string, value: string) {
     const next = new URLSearchParams(searchParams);
-    const ag = agreementInput.trim();
-    const rn = runInput.trim();
-    if (ag) next.set("agreement_id", ag);
-    else next.delete("agreement_id");
-    if (rn) next.set("run_id", rn);
-    else next.delete("run_id");
+    if (value) next.set(key, value);
+    else next.delete(key);
     setSearchParams(next, { replace: true });
     pager.reset();
   }
@@ -198,27 +195,21 @@ export function RebatesPage() {
         </Card>
 
         <Card title="Accrual ledger">
-          <form className="mb-4 flex flex-wrap items-end gap-3" onSubmit={applyFilters}>
-            <div className="min-w-56 flex-1">
-              <Field
-                label="Agreement ID"
-                value={agreementInput}
-                placeholder="UUID"
-                onChange={(e) => setAgreementInput(e.target.value)}
-              />
-            </div>
-            <div className="min-w-56 flex-1">
-              <Field
-                label="Run ID"
-                value={runInput}
-                placeholder="UUID"
-                onChange={(e) => setRunInput(e.target.value)}
-              />
-            </div>
-            <Button type="submit" variant="secondary">
-              Apply
-            </Button>
-          </form>
+          <div className="mb-4 grid gap-3 sm:grid-cols-2">
+            <AgreementSelect value={agreementFilter} onChange={(id) => setFilter("agreement_id", id)} />
+            <SelectField
+              label="Calculation run"
+              value={runFilter}
+              onChange={(e) => setFilter("run_id", e.target.value)}
+            >
+              <option value="">All runs</option>
+              {runs.data?.data.map((r) => (
+                <option key={r.id} value={r.id}>
+                  {formatDate(r.run_date)} · {runSummary(r.totals)}
+                </option>
+              ))}
+            </SelectField>
+          </div>
 
           {accrualsErr ? (
             <ValidationDetailsAlert error={accrualsErr} />

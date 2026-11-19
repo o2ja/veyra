@@ -1,7 +1,7 @@
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
 
-import { Button, Card, ErrorAlert, PermissionDenied } from "../../components/ui";
+import { Badge, Button, Card, ErrorAlert, PermissionDenied } from "../../components/ui";
 import { api } from "../../lib/api/client";
 import { ApiError, unwrap } from "../../lib/api/errors";
 import { useSession } from "../../lib/session";
@@ -11,7 +11,14 @@ import { DRAFT_STATUSES, DRAFT_STATUS_LABELS, emptyPayload } from "./logic";
 import { formatDateTime } from "../../lib/format";
 
 type DraftStatus = (typeof DRAFT_STATUSES)[number];
-type FilterStatus = DraftStatus | "all";
+type FilterStatus = DraftStatus | "all" | "open";
+
+const OPEN_STATUSES: DraftStatus[] = ["draft", "pending_approval"];
+const SOURCE_LABELS: Record<string, string> = {
+  manual: "Typed in",
+  spreadsheet_template: "Spreadsheet",
+  ai_extraction: "Read by AI",
+};
 
 function isDraftStatus(v: string | null): v is DraftStatus {
   return Boolean(v && (DRAFT_STATUSES as readonly string[]).includes(v));
@@ -23,10 +30,10 @@ export function DraftsPage() {
   const [searchParams, setSearchParams] = useSearchParams();
   const pager = usePager();
 
-  const defaultStatus: DraftStatus = can("agreement.approve") ? "pending_approval" : "draft";
+  // Default to every open draft so an AI-generated draft is never hidden behind a role-based filter.
   const paramStatus = searchParams.get("status");
   const statusFilter: FilterStatus =
-    paramStatus === "all" ? "all" : isDraftStatus(paramStatus) ? paramStatus : defaultStatus;
+    paramStatus === "all" ? "all" : isDraftStatus(paramStatus) ? paramStatus : "open";
   const agreementIdParam = searchParams.get("agreement_id");
 
   const list = useQuery({
@@ -36,7 +43,8 @@ export function DraftsPage() {
         api.GET("/api/v1/agreement-drafts", {
           params: {
             query: {
-              status: statusFilter === "all" ? null : [statusFilter],
+              status:
+                statusFilter === "all" ? null : statusFilter === "open" ? OPEN_STATUSES : [statusFilter],
               agreement_id: agreementIdParam || null,
               limit: 50,
               cursor: pager.cursor,
@@ -92,6 +100,7 @@ export function DraftsPage() {
               pager.reset();
             }}
           >
+            <option value="open">All open (draft + pending approval)</option>
             <option value="all">All statuses</option>
             {DRAFT_STATUSES.map((st) => (
               <option key={st} value={st}>
@@ -119,9 +128,16 @@ export function DraftsPage() {
             },
             {
               header: "Status",
-              cell: (d) => DRAFT_STATUS_LABELS[d.status] ?? d.status,
+              cell: (d) => (
+                <span className="flex flex-wrap items-center gap-1.5">
+                  {DRAFT_STATUS_LABELS[d.status] ?? d.status}
+                  {d.source === "ai_extraction" && d.status === "draft" && (
+                    <Badge tone="warn">Needs review</Badge>
+                  )}
+                </span>
+              ),
             },
-            { header: "Source", cell: (d) => d.source },
+            { header: "Source", cell: (d) => SOURCE_LABELS[d.source] ?? d.source },
             {
               header: "Agreement",
               cell: (d) =>

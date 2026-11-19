@@ -1,5 +1,5 @@
 import type { components } from "../../api/schema";
-import { formatDate } from "../../lib/format";
+import { formatDate, formatMoney, formatQty } from "../../lib/format";
 
 export type CaseOut = components["schemas"]["CaseOut"];
 export type SummaryOut = components["schemas"]["SummaryOut"];
@@ -60,6 +60,64 @@ export const statusLabel = (status: string): string => CASE_STATUS_LABELS[status
 export const caseTypeLabel = (caseType: string): string => CASE_TYPE_LABELS[caseType as CaseType] ?? caseType;
 
 export const reasonLabel = (code: string): string => code.replaceAll("_", " ");
+
+interface DisputeCheck {
+  name: string;
+  inputs: Record<string, string>;
+  passed: boolean | null;
+}
+
+const ASSESSMENT_TEXT: Record<string, string> = {
+  supported: "Worth disputing: the frozen claim data contradicts the manufacturer's reason.",
+  weak: "Weak dispute: the frozen claim data agrees with the manufacturer's reason.",
+  unknown: "Not enough data on file to judge the manufacturer's reason.",
+};
+
+function checkSentence({ name, inputs: i, passed }: DisputeCheck): string {
+  const yes = passed === true;
+  switch (name) {
+    case "line_date_in_valid_range":
+      return passed === null
+        ? "The invoice date or the agreement period is not on file."
+        : `Invoice date ${formatDate(i.line_date)} is ${yes ? "inside" : "outside"} the agreement period (${formatDate(i.valid_from)} – ${formatDate(i.valid_to)}).`;
+    case "customer_in_scope":
+      return passed === null
+        ? "Whether the customer is covered is not on file."
+        : `The customer is ${yes ? "" : "not "}covered by the agreement.`;
+    case "unit_price_matches_sell_price":
+      return passed === null
+        ? "The invoiced price or the agreed sell price is not on file."
+        : `Invoiced unit price ${formatMoney(i.unit_price)} ${yes ? "matches" : "does not match"} the agreed sell price ${formatMoney(i.sell_price)} (tolerance ${formatMoney(i.tolerance)}).`;
+    case "consumption_within_max_quantity":
+      return passed === null
+        ? "The authorized maximum quantity is not on file."
+        : `Quantity claimed to date (${formatQty(i.consumption)}) is ${yes ? "within" : "over"} the authorized maximum of ${formatQty(i.max_quantity)}.`;
+    case "no_other_active_claim_or_payment":
+      return passed === null
+        ? "Whether this sale was claimed or paid elsewhere is not on file."
+        : yes
+          ? "No other claim or payment exists for this sale."
+          : `${i.other_active_claims} other claim(s) or payment(s) exist for this sale.`;
+    case "submitted_within_claim_window":
+      return passed === null
+        ? "The submission date or the claim window is not on file."
+        : `The claim was submitted on ${formatDate(i.submitted_on)}, ${yes ? "before" : "after"} the claim window closed (${formatDate(i.claim_window_end)}).`;
+    default:
+      return `${name.replaceAll("_", " ")}: ${passed === null ? "unknown" : yes ? "passed" : "failed"}.`;
+  }
+}
+
+/** Plain-English reading of the stored dispute assessment (recovery/assessment.py). */
+export function disputeSentences(
+  doc: Record<string, unknown> | null | undefined,
+): { headline: string; checks: { text: string; passed: boolean | null }[] } | null {
+  if (!doc) return null;
+  const checks = Array.isArray(doc.checks) ? (doc.checks as DisputeCheck[]) : [];
+  return {
+    headline: ASSESSMENT_TEXT[String(doc.assessment)] ?? String(doc.assessment),
+    checks: checks.map((c) => ({ text: checkSentence(c), passed: c.passed })),
+  };
+}
 
 export const ownerText = (
   ownerUserId: string | null | undefined,

@@ -26,7 +26,9 @@ import {
   emptyItem,
   emptyTier,
   formatValue,
+  friendlyIssueMessage,
   issueFieldId,
+  issueFieldLabel,
   itemIndexFromIssuePath,
   pageForItemIndex,
   paginateItems,
@@ -880,7 +882,8 @@ function ValidationPanel({
                       className="flex flex-wrap items-center justify-between gap-2 rounded-md border border-danger px-3 py-2 text-sm text-danger"
                     >
                       <div>
-                        <span className="font-mono text-xs">{issue.field}</span>: {issue.message}
+                        <span className="font-medium">{issueFieldLabel(issue.field)}</span>:{" "}
+                        {friendlyIssueMessage(issue.message)}
                       </div>
                       {target && (
                         <Button variant="secondary" onClick={() => onFocusIssue(issue)}>
@@ -908,7 +911,8 @@ function ValidationPanel({
                     >
                       <div className="flex flex-col gap-1">
                         <div>
-                          <span className="font-mono text-xs">{issue.field}</span>: {issue.message}
+                          <span className="font-medium">{issueFieldLabel(issue.field)}</span>:{" "}
+                          {friendlyIssueMessage(issue.message)}
                         </div>
                         {warnId && canEdit && (
                           <Checkbox

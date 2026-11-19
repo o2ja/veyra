@@ -3,7 +3,6 @@ import { describe, expect, it } from "vitest";
 import {
   CASE_TYPE_LABELS,
   MATCH_METHOD_LABELS,
-  REASON_CODES,
   RECONCILIATION_STATE_LABELS,
   REMITTANCE_CHANNEL_LABELS,
   REMITTANCE_DOC_TYPE_LABELS,
@@ -21,8 +20,6 @@ describe("reconciliation logic", () => {
     expect(MATCH_METHOD_LABELS["exact_reference"]).toBe("T1 Exact reference");
     expect(MATCH_METHOD_LABELS["subset_sum"]).toBe("T5 Subset sum");
     expect(CASE_TYPE_LABELS["short_paid"]).toBe("Short-paid");
-    expect(REASON_CODES).toContain("rejected_agreement_expired");
-    expect(REASON_CODES).toContain("short_paid_unexplained");
   });
 
   it("buildEvidenceTree parses arbitrary nested objects", () => {

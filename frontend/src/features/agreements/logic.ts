@@ -285,6 +285,66 @@ export function issueFieldId(path: string): string | null {
   return `field-${parts.join("-")}`;
 }
 
+const SECTION_LABELS: Record<string, string> = {
+  header: "",
+  rules: "Rules",
+  customers: "Customer",
+  items: "Item",
+  tiers: "Tier",
+};
+
+/** `payload.items[3].sell_price` → "Item 4 · Sell price"; `header.valid_to` → "Valid to". */
+export function issueFieldLabel(path: string): string {
+  const parts = path
+    .trim()
+    .replace(/^payload\.?/, "")
+    .replace(/\[(\d+)\]/g, ".$1")
+    .split(".")
+    .filter(Boolean);
+  const words = parts.map((p, i) => {
+    if (/^\d+$/.test(p)) return `${Number(p) + 1}`;
+    if (i === 0 && p in SECTION_LABELS) return SECTION_LABELS[p] ?? p;
+    const text = p.replaceAll("_", " ");
+    return text.charAt(0).toUpperCase() + text.slice(1);
+  });
+  // "Item", "4", "Sell price" → "Item 4 · Sell price"
+  const out: string[] = [];
+  for (const w of words) {
+    if (!w) continue;
+    if (/^\d+$/.test(w) && out.length) out[out.length - 1] += ` ${w}`;
+    else out.push(w);
+  }
+  return out.join(" · ") || "Agreement";
+}
+
+const ISSUE_PATTERNS: [RegExp, (m: RegExpExecArray) => string][] = [
+  [/^Field required$/i, () => "This is required."],
+  [/^Input should be a valid (?:decimal|number|integer)/i, () => "Enter a number, for example 12.50."],
+  [/^Input should be a valid date/i, () => "Enter a date as YYYY-MM-DD."],
+  [/^String should have at least 1 character/i, () => "This can't be empty."],
+  [/^String should have at most (\d+) characters?/i, (m) => `Keep this to ${m[1]} characters or fewer.`],
+  [/^Input should be greater than or equal to (\S+)/i, (m) => `Must be ${m[1]} or more.`],
+  [/^Input should be greater than (\S+)/i, (m) => `Must be more than ${m[1]}.`],
+  [/^Input should be less than or equal to (\S+)/i, (m) => `Must be ${m[1]} or less.`],
+  [/^Input should be less than (\S+)/i, (m) => `Must be less than ${m[1]}.`],
+  [
+    /^Decimal input should have no more than (\d+) decimal places?/i,
+    (m) => `Use at most ${m[1]} decimal places.`,
+  ],
+  [/^Input should be (.+)$/i, (m) => `Choose one of: ${m[1]?.replaceAll("'", "").replace(/ or /, ", ")}.`],
+  [/^Extra inputs are not permitted/i, () => "This field is not used for this kind of agreement."],
+  [/^Value error, (.+)$/i, (m) => (m[1] ?? "").charAt(0).toUpperCase() + (m[1] ?? "").slice(1)],
+];
+
+/** Server validation messages (often raw Pydantic text) rewritten for an analyst; unknown text passes through. */
+export function friendlyIssueMessage(message: string): string {
+  for (const [re, fn] of ISSUE_PATTERNS) {
+    const m = re.exec(message.trim());
+    if (m) return fn(m);
+  }
+  return message;
+}
+
 export function itemIndexFromIssuePath(path: string): number | null {
   const m = /(?:^|\.)items(?:\[(\d+)\]|\.(\d+))(?:\.|$)/.exec(path.trim());
   if (!m) return null;
