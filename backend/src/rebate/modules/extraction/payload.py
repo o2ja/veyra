@@ -18,13 +18,10 @@ from rebate.modules.extraction import parsers as p
 from rebate.modules.extraction.verification import Kind, MergedField, canonical, spec_for
 
 ROW = re.compile(r"^(items|customers|tiers|exclusions_text)\[(.*?)\](?:\.(\w+))?$")
-_SYNTHETIC = re.compile(r"\s*\(synthetic\)\s*", re.IGNORECASE)
 PRICE_TOLERANCE = "0.005"
 
 
-def name_key(name: str) -> str:
-    """Comparable form of a party name: case, spacing, punctuation and the dataset label are ignored."""
-    return re.sub(r"[^a-z0-9]+", " ", _SYNTHETIC.sub(" ", name).casefold()).strip()
+name_key = p.name_key  # one definition for the master-data lookup and the pass comparison
 
 
 def jsonable(value: Any) -> Any:

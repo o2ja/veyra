@@ -168,6 +168,21 @@ def parse_iso_date(value: object) -> date:
     return date.fromisoformat(value)
 
 
+def parse_date(value: object) -> date:
+    """ISO ``YYYY-MM-DD`` as is; otherwise a written date ("January 1, 2026", "1 Jan 2026", "12/31/2026")
+    only when it names exactly one date without a day/month ambiguity. Never guesses: the verifier still
+    requires that date to be stated in the evidence."""
+    try:
+        return parse_iso_date(value)
+    except ValueError:
+        pass
+    if isinstance(value, str):
+        stated = dates(value)
+        if len({d for d, _ in stated}) == 1 and not any(ambiguous for _, ambiguous in stated):
+            return stated[0][0]
+    raise ValueError(f"not a recognisable date (use YYYY-MM-DD): {value!r}")
+
+
 # ---- units of measure, identifiers, names ----------------------------------------------------------
 
 _UOM_SYNONYMS = {
@@ -200,6 +215,14 @@ def contains_identifier(text: str, value: str) -> bool:
     """``value`` occurs as a whole token: ``SPA-VOLT-2026-88`` is not found in ``SPA-VOLT-2026-884``."""
     pattern = r"(?<![a-z0-9\-_/])" + re.escape(norm(value)) + r"(?![a-z0-9_/]|-[a-z0-9])"
     return re.search(pattern, norm(text)) is not None
+
+
+_SYNTHETIC = re.compile(r"\s*\(synthetic\)\s*", re.IGNORECASE)
+
+
+def name_key(name: str) -> str:
+    """Comparable form of a party name: case, spacing, punctuation and the dataset label are ignored."""
+    return re.sub(r"[^a-z0-9]+", " ", _SYNTHETIC.sub(" ", name).casefold()).strip()
 
 
 def contains_phrase(text: str, value: str) -> bool:

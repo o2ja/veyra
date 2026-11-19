@@ -321,7 +321,7 @@ def _canonical(spec: FieldSpec, value: Any) -> Any:
         case Kind.money | Kind.rate | Kind.quantity:
             return p.parse_decimal(value)
         case Kind.date:
-            return p.parse_iso_date(value)
+            return p.parse_date(value)
         case Kind.identifier:
             return p.parse_identifier(value)
         case Kind.uom:
@@ -354,8 +354,8 @@ def _canonical(spec: FieldSpec, value: Any) -> Any:
                 raise ValueError("measurement_period needs kind, start, end")
             return {
                 "kind": value["kind"],
-                "start": p.parse_iso_date(value["start"]),
-                "end": p.parse_iso_date(value["end"]),
+                "start": p.parse_date(value["start"]),
+                "end": p.parse_date(value["end"]),
             }
 
 
@@ -417,6 +417,26 @@ _BLOCKING_INDICATORS = {
 }
 
 
+CONTEXT_FLAG = "derived_from_context"
+# Terms a contract usually implies in a neighbouring sentence rather than in the quoted one: who it applies to
+# ("applies only to ...: <list of customers>") and the cost the credit is based on. Other enums stay strict.
+_CONTEXT_TABLES = frozenset({"customer_scope", "cost_source"})
+
+
+def _context_states(
+    spec: FieldSpec, value: Any, text: str, where: Span, indicators: Sequence[Indicator]
+) -> bool:
+    """The quote itself names no keyword, but its whole page/cell states exactly the claimed reading."""
+    if spec.keywords not in _CONTEXT_TABLES:
+        return False
+    place = (where.page, where.sheet, where.cell)
+    if any(
+        ind.kind in _BLOCKING_INDICATORS and (ind.page, ind.sheet, ind.cell) == place for ind in indicators
+    ):
+        return False  # hidden or instruction text on this page: only the cited words count
+    return p.keyword_values(spec.keywords, text) == {value}
+
+
 def verify_field(document: Document, cf: CandidateField, indicators: Sequence[Indicator] = ()) -> FieldResult:
     spec = spec_for(cf.path)
 
@@ -457,6 +477,12 @@ def verify_field(document: Document, cf: CandidateField, indicators: Sequence[In
     if blocked:
         return fail(*sorted(blocked), span=span)
     supported, flags = _check_value(spec, value, source)
+    if (
+        not supported
+        and flags == ("value_not_derivable",)
+        and _context_states(spec, value, text, where, indicators)
+    ):
+        supported, flags = True, (CONTEXT_FLAG,)
     if not supported:
         return fail(*(flags or ("value_not_in_evidence",)), span=span)
     return FieldResult(cf.path, Status.verified, cf.value, cf.value, flags, span, text_method)
@@ -530,7 +556,9 @@ def _keyed(results: Mapping[str, FieldResult]) -> dict[str, FieldResult]:
 def _effective(r: FieldResult | None) -> Any:
     if r is None or r.status is not Status.verified:
         return None
-    return _canonical(spec_for(r.path), r.value)
+    spec = spec_for(r.path)
+    # names are compared the way master data is looked up, so "ACME Corp (SYNTHETIC)" and "Acme Corp" agree
+    return p.name_key(r.value) if spec.kind is Kind.name else _canonical(spec, r.value)
 
 
 def _merge(key: str, a: FieldResult | None, b: FieldResult | None, warned: bool) -> MergedField:
@@ -560,6 +588,8 @@ def _merge(key: str, a: FieldResult | None, b: FieldResult | None, warned: bool)
         reasons.append("ocr_text")
     if "ambiguous_date" in reasons:
         conf = Confidence.low
+    if CONTEXT_FLAG in reasons:
+        conf = min(conf, Confidence.medium)  # not stated in the quoted words: the reviewer acknowledges it
     if warned:
         conf = Confidence(max(Confidence.low, conf - 1))
         reasons.append("validator_warning")

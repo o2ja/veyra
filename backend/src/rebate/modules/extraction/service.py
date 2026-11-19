@@ -680,7 +680,12 @@ def _run(db: Session, ctx: JobContext, ex: DocumentExtraction, ai: Engine) -> No
         if ctx.attempt < JOB_MAX_ATTEMPTS:
             raise  # job-level retry with backoff (bounded); the passes saved so far are reused
         raise _Stop("failed", exc.code, "The AI provider could not be reached; enter manually.") from exc
-    except (gateway.InvalidOutput, gateway.NotConfigured, gateway.ProviderFailure) as exc:
+    except (
+        gateway.InvalidOutput,
+        gateway.NotConfigured,
+        gateway.ProviderFailure,
+        gateway.ProviderRejected,  # permanent 4xx: no job retry, the user sees the real reason
+    ) as exc:
         raise _Stop("failed", exc.code, str(exc)) from exc
     finally:
         if gw is not None:
