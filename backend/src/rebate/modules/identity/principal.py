@@ -1,7 +1,8 @@
 """Resolve the session cookie into a ``Principal`` for one request (called by the API layer).
 
 Fail closed: an expired/revoked session, a disabled user, or a membership that is no longer active
-yields no principal (or no tenant). Role and permissions are read from the DB on every request
+yields no principal (or no tenant). A tenant whose status is not ``active`` raises ``TenantSuspended``
+(403) on every request, whatever the session age. Role and permissions are read from the DB on every request
 (SECURITY.md §11.13: no stale roles).
 """
 
@@ -10,6 +11,7 @@ from sqlalchemy.orm import Session
 
 from rebate.core.config import Settings
 from rebate.core.db import set_tenant
+from rebate.core.errors import TenantSuspended
 from rebate.core.request import Principal
 from rebate.core.security import hash_token
 from rebate.modules import tenancy
@@ -30,6 +32,8 @@ def resolve(db: Session, settings: Settings, token: str) -> tuple[Principal | No
     tenant_id, role, mfa_required = None, None, False
     if row.active_tenant_id is not None:
         set_tenant(db, row.active_tenant_id)
+        if not tenancy.is_active(db, row.active_tenant_id):
+            raise TenantSuspended()
         membership = tenancy.membership(db, row.active_tenant_id, user.id)
         if membership is not None and membership.status == "active":
             tenant_id, role = row.active_tenant_id, membership.role

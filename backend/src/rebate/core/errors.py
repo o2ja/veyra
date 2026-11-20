@@ -74,6 +74,11 @@ class Forbidden(DomainError):
     message = "You do not have permission to do this."
 
 
+class TenantSuspended(Forbidden):
+    code = "tenant_suspended"
+    message = "Account suspended. Please contact support."
+
+
 class CsrfFailed(DomainError):
     code = "csrf_failed"
     status_code = 403

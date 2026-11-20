@@ -67,7 +67,7 @@ Legend: PK primary key · FK composite `(tenant_id, x)` unless noted · `NN` not
 
 **sessions** (global): `id text` (SHA-256 of opaque token) PK, `user_id`, `active_tenant_id`, `created_at`, `last_seen_at`, `idle_expires_at`, `absolute_expires_at`, `mfa_verified bool`, `ip inet`, `user_agent`, `revoked_at`. Index `(user_id)`. Added S1: `reauthenticated_at` (step-up), `mfa_failed_count int NN default 0`.
 
-**tenants**: `id`, `name NN`, `slug UNIQUE`, `status` (`active`,`suspended`,`closed`), `created_at`.
+**tenants**: `id`, `name NN`, `slug UNIQUE`, `status` (`active`,`suspended`,`closed`), `created_at`. A tenant that is not `active` is refused on every request (403 `tenant_suspended`) and cannot accept invitations; operators switch it with `infra/scripts/ops/suspend-tenant.sql` / `unsuspend-tenant.sql` (`infra/runbooks/suspend-tenant.md`).
 
 **tenant_settings** (1:1): `tenant_id PK/FK`, `business_timezone text NN default 'America/Chicago'`, `currency_code char(3) NN default 'USD'`, `mfa_required bool NN default true`, `four_eyes_required bool NN default true`, `ai_processing_enabled bool NN default false`, `retention_years int NN default 7`, `default_claim_rounding jsonb`.
 *`ai_processing_enabled` defaults to false: AI is opt-in per workspace (OD-2).*
