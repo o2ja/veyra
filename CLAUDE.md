@@ -131,7 +131,7 @@ Modules (authoritative list: `docs/ARCHITECTURE.md` §3): `identity, tenancy, au
 - Use the generated API client; never hand-write duplicate API types.
 - No business calculations in the UI; display values from the server. Use `decimal.js` only for display formatting.
 - The server is the authority on permissions; the UI merely hides what the user cannot do.
-- No secrets, tokens or sensitive data in code, `localStorage` or logs. Session cookie is HttpOnly.
+- No secrets, tokens or sensitive data in code, `localStorage` or logs. Session cookie is HttpOnly. One owner-approved exception (2026-11-20): `features/extractions/logic.ts` keeps the contract review's "Looks right" field ids in `localStorage` (non-sensitive, keyed by extraction id and draft `updated_at`).
 - Handle loading, empty, error and permission-denied states. Accessible by default.
 
 ## 11. Database and migration rules

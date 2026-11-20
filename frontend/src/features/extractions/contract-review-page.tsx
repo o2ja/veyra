@@ -7,9 +7,9 @@ import { api } from "../../lib/api/client";
 import { ApiError, unwrap } from "../../lib/api/errors";
 import { formatDate } from "../../lib/format";
 import { useSession } from "../../lib/session";
-import type { DraftOut } from "../agreements/logic";
+import { setAgreementType, type DraftOut, type Payload } from "../agreements/logic";
 import { ExtractionsNav } from "./common";
-import { parseExtractionResult } from "./logic";
+import { parseExtractionResult, readConfirmed, writeConfirmed } from "./logic";
 import {
   buildReview,
   editText,
@@ -164,7 +164,7 @@ export function ContractReviewPage() {
   const { extractionId = "" } = useParams();
   const { can } = useSession();
   const client = useQueryClient();
-  const [confirmed, setConfirmed] = useState<ReadonlySet<string>>(new Set());
+  const [answered, setAnswered] = useState<ReadonlySet<string>>(new Set());
   const [edits, setEdits] = useState<ReadonlyMap<string, string>>(new Map());
   const [submitted, setSubmitted] = useState(false);
 
@@ -201,6 +201,17 @@ export function ContractReviewPage() {
 
   const parsed = parseExtractionResult(detail.data?.result);
   const d = draft.data;
+  const updatedAt = d?.updated_at;
+  // "Looks right" answers survive a reload while the draft is unchanged since they were given
+  const stored = useMemo(
+    () => (updatedAt ? readConfirmed(extractionId, updatedAt) : []),
+    [extractionId, updatedAt],
+  );
+  const confirmed = useMemo(() => new Set([...stored, ...answered]), [stored, answered]);
+  const remember = (next: ReadonlySet<string>, at: string) => {
+    setAnswered(next);
+    writeConfirmed(extractionId, at, next);
+  };
   const review = useMemo(
     () => (parsed && d ? buildReview(parsed, d.payload, d.validation) : null),
     [parsed, d],
@@ -242,11 +253,15 @@ export function ContractReviewPage() {
   const save = useMutation({
     mutationFn: async (v: { item: ReviewItem; value: unknown }) => {
       if (!d || !v.item.path) throw new Error("Nothing to save");
+      const payload =
+        v.item.path === "header.agreement_type" && (v.value === "spa" || v.value === "rebate")
+          ? (setAgreementType(d.payload as unknown as Payload, v.value) as unknown as Record<string, unknown>)
+          : setAt(d.payload, v.item.path, v.value);
       await unwrap(
         api.PUT("/api/v1/agreement-drafts/{draft_id}", {
           params: { path: { draft_id: d.id }, header: { "if-match": `"${d.revision}"` } },
           body: {
-            payload: setAt(d.payload, v.item.path, v.value),
+            payload,
             change_summary: `Contract review: ${v.item.label}`.slice(0, 200),
           },
         }),
@@ -257,7 +272,11 @@ export function ContractReviewPage() {
     },
     onSuccess: (fresh, v) => {
       keep(fresh);
-      setConfirmed((s) => new Set(s).add(v.item.id));
+      // re-read from the server so the counts, checks, estimate and submit state match the database
+      void client.invalidateQueries({ queryKey: ["agreement-drafts", fresh.id] });
+      void client.invalidateQueries({ queryKey: ["document-extractions"] });
+      void client.invalidateQueries({ queryKey: ["draft-preview"] });
+      remember(new Set(confirmed).add(v.item.id), fresh.updated_at);
       setEdits((m) => {
         const next = new Map(m);
         next.delete(v.item.id);
@@ -350,7 +369,7 @@ export function ContractReviewPage() {
         return next;
       }),
     onSave: (value: unknown) => save.mutate({ item, value }),
-    onConfirm: () => setConfirmed((s) => new Set(s).add(item.id)),
+    onConfirm: () => d && remember(new Set(confirmed).add(item.id), d.updated_at),
     onOpen: (page: number) => openDocument.mutate(page),
     editorHref,
   });
