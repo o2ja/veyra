@@ -124,6 +124,9 @@ export function HomePage() {
         <div className="flex flex-wrap items-start justify-between gap-6">
           <div>
             <p className="text-sm text-rail-ink/70">{me?.tenant?.name ?? "Workspace"}</p>
+            <p className="text-xs text-rail-ink/60">
+              Signed in as {me?.user.email} ({me?.role})
+            </p>
             <h1 className="mt-4 text-xs font-semibold tracking-[0.18em] text-rail-ink/60 uppercase">
               Money found
             </h1>
