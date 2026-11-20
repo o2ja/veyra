@@ -119,10 +119,20 @@ def scan_file(db: Session, ctx: JobContext) -> None:
     _notify_admins(db, row)
 
 
+def _file_or_none(db: Session, ctx: JobContext) -> FileObject | None:
+    """``None`` when the row is gone: an unused file deleted (``DELETE /files/{id}``) before this job ran."""
+    try:
+        return _file(db, ctx)
+    except PermanentError:
+        return None
+
+
 @job("files_purge_quarantine", tenant_scoped=True)
 def purge_quarantine(db: Session, ctx: JobContext) -> None:
     """Delete the quarantine copy of a promoted file (versioning keeps the history)."""
-    row = _file(db, ctx)
+    row = _file_or_none(db, ctx)
+    if row is None:
+        return  # deleted meanwhile; files_delete_objects removes the quarantine copy too
     if row.scan_status != "clean" or ctx.tenant_id is None:
         raise PermanentError("only a promoted file's quarantine copy is purged")
     storage.delete(ctx.settings, storage.quarantine_key(ctx.tenant_id, row.id))
@@ -131,7 +141,9 @@ def purge_quarantine(db: Session, ctx: JobContext) -> None:
 @job("files_notify_blocked", tenant_scoped=True)
 def notify_blocked(db: Session, ctx: JobContext) -> None:
     """Email the workspace admins about an infected file or a scan that could not be completed."""
-    row = _file(db, ctx)
+    row = _file_or_none(db, ctx)
+    if row is None:
+        return  # deleted meanwhile: nothing left to warn about
     if ctx.tenant_id is None:
         raise PermanentError("tenant-scoped job without tenant context")
     if row.scan_status == "infected":
@@ -162,3 +174,20 @@ def notify_blocked(db: Session, ctx: JobContext) -> None:
                 ),
             ),
         )
+
+
+@job("files_delete_objects", tenant_scoped=True)
+def delete_objects(db: Session, ctx: JobContext) -> None:
+    """Remove the stored object and any quarantine copy of a deleted file, after the row's deletion committed.
+    Refuses a key outside the workspace or a file whose row still exists; a missing key is a no-op (idempotent)."""
+    if ctx.tenant_id is None:
+        raise PermanentError("tenant-scoped job without tenant context")
+    if _file_or_none(db, ctx) is not None:
+        raise PermanentError("the file still exists")
+    file_id, key = UUID(ctx.payload["file_id"]), ctx.payload["key"]
+    if not (key.startswith(f"tenants/{ctx.tenant_id}/") and key.endswith(f"/{file_id}")):
+        key = storage.quarantine_key(
+            ctx.tenant_id, file_id
+        )  # never promoted, or a key that is not this file's
+    for k in dict.fromkeys((key, storage.quarantine_key(ctx.tenant_id, file_id))):
+        storage.delete(ctx.settings, k)

@@ -6,7 +6,7 @@ import { Alert, Button, Card, ErrorAlert, Field, Loading, PermissionDenied } fro
 import { api } from "../../lib/api/client";
 import { ApiError, unwrap } from "../../lib/api/errors";
 import { useSession } from "../../lib/session";
-import { DataTable, PagerControls, SelectField, usePager, utc } from "../masterdata/common";
+import { DataTable, PagerControls, SelectField, usePager } from "../masterdata/common";
 import {
   ClaimsNav,
   ConfirmDialog,
@@ -18,7 +18,6 @@ import {
   ADJUSTMENT_TYPE_LABELS,
   BATCH_STATUS_LABELS,
   canApproveBatch,
-  formatDecimal,
   getJobRefetchInterval,
   type AdjustmentOut,
   type ExportAccepted,
@@ -26,6 +25,7 @@ import {
   type JobOut,
   type LineOut,
 } from "./logic";
+import { formatDate, formatDateTime, formatMoney, formatQty } from "../../lib/format";
 
 export function ClaimBatchDetailPage() {
   const { batchId = "" } = useParams();
@@ -337,7 +337,7 @@ export function ClaimBatchDetailPage() {
                 </div>
                 <div>
                   <dt className="text-muted">Batch total (lines + carried adjustments, from server)</dt>
-                  <dd className="font-mono text-lg font-semibold text-ok">{formatDecimal(b.total_amount)}</dd>
+                  <dd className="font-mono text-lg font-semibold text-ok">{formatMoney(b.total_amount)}</dd>
                 </div>
                 <div>
                   <dt className="text-muted">Line count</dt>
@@ -349,15 +349,15 @@ export function ClaimBatchDetailPage() {
                 </div>
                 <div>
                   <dt className="text-muted">Created</dt>
-                  <dd>{utc(b.created_at)}</dd>
+                  <dd>{formatDateTime(b.created_at)}</dd>
                 </div>
                 <div>
                   <dt className="text-muted">Approved</dt>
-                  <dd>{b.approved_at ? utc(b.approved_at) : "—"}</dd>
+                  <dd>{b.approved_at ? formatDateTime(b.approved_at) : "—"}</dd>
                 </div>
                 <div>
                   <dt className="text-muted">Submitted</dt>
-                  <dd>{b.submitted_at ? utc(b.submitted_at) : "—"}</dd>
+                  <dd>{b.submitted_at ? formatDateTime(b.submitted_at) : "—"}</dd>
                 </div>
                 <div>
                   <dt className="text-muted">External reference</dt>
@@ -373,7 +373,7 @@ export function ClaimBatchDetailPage() {
                 )}
                 {b.void_reason && (
                   <div className="sm:col-span-2">
-                    <dt className="text-muted">Void reason ({utc(b.voided_at)})</dt>
+                    <dt className="text-muted">Void reason ({formatDateTime(b.voided_at)})</dt>
                     <dd className="font-medium text-danger">{b.void_reason}</dd>
                   </div>
                 )}
@@ -421,22 +421,20 @@ export function ClaimBatchDetailPage() {
                 header: "Document / line",
                 cell: (l) => (l.document_number ? `${l.document_number} #${l.line_number ?? 1}` : "—"),
               },
-              { header: "Invoice date", cell: (l) => l.invoice_date ?? "—" },
+              { header: "Invoice date", cell: (l) => formatDate(l.invoice_date) },
               {
                 header: "Quantity",
-                cell: (l) => <span className="block text-right font-mono">{formatDecimal(l.quantity)}</span>,
+                cell: (l) => <span className="block text-right font-mono">{formatQty(l.quantity)}</span>,
               },
               {
                 header: "Unit amount",
-                cell: (l) => (
-                  <span className="block text-right font-mono">{formatDecimal(l.unit_amount)}</span>
-                ),
+                cell: (l) => <span className="block text-right font-mono">{formatMoney(l.unit_amount)}</span>,
               },
               {
                 header: "Claim amount",
                 cell: (l) => (
                   <span className="block text-right font-mono font-medium">
-                    {formatDecimal(l.claim_amount)}
+                    {formatMoney(l.claim_amount)}
                   </span>
                 ),
               },
@@ -446,14 +444,14 @@ export function ClaimBatchDetailPage() {
                   if (l.frozen_at) {
                     return (
                       <span className="rounded-lg border border-line px-1.5 py-0.5 text-xs font-medium text-ok">
-                        Frozen ({utc(l.frozen_at)})
+                        Frozen ({formatDateTime(l.frozen_at)})
                       </span>
                     );
                   }
                   if (l.released_at) {
                     return (
                       <span className="rounded-lg border border-line px-1.5 py-0.5 text-xs text-muted">
-                        Released ({utc(l.released_at)})
+                        Released ({formatDateTime(l.released_at)})
                       </span>
                     );
                   }
@@ -511,7 +509,7 @@ export function ClaimBatchDetailPage() {
               {
                 header: "Signed amount",
                 cell: (a: AdjustmentOut) => (
-                  <span className="block text-right font-mono font-medium">{formatDecimal(a.amount)}</span>
+                  <span className="block text-right font-mono font-medium">{formatMoney(a.amount)}</span>
                 ),
               },
               {
@@ -534,7 +532,7 @@ export function ClaimBatchDetailPage() {
           open={approveOpen}
           onOpenChange={setApproveOpen}
           title={`Approve claim batch ${b?.batch_number ?? ""}`}
-          description={`Are you sure you want to approve this batch (${b?.line_count ?? 0} lines, ${formatDecimal(
+          description={`Are you sure you want to approve this batch (${b?.line_count ?? 0} lines, ${formatMoney(
             b?.total_amount,
           )} total)? After approval, the batch can be exported and submitted.`}
           confirmLabel="Approve batch"

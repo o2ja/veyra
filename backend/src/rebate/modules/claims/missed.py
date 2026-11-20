@@ -186,3 +186,16 @@ def summary(
         "exceptions": [e._mapping for e in exceptions],
         "lost_to_expiry": {"lines": lost.lines, "amount": lost.amount},
     }
+
+
+def unclaimed_total(db: Session, tenant_id: UUID) -> Decimal:
+    """Sum of claim_amount of the missed claims: the ``totals.amount`` of ``summary`` without filters."""
+    db.execute(text("SET LOCAL jit = off"))  # see missed()
+    total = db.scalar(
+        text(
+            f"WITH {LATEST_SCAN} SELECT COALESCE(sum(l.claim_amount), 0) FROM latest l "  # nosec B608 (module constants, bound values)
+            f"WHERE l.status = 'eligible' AND {UNCLAIMED}"
+        ),
+        {"t": tenant_id},
+    )
+    return Decimal(total)

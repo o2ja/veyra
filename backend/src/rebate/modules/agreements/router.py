@@ -254,6 +254,14 @@ def update_draft(
     return _draft_out(response, d)
 
 
+@router.delete("/agreement-drafts/{draft_id}", status_code=204, operation_id="agreement_draft_delete")
+def delete_draft(
+    request: Request, draft_id: UUID, principal: Annotated[Principal, Depends(require(DRAFT))]
+) -> Response:
+    service.delete_draft(ctx(request).db, _who(request, principal), draft_id)
+    return Response(status_code=204)
+
+
 @router.post("/agreement-drafts/{draft_id}/validate", operation_id="agreement_draft_validate")
 def validate_draft(
     request: Request,

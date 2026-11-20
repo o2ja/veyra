@@ -31,7 +31,7 @@ from rebate.modules.ingestion.normalizers import (
 )
 from rebate.modules.ingestion.readers import EXTRA_CELLS, ReadError, Source, csv_source, records, xlsx_source
 from rebate.modules.ingestion.router import router
-from rebate.modules.ingestion.service import get_template, mapping_sample
+from rebate.modules.ingestion.service import get_template, mapping_sample, waiting_count
 from rebate.modules.ingestion.validators import FIELDS, Field, MappingInvalid, check_mapping, suggest_mapping
 
 __all__ = [
@@ -70,5 +70,6 @@ __all__ = [
     "store",
     "suggest_mapping",
     "text_value",
+    "waiting_count",
     "xlsx_source",
 ]

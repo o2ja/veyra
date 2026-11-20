@@ -106,6 +106,16 @@ def _write(engine: Engine, tenant_id: UUID, extraction_id: UUID, **columns: Any)
 # ---- request and reads --------------------------------------------------------------------------------
 
 
+@files.register_use_source
+def _file_uses(db: Session, tenant_id: UUID, file_id: UUID) -> list[files.Use]:
+    rows = db.scalars(
+        select(DocumentExtraction)
+        .where(DocumentExtraction.tenant_id == tenant_id, DocumentExtraction.file_id == file_id)
+        .order_by(DocumentExtraction.id)
+    )
+    return [files.Use("extraction", x.id, f"{x.kind.capitalize()} extraction ({x.status})") for x in rows]
+
+
 def request_extraction(
     db: Session, who: Who, file_id: UUID, rerun: bool, settings: Settings
 ) -> tuple[DocumentExtraction, bool]:

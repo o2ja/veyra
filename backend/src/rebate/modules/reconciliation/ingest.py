@@ -20,12 +20,17 @@ from rebate.core import clock
 from rebate.core.errors import Conflict, InvalidState, NotFound, ValidationFailed
 from rebate.core.ids import new_id
 from rebate.core.jobs import JobContext, PermanentError, enqueue, job
-from rebate.modules import audit, extraction, files, ingestion, masterdata, tenancy
+from rebate.modules import audit, claims, extraction, files, ingestion, masterdata, tenancy
 from rebate.modules.audit import Action, Actor
 from rebate.modules.extraction import DocumentExtraction
 from rebate.modules.masterdata import Who, keyset
 from rebate.modules.reconciliation import intake, pdf
-from rebate.modules.reconciliation.models import RemittanceDocument, RemittanceLine, RemittanceStagingLine
+from rebate.modules.reconciliation.models import (
+    ReconciliationMatch,
+    RemittanceDocument,
+    RemittanceLine,
+    RemittanceStagingLine,
+)
 
 log = structlog.get_logger("rebate.reconciliation")
 
@@ -131,6 +136,20 @@ def get(db: Session, tenant_id: UUID, remittance_id: UUID, *, lock: bool = False
     return row
 
 
+@files.register_use_source
+def _file_uses(db: Session, tenant_id: UUID, file_id: UUID) -> list[files.Use]:
+    rows = db.scalars(
+        select(RemittanceDocument)
+        .where(RemittanceDocument.tenant_id == tenant_id, RemittanceDocument.file_id == file_id)
+        .order_by(RemittanceDocument.id)
+    )
+    return [
+        files.Use("remittance", d.id, f"Remittance {d.document_number} ({d.status})" if d.document_number
+                  else f"Remittance ({d.status})")
+        for d in rows
+    ]  # fmt: skip
+
+
 def list_documents(
     db: Session,
     tenant_id: UUID,
@@ -156,6 +175,54 @@ def list_lines(
         RemittanceLine.tenant_id == tenant_id, RemittanceLine.remittance_document_id == remittance_id
     )
     return list(db.scalars(keyset(stmt, RemittanceLine.id, cursor, limit, newest_first=False)))
+
+
+def matched_claim_lines(
+    db: Session, tenant_id: UUID, line_ids: list[UUID]
+) -> dict[UUID, list[dict[str, Any]]]:
+    """remittance line id -> its confirmed allocations to claim lines, with the claim line's batch, reference and
+    frozen amount (for links; adjustment items are left out)."""
+    if not line_ids:
+        return {}
+    rows = list(
+        db.execute(
+            select(ReconciliationMatch.remittance_line_id, ReconciliationMatch.claim_line_id,
+                   ReconciliationMatch.allocated_amount)
+            .where(ReconciliationMatch.tenant_id == tenant_id, ReconciliationMatch.status == "confirmed",
+                   ReconciliationMatch.remittance_line_id.in_(line_ids),
+                   ReconciliationMatch.claim_line_id.is_not(None))
+            .order_by(ReconciliationMatch.id)
+        )
+    )  # fmt: skip
+    refs = claims.claim_line_refs(db, tenant_id, [r.claim_line_id for r in rows])
+    out: dict[UUID, list[dict[str, Any]]] = {}
+    for r in rows:
+        ref = refs[r.claim_line_id]
+        out.setdefault(r.remittance_line_id, []).append(
+            {"claim_line_id": r.claim_line_id, "claim_reference": ref.claim_reference, "claim_batch_id": ref.batch_id,
+             "claim_amount": ref.claim_amount, "allocated_amount": r.allocated_amount}
+        )  # fmt: skip
+    return out
+
+
+def unknown_reason_codes(db: Session, tenant_id: UUID, manufacturer_id: UUID) -> list[Any]:
+    """External reason codes on the manufacturer's remittance lines that no mapping covers now (looked up like
+    acceptance does: as written, then upper-cased): ``external_code``, ``line_count``, ``last_seen_at`` (acceptance)."""
+    mapped = set(_reason_map(db, tenant_id, manufacturer_id))  # also 404 for an unknown manufacturer
+    rows = db.execute(
+        select(
+            RemittanceLine.external_reason_code.label("external_code"),
+            func.count().label("line_count"),
+            func.max(RemittanceDocument.accepted_at).label("last_seen_at"),
+        )
+        .join(RemittanceDocument, (RemittanceDocument.tenant_id == RemittanceLine.tenant_id)
+              & (RemittanceDocument.id == RemittanceLine.remittance_document_id))
+        .where(RemittanceLine.tenant_id == tenant_id, RemittanceDocument.manufacturer_id == manufacturer_id,
+               RemittanceLine.external_reason_code.is_not(None))
+        .group_by(RemittanceLine.external_reason_code)
+        .order_by(RemittanceLine.external_reason_code)
+    )  # fmt: skip
+    return [r for r in rows if r.external_code not in mapped and r.external_code.upper() not in mapped]
 
 
 def staged(db: Session, tenant_id: UUID, remittance_id: UUID) -> list[RemittanceStagingLine]:

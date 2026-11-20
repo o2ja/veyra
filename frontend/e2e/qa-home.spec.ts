@@ -33,7 +33,7 @@ test.describe("QA Home: dashboard, workspace info, session details, axe", () => 
 
     // Verify Home page
     await page.goto("/");
-    await expect(page.getByRole("heading", { name: "QA Home Enterprise" })).toBeVisible();
+    await expect(page.getByText("QA Home Enterprise", { exact: true })).toBeVisible();
     await expect(page.getByText(`Signed in as ${email}`)).toBeVisible();
     await expect(page.getByText("(admin)")).toBeVisible();
     await noViolations(page, "/ (home)");

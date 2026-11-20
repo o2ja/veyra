@@ -41,6 +41,16 @@ def get_dashboard(
     return s.DashboardOut.model_validate(out)
 
 
+@router.get("/home/attention", operation_id="home_attention", dependencies=[NO_QUERY])
+def get_attention(
+    request: Request, principal: Annotated[Principal, Depends(require("data.read"))]
+) -> s.AttentionOut:
+    out = service.attention(
+        ctx(request).db, tenant_of(principal), see_jobs="jobs.manage" in principal.permissions
+    )
+    return s.AttentionOut.model_validate(out)
+
+
 @router.post("/dashboard/refresh", status_code=202, operation_id="dashboard_refresh")
 def refresh_dashboard(
     request: Request, principal: Annotated[Principal, Depends(require("report.refresh"))]

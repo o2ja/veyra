@@ -7,7 +7,7 @@ import { api } from "../../lib/api/client";
 import { ApiError, unwrap } from "../../lib/api/errors";
 import { useSession } from "../../lib/session";
 import { uploadWithProgress } from "../files/files-page";
-import { Checkbox, FormGrid, SelectField, orNull, useManufacturers, utc } from "../masterdata/common";
+import { Checkbox, FormGrid, SelectField, orNull, useManufacturers } from "../masterdata/common";
 import { DraftPreviewPanel } from "../calculations/draft-preview-panel";
 import { AgreementsNav } from "./common";
 import {
@@ -26,7 +26,9 @@ import {
   emptyItem,
   emptyTier,
   formatValue,
+  friendlyIssueMessage,
   issueFieldId,
+  issueFieldLabel,
   itemIndexFromIssuePath,
   pageForItemIndex,
   paginateItems,
@@ -36,6 +38,7 @@ import {
   viewPayload,
   intOrRaw,
 } from "./logic";
+import { formatDateTime } from "../../lib/format";
 
 /** Disabled controls cannot take focus; focus their own label or row instead (never the wrapping fieldset), with temporary tabIndex. */
 function focusEl(el: HTMLElement) {
@@ -847,7 +850,7 @@ function ValidationPanel({
           <Alert tone={v.valid ? "ok" : "danger"}>
             {v.valid ? "Validation passed." : `${v.error_count} validation error(s).`}
             {v.warnings.length > 0 ? ` ${v.warnings.length} warning(s).` : ""}
-            <span className="ml-2 text-xs">Checked {utc(v.validated_at)}</span>
+            <span className="ml-2 text-xs">Checked {formatDateTime(v.validated_at)}</span>
           </Alert>
 
           {(v.references.unresolved_customers.length > 0 || v.references.unresolved_skus.length > 0) && (
@@ -879,7 +882,8 @@ function ValidationPanel({
                       className="flex flex-wrap items-center justify-between gap-2 rounded-md border border-danger px-3 py-2 text-sm text-danger"
                     >
                       <div>
-                        <span className="font-mono text-xs">{issue.field}</span>: {issue.message}
+                        <span className="font-medium">{issueFieldLabel(issue.field)}</span>:{" "}
+                        {friendlyIssueMessage(issue.message)}
                       </div>
                       {target && (
                         <Button variant="secondary" onClick={() => onFocusIssue(issue)}>
@@ -907,7 +911,8 @@ function ValidationPanel({
                     >
                       <div className="flex flex-col gap-1">
                         <div>
-                          <span className="font-mono text-xs">{issue.field}</span>: {issue.message}
+                          <span className="font-medium">{issueFieldLabel(issue.field)}</span>:{" "}
+                          {friendlyIssueMessage(issue.message)}
                         </div>
                         {warnId && canEdit && (
                           <Checkbox
@@ -1401,7 +1406,7 @@ function DraftEditorForm({ initial }: { initial: DraftOut }) {
             <div className="flex flex-wrap gap-6 text-muted">
               <span>Revision {draft.revision}</span>
               <span>Source: {draft.source}</span>
-              <span>Updated {utc(draft.updated_at)}</span>
+              <span>Updated {formatDateTime(draft.updated_at)}</span>
               {draft.agreement_id && (
                 <Link to={`/agreements/${draft.agreement_id}`} className="text-brand underline">
                   Agreement

@@ -6,6 +6,7 @@ import type { components } from "../../api/schema";
 import { Alert, Button, Card, ErrorAlert, Field, Loading, fieldError } from "../../components/ui";
 import { api } from "../../lib/api/client";
 import { ApiError, unwrap } from "../../lib/api/errors";
+import { formatDateTime } from "../../lib/format";
 import { useSession } from "../../lib/session";
 import {
   Checkbox,
@@ -278,7 +279,7 @@ function SettingsForm({ manufacturerId, initial }: { manufacturerId: string; ini
   );
 }
 
-function ReasonCodeMappings({ manufacturerId }: { manufacturerId: string }) {
+export function ReasonCodeMappings({ manufacturerId }: { manufacturerId: string }) {
   const { can } = useSession();
   const editable = can("masterdata.write");
   const [rows, setRows] = useState<Mapping[] | null>(null);
@@ -315,6 +316,19 @@ function ReasonCodeMappings({ manufacturerId }: { manufacturerId: string }) {
   });
   const update = (i: number, patch: Partial<Mapping>) =>
     setRows(current.map((r, j) => (j === i ? { ...r, ...patch } : r)));
+  const unknown = useQuery({
+    queryKey: ["manufacturers", manufacturerId, "unknown-reason-codes"],
+    queryFn: () =>
+      unwrap(
+        api.GET("/api/v1/manufacturers/{manufacturer_id}/unknown-reason-codes", {
+          params: { path: { manufacturer_id: manufacturerId } },
+        }),
+      ),
+  });
+  // codes already being mapped in the form (saved or not) drop out of the "arrived but unknown" list
+  const unmapped = (unknown.data?.data ?? []).filter(
+    (u) => !current.some((r) => r.external_code === u.external_code),
+  );
 
   if (query.isPending) return <Loading />;
   return (
@@ -330,6 +344,38 @@ function ReasonCodeMappings({ manufacturerId }: { manufacturerId: string }) {
         example <code>rejected_price_mismatch</code>). Saving replaces the whole list.
       </p>
       <ErrorAlert error={(query.error as ApiError | null) ?? (save.error as ApiError | null)} />
+      {unmapped.length > 0 && (
+        <div className="rounded-lg border border-warn/30 bg-warn-soft p-3 text-sm">
+          <p className="font-medium text-warn">
+            {unmapped.length} code{unmapped.length === 1 ? "" : "s"} arrived on remittances with no mapping
+          </p>
+          <ul className="mt-2 flex flex-col gap-1.5">
+            {unmapped.map((u) => (
+              <li key={u.external_code} className="flex flex-wrap items-center gap-3">
+                <code className="font-mono font-semibold">{u.external_code}</code>
+                <span className="text-xs text-muted">
+                  {u.line_count} line{u.line_count === 1 ? "" : "s"}, last seen{" "}
+                  {formatDateTime(u.last_seen_at)}
+                </span>
+                {editable && (
+                  <Button
+                    variant="secondary"
+                    className="px-2.5 py-1 text-xs"
+                    onClick={() =>
+                      setRows([
+                        ...current,
+                        { external_code: u.external_code, external_text: null, reason_code: "" },
+                      ])
+                    }
+                  >
+                    Map it
+                  </Button>
+                )}
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
       {current.length === 0 && <p className="text-sm text-muted">No mappings yet.</p>}
       {current.map((r, i) => (
         <fieldset

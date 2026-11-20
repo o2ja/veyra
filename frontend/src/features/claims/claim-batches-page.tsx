@@ -4,16 +4,10 @@ import { Link, useSearchParams } from "react-router-dom";
 import { Card, PermissionDenied } from "../../components/ui";
 import { api } from "../../lib/api/client";
 import { ApiError, unwrap } from "../../lib/api/errors";
-import {
-  DataTable,
-  ManufacturerSelect,
-  PagerControls,
-  SelectField,
-  usePager,
-  utc,
-} from "../masterdata/common";
+import { DataTable, ManufacturerSelect, PagerControls, SelectField, usePager } from "../masterdata/common";
 import { ClaimsNav, useManufacturerMap } from "./common";
-import { BATCH_STATUSES, BATCH_STATUS_LABELS, formatDecimal, type BatchOut } from "./logic";
+import { BATCH_STATUSES, BATCH_STATUS_LABELS, type BatchOut } from "./logic";
+import { formatDateTime, formatMoney } from "../../lib/format";
 
 export function ClaimBatchesPage() {
   const pager = usePager();
@@ -145,18 +139,20 @@ export function ClaimBatchesPage() {
                 header: "Total amount",
                 cell: (b) => (
                   <span className="block text-right font-mono font-medium">
-                    {formatDecimal(b.total_amount)}
+                    {formatMoney(b.total_amount)}
                   </span>
                 ),
               },
               {
                 header: "Activity",
                 cell: (b) => {
-                  if (b.submitted_at) return <span className="text-xs">Submitted {utc(b.submitted_at)}</span>;
-                  if (b.approved_at) return <span className="text-xs">Approved {utc(b.approved_at)}</span>;
+                  if (b.submitted_at)
+                    return <span className="text-xs">Submitted {formatDateTime(b.submitted_at)}</span>;
+                  if (b.approved_at)
+                    return <span className="text-xs">Approved {formatDateTime(b.approved_at)}</span>;
                   if (b.voided_at)
-                    return <span className="text-xs text-danger">Voided {utc(b.voided_at)}</span>;
-                  return <span className="text-xs text-muted">Created {utc(b.created_at)}</span>;
+                    return <span className="text-xs text-danger">Voided {formatDateTime(b.voided_at)}</span>;
+                  return <span className="text-xs text-muted">Created {formatDateTime(b.created_at)}</span>;
                 },
               },
             ]}

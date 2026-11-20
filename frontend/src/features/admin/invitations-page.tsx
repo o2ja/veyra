@@ -15,6 +15,7 @@ import {
 } from "../../components/ui";
 import { api } from "../../lib/api/client";
 import { ApiError, unwrap } from "../../lib/api/errors";
+import { formatDate } from "../../lib/format";
 
 type Role = "admin" | "approver" | "analyst" | "viewer";
 
@@ -120,7 +121,7 @@ export function InvitationsPage() {
                     <td className="py-2">{i.email}</td>
                     <td>{i.role}</td>
                     <td>{state(i)}</td>
-                    <td>{new Date(i.expires_at).toLocaleDateString("en-US")}</td>
+                    <td>{formatDate(i.expires_at)}</td>
                     <td>
                       {state(i) === "Open" && (
                         <button

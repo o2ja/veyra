@@ -540,6 +540,15 @@ def list_unmapped(
     return list(db.scalars(keyset(stmt, UnmappedEntity.id, cursor, limit)))
 
 
+def unmapped_open_count(db: Session, tenant_id: UUID) -> int:
+    return (
+        db.scalar(
+            select(func.count()).where(UnmappedEntity.tenant_id == tenant_id, UnmappedEntity.status == "open")
+        )
+        or 0
+    )
+
+
 def record_unmapped(
     db: Session,
     tenant_id: UUID,

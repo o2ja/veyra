@@ -14,15 +14,15 @@ export function Button({
   ...props
 }: ButtonHTMLAttributes<HTMLButtonElement> & { variant?: "primary" | "secondary" | "danger" }) {
   const styles = {
-    primary: "bg-brand text-panel shadow-card hover:brightness-110",
-    secondary: "border border-line bg-panel shadow-card hover:bg-brand-soft",
-    danger: "bg-danger text-panel shadow-card hover:brightness-110",
+    primary: "bg-brand text-panel shadow-card hover:bg-brand/85",
+    secondary: "border border-line bg-panel shadow-card hover:border-ink/30 hover:bg-brand-soft",
+    danger: "bg-danger text-panel shadow-card hover:bg-danger/85",
   }[variant];
   return (
     <button
       type="button"
       className={`inline-flex cursor-pointer items-center justify-center gap-2 rounded-lg px-3.5 py-2 text-sm font-medium
-        transition disabled:cursor-not-allowed disabled:opacity-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand
+        transition-colors duration-150 disabled:cursor-not-allowed disabled:opacity-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand
         ${styles} ${className}`}
       {...props}
     />
@@ -186,11 +186,25 @@ export function PermissionDenied() {
 export function AuthCard({ title, children }: { title: string; children: ReactNode }) {
   return (
     <div className="mx-auto mt-8 w-full max-w-md sm:mt-16">
-      <p className="mb-4 text-center text-sm text-muted">
+      <Logo className="mx-auto mb-5 block h-8" />
+      <p className="mb-6 text-center text-sm text-muted">
         Veyra Recover finds and recovers the rebates manufacturers owe you.
       </p>
       <Card title={title}>{children}</Card>
     </div>
+  );
+}
+
+/** The Veyra wordmark (black on transparent; inverted for dark surfaces). */
+export function Logo({ className = "h-6", inverted = false }: { className?: string; inverted?: boolean }) {
+  return (
+    <img
+      src="/veyra-logo.png"
+      alt="Veyra"
+      width={640}
+      height={115}
+      className={`w-auto select-none ${inverted ? "invert" : "dark:invert"} ${className}`}
+    />
   );
 }
 

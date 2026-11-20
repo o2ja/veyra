@@ -12,7 +12,13 @@ from rebate.modules.agreements.calc_reads import (
 from rebate.modules.agreements.models import AgreementDraft
 from rebate.modules.agreements.router import router
 from rebate.modules.agreements.schemas import Payload
-from rebate.modules.agreements.service import business_today, content_hash, create_ai_draft, version_payload
+from rebate.modules.agreements.service import (
+    business_today,
+    content_hash,
+    create_ai_draft,
+    draft_counts,
+    version_payload,
+)
 from rebate.modules.agreements.validator import validate
 
 __all__ = [
@@ -22,6 +28,7 @@ __all__ = [
     "business_today",
     "content_hash",
     "create_ai_draft",
+    "draft_counts",
     "draft_for_preview",
     "router",
     "validate",

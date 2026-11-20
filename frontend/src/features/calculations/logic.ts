@@ -1,4 +1,5 @@
 import type { components } from "../../api/schema";
+import { formatMoney, formatQty } from "../../lib/format";
 
 export type AccrualList = components["schemas"]["AccrualList"];
 export type AccrualOut = components["schemas"]["AccrualOut"];
@@ -37,20 +38,80 @@ export const RESULT_STATUS_LABELS: Record<string, string> = {
   not_applicable: "Not applicable",
 };
 
-/**
- * Format a server decimal string with thousands grouping only.
- * Never parses to float or rounds; preserves exact fractional digits.
- */
-export function formatDecimal(value: string | null | undefined): string {
-  if (value === null || value === undefined || value === "") return "—";
-  const trimmed = value.trim();
-  // eslint-disable-next-line security/detect-unsafe-regex -- linear: no overlapping repetition; input is a server decimal string
-  const match = /^(-?)(\d+)(\.\d+)?$/.exec(trimmed);
-  if (!match) return trimmed;
-  const [, sign, intPart, fracPart] = match;
-  // eslint-disable-next-line security/detect-unsafe-regex -- thousands grouping on the integer part of a server decimal (bounded length)
-  const grouped = (intPart ?? "").replace(/\B(?=(\d{3})+(?!\d))/g, ",");
-  return `${sign ?? ""}${grouped}${fracPart ?? ""}`;
+/** Engine exception codes (BUSINESS_LOGIC.md A8) in plain English, with the next step to clear each one. */
+export const EXCEPTION_INFO: Record<string, { label: string; action?: { text: string; to: string } }> = {
+  unknown_product: { label: "Unknown product", action: { text: "Map it", to: "/master-data/unmapped" } },
+  unknown_customer: { label: "Unknown customer", action: { text: "Map it", to: "/master-data/unmapped" } },
+  no_agreement: { label: "No contract on file", action: { text: "Add contract", to: "/agreements" } },
+  ineligible_customer: {
+    label: "Customer not covered by the contract",
+    action: { text: "Check contract", to: "/agreements" },
+  },
+  ineligible_product: {
+    label: "Product not covered by the contract",
+    action: { text: "Check contract", to: "/agreements" },
+  },
+  agreement_not_started: { label: "Sale is before the contract starts" },
+  expired_agreement: { label: "Contract had expired", action: { text: "Add renewal", to: "/agreements" } },
+  conflicting_agreements: {
+    label: "More than one contract applies",
+    action: { text: "Review contracts", to: "/agreements" },
+  },
+  missing_spa_reference: { label: "SPA number missing on the invoice" },
+  spa_reference_mismatch: { label: "SPA number on the invoice does not match the contract" },
+  missing_cost: { label: "Cost missing on the sales line", action: { text: "Re-import", to: "/imports" } },
+  missing_replacement_cost: {
+    label: "Replacement cost missing",
+    action: { text: "Re-import", to: "/imports" },
+  },
+  missing_uom_conversion: {
+    label: "Unit of measure can't be converted",
+    action: { text: "Add conversion", to: "/master-data/uom" },
+  },
+  price_mismatch: { label: "Sell price differs from the contract price" },
+  cap_exhausted: { label: "Contract quantity cap already used up" },
+  no_claim_due: { label: "Nothing to claim on this line" },
+  negative_claim_amount: { label: "Claim would be negative" },
+  outside_claim_window: { label: "Too late to claim (window closed)" },
+  return_original_missing: {
+    label: "Return without its original sale",
+    action: { text: "Find the sale", to: "/lines/sales" },
+  },
+  return_exceeds_original: { label: "Return is larger than the original sale" },
+};
+
+export const exceptionLabel = (code: string | null | undefined): string =>
+  code ? (EXCEPTION_INFO[code]?.label ?? code.replaceAll("_", " ")) : "—";
+
+/** "35 lines · 7 eligible · $8,472.50 · 26 exceptions" from a run's stored totals (claims/runs.py Totals). */
+export function runSummary(totals: Record<string, unknown> | null | undefined): string {
+  if (!totals || typeof totals.lines !== "number") return "No results yet";
+  const byStatus = isPlainObject(totals.by_status) ? totals.by_status : {};
+  const n = (k: string) => (typeof byStatus[k] === "number" ? byStatus[k] : 0);
+  const plural = (count: number, word: string) =>
+    `${count.toLocaleString("en-US")} ${word}${count === 1 ? "" : "s"}`;
+  return [
+    plural(totals.lines, "line"),
+    `${n("eligible").toLocaleString("en-US")} eligible`,
+    formatMoney(typeof totals.eligible_amount === "string" ? totals.eligible_amount : null),
+    plural(n("exception"), "exception"),
+  ].join(" · ");
+}
+
+/** One plain line above the lineage tree. Only restates the server's own figures; computes nothing. */
+export function explainFormula(r: {
+  status: string;
+  claim_amount?: string | null;
+  claim_unit_amount?: string | null;
+  eligible_quantity?: string | null;
+  claim_uom?: string | null;
+  exception_code?: string | null;
+}): string {
+  if (r.status === "exception") return `Nothing claimed: ${exceptionLabel(r.exception_code).toLowerCase()}.`;
+  if (!r.claim_amount) return "No claim amount for this line.";
+  if (!r.eligible_quantity || !r.claim_unit_amount) return `Claim ${formatMoney(r.claim_amount)}.`;
+  const uom = r.claim_uom ? ` ${r.claim_uom}` : "";
+  return `Claim ${formatMoney(r.claim_amount)} = ${formatQty(r.eligible_quantity)}${uom} eligible × ${formatMoney(r.claim_unit_amount)} per unit, after the contract's rounding rule.`;
 }
 
 export function isPlainObject(v: unknown): v is Record<string, unknown> {

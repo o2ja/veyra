@@ -1,9 +1,38 @@
 import { useMemo, useState } from "react";
-import { NavLink } from "react-router-dom";
+import { Link, NavLink } from "react-router-dom";
 
 import { Alert, Button, Empty, ErrorAlert } from "../../components/ui";
 import type { ApiError } from "../../lib/api/errors";
-import { buildTraceTree, collectExpandableIds, flattenKeyValues, type TraceNode } from "./logic";
+import {
+  EXCEPTION_INFO,
+  buildTraceTree,
+  collectExpandableIds,
+  exceptionLabel,
+  flattenKeyValues,
+  type TraceNode,
+} from "./logic";
+
+/** "No contract on file → Add contract": the exception in plain English plus the page that fixes it. */
+export function ExceptionCell({ code }: { code: string | null | undefined }) {
+  if (!code) return <>—</>;
+  const action = EXCEPTION_INFO[code]?.action;
+  return (
+    <span title={code}>
+      {exceptionLabel(code)}
+      {action && (
+        <>
+          {" "}
+          <span aria-hidden="true" className="text-muted">
+            →
+          </span>{" "}
+          <Link to={action.to} className="font-medium text-brand underline">
+            {action.text}
+          </Link>
+        </>
+      )}
+    </span>
+  );
+}
 
 export function ValidationDetailsAlert({ error }: { error: ApiError | null | undefined }) {
   if (!error) return null;

@@ -13,7 +13,7 @@ from rebate.modules.masterdata import Page
 ImportType = Literal["sales", "purchases", "customers", "products", "uom"]
 ImportStatus = Literal[
     "uploaded", "scanning", "parsing", "awaiting_confirmation", "loading", "completed",
-    "completed_with_errors", "failed", "rejected",
+    "completed_with_errors", "failed", "rejected", "discarded",
 ]  # fmt: skip
 TemplateType = Literal["sales", "purchases", "customers", "products", "uom", "agreement_items", "remittance"]
 Header = Annotated[str, StringConstraints(min_length=1, max_length=200, pattern=NO_CONTROL)]

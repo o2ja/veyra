@@ -164,6 +164,7 @@ Rules:
 | Job | Trigger | Output |
 |---|---|---|
 | `files_scan` | upload | `file_objects.scan_status`; then `files_purge_quarantine` (clean) or `files_notify_blocked` (infected/error) |
+| `files_delete_objects` | `DELETE /files/{id}` of an unused file | removes the stored object (and any quarantine copy) after the row's deletion committed |
 | `parse_import` | file clean | staged rows + errors |
 | `load_import` | user confirms | source tables |
 | `suggest_mapping` | unmapped header | mapping suggestion (AI, optional) |

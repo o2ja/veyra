@@ -88,11 +88,14 @@ def seed_remittance(
     document_date: date,
     amounts: list[Decimal],
     codes: list[str | None],
+    claimed: list[Decimal | None] | None = None,
 ) -> tuple[UUID, list[UUID]]:
     """An accepted credit-memo remittance with one line per amount (inserted as the real flow does: staging rows,
-    lines, then acceptance, which the database checks against the total)."""
+    lines, then acceptance, which the database checks against the total). ``claimed``: the lines' stated claimed
+    amounts (none by default)."""
     doc, file_id = uuid.uuid4(), uuid.uuid4()
     lines = [uuid.uuid4() for _ in amounts]
+    stated = claimed or [None] * len(amounts)
     p = {"t": story.tenant, "u": story.user, "m": story.manufacturer, "doc": doc, "f": file_id, "n": number,
          "d": document_date, "total": sum(amounts, D(0))}  # fmt: skip
     with engine.begin() as c:
@@ -112,8 +115,10 @@ def seed_remittance(
             ),
             p,
         )
-        for i, (line, amount, code) in enumerate(zip(lines, amounts, codes, strict=True), start=1):
-            q = {"t": story.tenant, "doc": doc, "line": line, "i": i, "a": amount, "c": code}
+        for i, (line, amount, code, cl) in enumerate(
+            zip(lines, amounts, codes, stated, strict=True), start=1
+        ):
+            q = {"t": story.tenant, "doc": doc, "line": line, "i": i, "a": amount, "c": code, "cl": cl}
             c.execute(
                 text(
                     "INSERT INTO remittance_extraction_staging (tenant_id, id, remittance_document_id, line_number, "
@@ -124,7 +129,7 @@ def seed_remittance(
             c.execute(
                 text(
                     "INSERT INTO remittance_lines (tenant_id, id, remittance_document_id, line_number, amount_paid, "
-                    "external_reason_code) VALUES (:t, :line, :doc, :i, :a, :c)"
+                    "external_reason_code, amount_claimed_stated) VALUES (:t, :line, :doc, :i, :a, :c, :cl)"
                 ),
                 q,
             )

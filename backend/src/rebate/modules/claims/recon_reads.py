@@ -55,3 +55,17 @@ def claim_references(db: Session, tenant_id: UUID, claim_line_ids: list[UUID]) -
         {"t": tenant_id, "ids": claim_line_ids},
     )
     return {r.id: r.claim_reference for r in rows}
+
+
+def claim_line_refs(db: Session, tenant_id: UUID, claim_line_ids: list[UUID]) -> dict[UUID, Any]:
+    """claim line id -> (claim_reference, batch_id, sales_document_line_id, claim_amount), for links in other views."""
+    if not claim_line_ids:
+        return {}
+    rows = db.execute(
+        text(
+            "SELECT id, claim_reference, batch_id, sales_document_line_id, claim_amount FROM claim_lines "
+            "WHERE tenant_id = :t AND id = ANY(CAST(:ids AS uuid[]))"
+        ),
+        {"t": tenant_id, "ids": claim_line_ids},
+    )
+    return {r.id: r for r in rows}

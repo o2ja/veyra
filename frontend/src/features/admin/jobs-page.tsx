@@ -3,6 +3,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Card, Empty, ErrorAlert, Loading, PermissionDenied } from "../../components/ui";
 import { api } from "../../lib/api/client";
 import { ApiError, unwrap } from "../../lib/api/errors";
+import { formatDateTime } from "../../lib/format";
 
 const KIND_TEXT: Record<string, string> = {
   files_scan: "Malware scan",
@@ -46,7 +47,7 @@ export function JobsPage() {
               <th className="py-2">Job</th>
               <th>Attempts</th>
               <th>Last error</th>
-              <th>Failed at (UTC)</th>
+              <th>Failed at</th>
               <th>
                 <span className="sr-only">Actions</span>
               </th>
@@ -60,7 +61,7 @@ export function JobsPage() {
                   {j.attempts} / {j.max_attempts}
                 </td>
                 <td className="font-mono text-xs">{j.last_error}</td>
-                <td>{j.finished_at?.replace("T", " ").slice(0, 19)}</td>
+                <td>{formatDateTime(j.finished_at)}</td>
                 <td>
                   <button
                     type="button"

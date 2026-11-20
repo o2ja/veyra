@@ -1,7 +1,7 @@
 import { useQuery } from "@tanstack/react-query";
 import { Link, useSearchParams } from "react-router-dom";
 
-import { Alert, Button, Card, Empty, ErrorAlert, Loading, PermissionDenied } from "../../components/ui";
+import { Button, Card, Empty, ErrorAlert, Loading, PermissionDenied } from "../../components/ui";
 import { api } from "../../lib/api/client";
 import { type ApiError, unwrap } from "../../lib/api/errors";
 import { useSession } from "../../lib/session";
@@ -12,16 +12,15 @@ import {
   CASE_STATUSES,
   CASE_STATUS_LABELS,
   DEADLINE_BASIS_LABELS,
-  amountText,
   caseTypeLabel,
   ownerText,
   reasonLabel,
   statusLabel,
-  usDate,
   type CaseOut,
   type CaseStatus,
   type SummaryOut,
 } from "./logic";
+import { formatDate, formatMoney } from "../../lib/format";
 
 export function RecoveryQueuePage() {
   const pager = usePager();
@@ -125,10 +124,21 @@ export function RecoveryQueuePage() {
                   }))}
                 />
               </div>
-              <Alert tone="info">
-                At risk within {summaryData.at_risk.deadline_within_days} days: {summaryData.at_risk.count}{" "}
-                cases, {amountText(summaryData.at_risk.amount)}
-              </Alert>
+              <div className="grid gap-3 sm:grid-cols-2">
+                <div className="rounded-lg border border-danger/30 bg-danger-soft px-4 py-3 text-sm text-danger">
+                  <span className="font-semibold">
+                    Overdue: {summaryData.overdue.count} cases, {formatMoney(summaryData.overdue.amount)}
+                  </span>
+                  <span className="block text-xs">Deadline already passed. Chase these first.</span>
+                </div>
+                <div className="rounded-lg border border-warn/30 bg-warn-soft px-4 py-3 text-sm text-warn">
+                  <span className="font-semibold">
+                    At risk within {summaryData.expiring.deadline_within_days} days:{" "}
+                    {summaryData.expiring.count} cases, {formatMoney(summaryData.expiring.amount)}
+                  </span>
+                  <span className="block text-xs">Not overdue yet; the deadline is coming up.</span>
+                </div>
+              </div>
             </div>
           ) : null}
         </Card>
@@ -247,7 +257,7 @@ export function RecoveryQueuePage() {
                         <td className="py-2 pr-4">
                           <Link
                             to={`/recovery/${item.id}`}
-                            aria-label={`${item.deadline_unknown ? "Unknown deadline" : usDate(item.deadline_date)}, open recovery case ${item.id}`}
+                            aria-label={`${item.deadline_unknown ? "Unknown deadline" : formatDate(item.deadline_date)}, open recovery case ${item.id}`}
                             className="font-medium text-brand underline after:absolute after:inset-0 after:content-['']"
                           >
                             {item.deadline_unknown ? (
@@ -255,9 +265,14 @@ export function RecoveryQueuePage() {
                                 Unknown deadline
                               </span>
                             ) : (
-                              usDate(item.deadline_date)
+                              formatDate(item.deadline_date)
                             )}
                           </Link>
+                          {item.overdue_days != null && item.overdue_days > 0 && (
+                            <span className="block text-xs font-semibold text-danger">
+                              Overdue by {item.overdue_days} day{item.overdue_days === 1 ? "" : "s"}
+                            </span>
+                          )}
                         </td>
                         <td className="py-2 pr-4">
                           {item.deadline_basis ? DEADLINE_BASIS_LABELS[item.deadline_basis] : "—"}
@@ -274,8 +289,8 @@ export function RecoveryQueuePage() {
                             ? `${manufacturer.name} (${manufacturer.code})`
                             : item.manufacturer_id}
                         </td>
-                        <td className="py-2 pr-4 font-mono">{amountText(item.variance_amount)}</td>
-                        <td className="py-2 pr-4 font-mono">{amountText(item.recovered_amount)}</td>
+                        <td className="py-2 pr-4 font-mono">{formatMoney(item.variance_amount)}</td>
+                        <td className="py-2 pr-4 font-mono">{formatMoney(item.recovered_amount)}</td>
                         <td className="py-2 pr-4">
                           <span className="inline-flex items-center rounded-full bg-brand-soft px-2.5 py-0.5 text-xs font-medium text-brand">
                             {statusLabel(item.status)}
@@ -340,9 +355,9 @@ function SummaryTable({
             <tr key={row.key} className="border-t border-line">
               <td className="py-1 pr-3">{row.key}</td>
               <td className="py-1 pr-3 font-mono">{row.count}</td>
-              <td className="py-1 pr-3 font-mono">{amountText(row.variance_amount)}</td>
-              <td className="py-1 pr-3 font-mono">{amountText(row.recovered_amount)}</td>
-              <td className="py-1 pr-3 font-mono">{amountText(row.written_off_amount)}</td>
+              <td className="py-1 pr-3 font-mono">{formatMoney(row.variance_amount)}</td>
+              <td className="py-1 pr-3 font-mono">{formatMoney(row.recovered_amount)}</td>
+              <td className="py-1 pr-3 font-mono">{formatMoney(row.written_off_amount)}</td>
             </tr>
           ))}
         </tbody>

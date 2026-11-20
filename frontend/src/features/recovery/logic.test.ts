@@ -2,16 +2,15 @@ import { describe, expect, it } from "vitest";
 
 import {
   TRANSITION_STATUSES,
-  amountText,
   batchIdFromDetails,
+  disputeSentences,
+  disputeSummary,
   isValidWriteOffReason,
   newestFirst,
   notificationCaseLink,
   ownerText,
   reasonLabel,
   statusLabel,
-  usDate,
-  usDateTime,
   writeOffProposalLabel,
   type EventOut,
   type NotificationOut,
@@ -29,21 +28,6 @@ const event = (id: string, createdAt: string): EventOut => ({
 });
 
 describe("recovery display helpers", () => {
-  it("formats server dates in US style and never invents one", () => {
-    expect(usDate("2026-11-13")).toBe("11/13/2026");
-    expect(usDate(null)).toBe("—");
-    expect(usDateTime("2026-11-13T14:05:00Z")).toBe("11/13/2026, 02:05 PM");
-  });
-
-  it("shows amounts exactly as the server sent them", () => {
-    expect(amountText("150.00")).toBe("150.00");
-    expect(amountText("0.00")).toBe("0.00");
-    expect(amountText("150.0000")).toBe("150.00");
-    expect(amountText("0.0000")).toBe("0.00");
-    expect(amountText("12.3450")).toBe("12.345");
-    expect(amountText(null)).toBe("—");
-  });
-
   it("offers every transition target except written_off", () => {
     expect(TRANSITION_STATUSES).toEqual(["open", "to_reclaim", "submitted", "recovered", "closed_no_action"]);
   });
@@ -106,20 +90,71 @@ describe("recovery display helpers", () => {
         { full_name: "Jane Approver", email: "jane@example.com" },
         "2026-11-14T07:30:00Z",
       ),
-    ).toBe("Reason proposed by Jane Approver on 11/14/2026");
+    ).toBe("Reason proposed by Jane Approver on Nov 14, 2026");
 
     expect(writeOffProposalLabel({ full_name: "", email: "jane@example.com" }, "2026-11-14T07:30:00Z")).toBe(
-      "Reason proposed by jane@example.com on 11/14/2026",
+      "Reason proposed by jane@example.com on Nov 14, 2026",
     );
 
     expect(writeOffProposalLabel("user-uuid-1234", "2026-11-14T07:30:00Z")).toBe(
-      "Reason proposed by user-uuid-1234 on 11/14/2026",
+      "Reason proposed by user-uuid-1234 on Nov 14, 2026",
     );
 
-    expect(writeOffProposalLabel(null, "2026-11-14T07:30:00Z")).toBe("Reason proposed on 11/14/2026");
+    expect(writeOffProposalLabel(null, "2026-11-14T07:30:00Z")).toBe("Reason proposed on Nov 14, 2026");
 
     expect(writeOffProposalLabel({ full_name: "Jane Approver" }, null)).toBe(
       "Reason proposed by Jane Approver on —",
+    );
+  });
+});
+
+describe("disputeSentences", () => {
+  it("turns the stored checks into plain English", () => {
+    const out = disputeSentences({
+      assessment: "supported",
+      reason_code: "rejected_price_mismatch",
+      checks: [
+        {
+          name: "unit_price_matches_sell_price",
+          inputs: { unit_price: "12.5000", sell_price: "12.50", tolerance: "0.01" },
+          passed: true,
+        },
+        { name: "customer_in_scope", inputs: { customer_in_scope: "" }, passed: null },
+      ],
+    });
+    expect(out?.headline).toMatch(/^Worth disputing/);
+    expect(out?.checks[0]?.text).toBe(
+      "Invoiced unit price $12.50 matches the agreed sell price $12.50 (tolerance $0.01).",
+    );
+    expect(out?.checks[1]?.text).toBe("Whether the customer is covered is not on file.");
+    expect(disputeSentences(null)).toBeNull();
+  });
+});
+
+describe("disputeSummary", () => {
+  it("fills the fixed template from server figures", () => {
+    expect(
+      disputeSummary({
+        claim_reference: "CLM-0042",
+        invoice: "INV-10060, line 1",
+        claimed_amount: "2080.0000",
+        paid_amount: "0.0000",
+        variance_amount: "2080.0000",
+        reason_code: "rejected_price_mismatch",
+        external_reason_code: "E12",
+      }),
+    ).toBe(
+      [
+        "Dispute summary",
+        "Claim reference: CLM-0042",
+        "Invoice: INV-10060, line 1",
+        "Claimed: $2,080.00",
+        "Paid: $0.00",
+        "Variance: $2,080.00",
+        "Reason given: Rejected: price mismatch (your code E12)",
+        "",
+        "Please review and pay the variance, or tell us what is missing.",
+      ].join("\n"),
     );
   });
 });

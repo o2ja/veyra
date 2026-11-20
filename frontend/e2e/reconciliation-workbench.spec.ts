@@ -222,20 +222,20 @@ test.describe("S8 reconciliation workbench", () => {
 
     // Add E12 -> rejected_price_mismatch
     await page.getByRole("button", { name: "Add mapping" }).click();
-    await page.getByLabel("External code row 1").fill("E12");
-    await page.getByLabel("External description row 1").fill("Price discrepancy");
-    await page.getByLabel("Controlled reason code row 1").selectOption("rejected_price_mismatch");
+    const row1 = page.getByRole("group", { name: "Mapping 1" });
+    await row1.getByLabel("Manufacturer code").fill("E12");
+    await row1.getByLabel("Manufacturer text").fill("Price discrepancy");
+    await row1.getByLabel("Reason code").selectOption("rejected_price_mismatch");
 
     // Add E07 -> rejected_quantity_exceeds_authorization
     await page.getByRole("button", { name: "Add mapping" }).click();
-    await page.getByLabel("External code row 2").fill("E07");
-    await page.getByLabel("External description row 2").fill("Quantity exceeds cap");
-    await page
-      .getByLabel("Controlled reason code row 2")
-      .selectOption("rejected_quantity_exceeds_authorization");
+    const row2 = page.getByRole("group", { name: "Mapping 2" });
+    await row2.getByLabel("Manufacturer code").fill("E07");
+    await row2.getByLabel("Manufacturer text").fill("Quantity exceeds cap");
+    await row2.getByLabel("Reason code").selectOption("rejected_quantity_exceeds_authorization");
 
     await page.getByRole("button", { name: "Save mappings" }).click();
-    await expect(page.getByText("Reason code mappings saved successfully.")).toBeVisible();
+    await expect(page.getByText("Mappings saved.")).toBeVisible();
 
     // 9. Invite viewer user & verify 403 / permission restrictions
     await page.getByRole("link", { name: "Invitations" }).click();
@@ -370,9 +370,9 @@ test.describe("S8 reconciliation workbench", () => {
     await expect(manualMatchDialog).toBeVisible();
     await manualMatchDialog.getByLabel("Submitted claim batch:").selectOption({ index: 1 });
     const claimLine = manualMatchDialog.getByLabel("Claim line:");
-    await expect(claimLine.locator("option", { hasText: "Claimed: 660" })).toHaveCount(1);
+    await expect(claimLine.locator("option", { hasText: "Claimed: $660.00" })).toHaveCount(1);
     await claimLine.selectOption({
-      label: (await claimLine.locator("option", { hasText: "Claimed: 660" }).innerText()).trim(),
+      label: (await claimLine.locator("option", { hasText: "Claimed: $660.00" }).innerText()).trim(),
     });
     await manualMatchDialog.getByLabel("Allocated amount").fill("75.00");
     await page.keyboard.press("Escape");

@@ -38,6 +38,8 @@ class Action(StrEnum):
     FILE_INFECTED = "file.infected"
     FILE_SCAN_ERROR = "file.scan_error"
     FILE_DOWNLOAD_URL_ISSUED = "file.download_url_issued"
+    FILE_DELETED = "file.deleted"
+    FILE_ARCHIVED = "file.archived"
     JOB_RETRIED = "job.retried"
     MANUFACTURER_CREATED = "manufacturer.created"
     MANUFACTURER_UPDATED = "manufacturer.updated"
@@ -63,6 +65,7 @@ class Action(StrEnum):
     IMPORT_COMPLETED = "import.completed"
     IMPORT_FAILED = "import.failed"
     IMPORT_ERRORS_EXPORTED = "import.errors_exported"
+    IMPORT_DISCARDED = "import.discarded"
     AGREEMENT_CREATED = "agreement.created"
     AGREEMENT_CANCELLED = "agreement.cancelled"
     AGREEMENT_DRAFT_CREATED = "agreement_draft.created"
@@ -74,6 +77,7 @@ class Action(StrEnum):
     AGREEMENT_DRAFT_REJECTED = "agreement_draft.rejected"
     AGREEMENT_DRAFT_APPROVED = "agreement_draft.approved"
     AGREEMENT_DRAFT_FOUR_EYES_VIOLATION = "agreement_draft.four_eyes_violation"
+    AGREEMENT_DRAFT_DELETED = "agreement_draft.deleted"
     AGREEMENT_VERSION_ACTIVATED = "agreement_version.activated"
     AGREEMENT_VERSION_SUPERSEDED = "agreement_version.superseded"
     AGREEMENT_VERSION_EXPIRED = "agreement_version.expired"
@@ -167,7 +171,7 @@ AUDITED_FIELDS: dict[str, frozenset[str]] = {
     "invitation": frozenset({"email", "role", "expires_at"}),
     "session": frozenset(),
     "permission": frozenset({"permission", "method", "route"}),
-    "file": frozenset({"kind", "original_name", "size_bytes", "sha256", "scan_status"}),
+    "file": frozenset({"kind", "original_name", "size_bytes", "sha256", "scan_status", "archived_at"}),
     "job": frozenset({"kind", "status", "attempts"}),
     "manufacturer": frozenset({"name", "code", "external_id", "active"}),
     "manufacturer_settings": frozenset(

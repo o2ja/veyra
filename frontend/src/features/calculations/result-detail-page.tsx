@@ -5,8 +5,9 @@ import { Alert, Card, ErrorAlert, Loading, PermissionDenied } from "../../compon
 import { api } from "../../lib/api/client";
 import { ApiError } from "../../lib/api/errors";
 import { unwrap } from "../../lib/api/errors";
-import { CalculationsNav, KeyValueGrid, TraceTree } from "./common";
-import { RESULT_STATUS_LABELS, formatDecimal } from "./logic";
+import { CalculationsNav, ExceptionCell, KeyValueGrid, TraceTree } from "./common";
+import { RESULT_STATUS_LABELS, explainFormula } from "./logic";
+import { formatDate, formatMoney, formatQty } from "../../lib/format";
 
 export function ResultDetailPage() {
   const { resultId = "" } = useParams();
@@ -74,11 +75,13 @@ export function ResultDetailPage() {
                   </div>
                   <div>
                     <dt className="text-muted">Invoice date</dt>
-                    <dd className="font-medium">{detail.data.invoice_date}</dd>
+                    <dd className="font-medium">{formatDate(detail.data.invoice_date)}</dd>
                   </div>
                   <div>
                     <dt className="text-muted">Exception code</dt>
-                    <dd className="font-mono text-xs">{detail.data.exception_code ?? "—"}</dd>
+                    <dd>
+                      <ExceptionCell code={detail.data.exception_code} />
+                    </dd>
                   </div>
                   <div>
                     <dt className="text-muted">Claim UoM</dt>
@@ -86,19 +89,19 @@ export function ResultDetailPage() {
                   </div>
                   <div>
                     <dt className="text-muted">Claim amount</dt>
-                    <dd className="font-mono font-medium">{formatDecimal(detail.data.claim_amount)}</dd>
+                    <dd className="font-mono font-medium">{formatMoney(detail.data.claim_amount)}</dd>
                   </div>
                   <div>
                     <dt className="text-muted">Claim unit amount</dt>
-                    <dd className="font-mono">{formatDecimal(detail.data.claim_unit_amount)}</dd>
+                    <dd className="font-mono">{formatMoney(detail.data.claim_unit_amount)}</dd>
                   </div>
                   <div>
                     <dt className="text-muted">Eligible quantity</dt>
-                    <dd className="font-mono">{formatDecimal(detail.data.eligible_quantity)}</dd>
+                    <dd className="font-mono">{formatQty(detail.data.eligible_quantity)}</dd>
                   </div>
                   <div>
                     <dt className="text-muted">Excess quantity</dt>
-                    <dd className="font-mono">{formatDecimal(detail.data.excess_quantity)}</dd>
+                    <dd className="font-mono">{formatQty(detail.data.excess_quantity)}</dd>
                   </div>
                   <div>
                     <dt className="text-muted">Flags</dt>
@@ -142,6 +145,9 @@ export function ResultDetailPage() {
 
         {detail.data && (
           <Card title="Explain this number">
+            <p className="mb-4 rounded-lg border border-line bg-surface px-4 py-3 text-sm font-medium">
+              {explainFormula(detail.data)}
+            </p>
             <TraceTree trace={detail.data.trace} />
           </Card>
         )}

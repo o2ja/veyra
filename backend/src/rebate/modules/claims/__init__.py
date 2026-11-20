@@ -6,7 +6,13 @@ from rebate.modules.claims import frozen
 from rebate.modules.claims import jobs as _jobs  # noqa: F401  (registers job handlers)
 from rebate.modules.claims.adjustments import propose_recovery_reclaim, retire_recovery_reclaims
 from rebate.modules.claims.exporting import render_table
-from rebate.modules.claims.recon_reads import claim_references, included_adjustments, submitted_claim_lines
+from rebate.modules.claims.missed import unclaimed_total
+from rebate.modules.claims.recon_reads import (
+    claim_line_refs,
+    claim_references,
+    included_adjustments,
+    submitted_claim_lines,
+)
 from rebate.modules.claims.reporting_reads import (
     audit_pack_rows,
     figures,
@@ -21,6 +27,7 @@ __all__ = [
     "JsonDate",
     "RunJobRef",
     "audit_pack_rows",
+    "claim_line_refs",
     "claim_references",
     "figures",
     "frozen",
@@ -33,4 +40,5 @@ __all__ = [
     "trace_calculation_result",
     "trace_claim_adjustment",
     "trace_claim_line",
+    "unclaimed_total",
 ]

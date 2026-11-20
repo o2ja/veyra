@@ -16,6 +16,7 @@ import {
   tokenFromMail,
   uniqueEmail,
 } from "./support";
+import { formatMoney } from "../src/lib/format";
 
 const data = (rel: string) => fileURLToPath(new URL(`../../testdata/generated/${rel}`, import.meta.url));
 const truth = (name: string) => JSON.parse(readFileSync(data(`ground_truth/${name}`), "utf8")) as unknown;
@@ -57,13 +58,6 @@ function salesPart(late: boolean): string {
 }
 
 const escapeRe = (t: string) => t.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-
-/** Digit grouping only, the same display rule as the UI (no arithmetic). */
-function grouping(value: string): string {
-  const [int = "", frac] = value.split(".");
-  const grouped = BigInt(int === "" ? "0" : int).toLocaleString("en-US");
-  return frac === undefined ? grouped : `${grouped}.${frac}`;
-}
 
 async function setAllowNegativeClaims(page: Page, manufacturerName: string, on: boolean) {
   await page.goto("/master-data/manufacturers");
@@ -446,14 +440,14 @@ test("S7 claims adjustments: queue, four-eyes approval, rejection, carry into ba
   await expect(carriedTable).toBeVisible();
   await expect(carriedTable.getByText(firstClaimRef)).toBeVisible();
 
-  // Batch total is the server string (digit grouping only, no arithmetic)
+  // Batch total is the server string in the UI's money format (no arithmetic)
   const res = await page.request.get(`/api/v1/claim-batches/${batchWithAdjId}`);
   expect(res.ok()).toBe(true);
   const serverTotal = ((await res.json()) as { total_amount: string }).total_amount;
   const totalsCard = page
     .getByRole("region")
     .filter({ has: page.getByText("Batch total (lines + carried adjustments, from server)") });
-  await expect(totalsCard.getByText(grouping(serverTotal), { exact: true })).toBeVisible();
+  await expect(totalsCard.getByText(formatMoney(serverTotal), { exact: true })).toBeVisible();
 
   // 14. adjustment_already_included: the stale page still has the adjustment selected
   await stalePage.getByRole("button", { name: /Create batch from selected/ }).click();

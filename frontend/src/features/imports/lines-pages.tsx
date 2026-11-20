@@ -14,6 +14,7 @@ import {
   SelectField,
   usePager,
 } from "../masterdata/common";
+import { formatDate, formatDateTime, formatMoney, formatQty } from "../../lib/format";
 
 type Lineage = components["schemas"]["Lineage"];
 type Kind = "sales" | "purchases";
@@ -111,6 +112,11 @@ export function LinesPage({ kind }: { kind: Kind }) {
     enabled: kind === "purchases",
   });
   const query = kind === "sales" ? sales : purchases;
+  // shortcut: the 50 most recent imports; older ones are still reachable from each import's own page.
+  const imports = useQuery({
+    queryKey: ["imports", "picker"],
+    queryFn: () => unwrap(api.GET("/api/v1/imports", { params: { query: { limit: 50 } } })),
+  });
 
   return (
     <>
@@ -158,11 +164,18 @@ export function LinesPage({ kind }: { kind: Kind }) {
             value={get("date_to")}
             onChange={(e) => set("date_to", e.target.value)}
           />
-          <Field
-            label="Import batch ID"
+          <SelectField
+            label="Import"
             value={get("import_batch_id")}
-            onChange={(e) => set("import_batch_id", e.target.value.trim())}
-          />
+            onChange={(e) => set("import_batch_id", e.target.value)}
+          >
+            <option value="">All imports</option>
+            {imports.data?.data.map((i) => (
+              <option key={i.id} value={i.id}>
+                {formatDateTime(i.created_at)} · {i.import_type} · {i.status.replaceAll("_", " ")}
+              </option>
+            ))}
+          </SelectField>
           {kind === "sales" && (
             <EntityPicker
               kind="customer"
@@ -200,23 +213,24 @@ export function LinesPage({ kind }: { kind: Kind }) {
                 ),
               },
               { header: "Type", cell: (l) => (l.doc_type === "credit_note" ? "Credit note" : "Invoice") },
-              { header: "Invoice date", cell: (l) => l.invoice_date },
+              { header: "Invoice date", cell: (l) => formatDate(l.invoice_date) },
               { header: "SKU", cell: (l) => <span className="font-mono">{l.sku_raw}</span> },
               {
                 header: "Quantity",
                 cell: (l) => (
                   <span className="font-mono">
-                    {l.quantity} {l.uom}
+                    {formatQty(l.quantity)} {l.uom}
                   </span>
                 ),
               },
-              { header: "Unit price", cell: (l) => <span className="font-mono">{l.unit_price}</span> },
+              {
+                header: "Unit price",
+                cell: (l) => <span className="font-mono">{formatMoney(l.unit_price, l.currency_code)}</span>,
+              },
               {
                 header: "Amount",
                 cell: (l) => (
-                  <span className="font-mono">
-                    {l.extended_amount} {l.currency_code}
-                  </span>
+                  <span className="font-mono">{formatMoney(l.extended_amount, l.currency_code)}</span>
                 ),
               },
               { header: "Source", cell: (l) => <LineageCell l={l.lineage} /> },
@@ -232,23 +246,24 @@ export function LinesPage({ kind }: { kind: Kind }) {
             columns={[
               { header: "Document", cell: (l) => `${l.document_number} / ${l.line_number}` },
               { header: "Type", cell: (l) => (l.doc_type === "vendor_credit" ? "Vendor credit" : "Receipt") },
-              { header: "Date", cell: (l) => l.document_date },
+              { header: "Date", cell: (l) => formatDate(l.document_date) },
               { header: "SKU", cell: (l) => <span className="font-mono">{l.sku_raw}</span> },
               {
                 header: "Quantity",
                 cell: (l) => (
                   <span className="font-mono">
-                    {l.quantity} {l.uom}
+                    {formatQty(l.quantity)} {l.uom}
                   </span>
                 ),
               },
-              { header: "Unit cost", cell: (l) => <span className="font-mono">{l.unit_cost}</span> },
+              {
+                header: "Unit cost",
+                cell: (l) => <span className="font-mono">{formatMoney(l.unit_cost, l.currency_code)}</span>,
+              },
               {
                 header: "Amount",
                 cell: (l) => (
-                  <span className="font-mono">
-                    {l.extended_amount} {l.currency_code}
-                  </span>
+                  <span className="font-mono">{formatMoney(l.extended_amount, l.currency_code)}</span>
                 ),
               },
               { header: "Source", cell: (l) => <LineageCell l={l.lineage} /> },
@@ -272,8 +287,8 @@ export function SalesLinePage() {
   const rows: [string, React.ReactNode][] = l
     ? [
         ["Type", l.doc_type === "credit_note" ? "Credit note" : "Invoice"],
-        ["Invoice date", l.invoice_date],
-        ["Ship date", l.ship_date ?? "—"],
+        ["Invoice date", formatDate(l.invoice_date)],
+        ["Ship date", formatDate(l.ship_date)],
         [
           "Customer",
           <Link key="c" to={`/master-data/customers/${l.customer_id}`} className="text-brand underline">
@@ -297,11 +312,11 @@ export function SalesLinePage() {
           ),
         ],
         ["Description", l.description ?? "—"],
-        ["Quantity", `${l.quantity} ${l.uom}`],
-        ["Unit price", l.unit_price],
-        ["Unit cost", l.unit_cost ?? "—"],
-        ["Replacement cost", l.replacement_cost ?? "—"],
-        ["Amount", `${l.extended_amount} ${l.currency_code}`],
+        ["Quantity", `${formatQty(l.quantity)} ${l.uom}`],
+        ["Unit price", formatMoney(l.unit_price, l.currency_code)],
+        ["Unit cost", formatMoney(l.unit_cost, l.currency_code)],
+        ["Replacement cost", formatMoney(l.replacement_cost, l.currency_code)],
+        ["Amount", formatMoney(l.extended_amount, l.currency_code)],
         ["SPA reference", l.spa_reference ?? "—"],
         ["Project reference", l.project_reference ?? "—"],
         [

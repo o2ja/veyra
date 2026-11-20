@@ -7,7 +7,8 @@ import { api } from "../../lib/api/client";
 import { type ApiError, unwrap } from "../../lib/api/errors";
 import { Checkbox, PagerControls, usePager } from "../masterdata/common";
 import { RecoveryNav } from "./common";
-import { notificationCaseLink, usDate, usDateTime, type NotificationOut } from "./logic";
+import { notificationCaseLink, type NotificationOut } from "./logic";
+import { formatDate, formatDateTime } from "../../lib/format";
 
 export function NotificationsPage() {
   const pager = usePager();
@@ -84,7 +85,8 @@ export function NotificationsPage() {
                           <p className="whitespace-pre-wrap text-sm">{notification.body}</p>
                         )}
                         <p className="text-xs text-muted">
-                          Due {usDate(notification.due_date)} · Created {usDateTime(notification.created_at)}
+                          Due {formatDate(notification.due_date)} · Created{" "}
+                          {formatDateTime(notification.created_at)}
                         </p>
                         {caseLink && (
                           <Link to={caseLink} className="text-sm text-brand underline">
@@ -94,7 +96,9 @@ export function NotificationsPage() {
                       </div>
                       <div className="flex flex-col items-end gap-1">
                         {notification.read_at ? (
-                          <span className="text-xs text-muted">Read {usDateTime(notification.read_at)}</span>
+                          <span className="text-xs text-muted">
+                            Read {formatDateTime(notification.read_at)}
+                          </span>
                         ) : (
                           <Button
                             variant="secondary"

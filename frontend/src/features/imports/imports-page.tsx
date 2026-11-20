@@ -7,8 +7,9 @@ import { Card, PermissionDenied } from "../../components/ui";
 import { api } from "../../lib/api/client";
 import { ApiError, unwrap } from "../../lib/api/errors";
 import { useSession } from "../../lib/session";
-import { DataTable, PagerControls, SelectField, usePager, utc } from "../masterdata/common";
+import { DataTable, PagerControls, SelectField, usePager } from "../masterdata/common";
 import { STATUS_TEXT, TYPE_TEXT, isBusy } from "./logic";
+import { formatDateTime } from "../../lib/format";
 
 type Query = NonNullable<paths["/api/v1/imports"]["get"]["parameters"]["query"]>;
 
@@ -37,7 +38,7 @@ export function ImportsPage() {
       title="Imports"
       actions={
         can("import.run") && (
-          <Link to="/imports/new" className="rounded-md bg-brand px-3 py-2 text-sm font-medium text-white">
+          <Link to="/imports/new" className="rounded-md bg-brand px-3 py-2 text-sm font-medium text-panel">
             New import
           </Link>
         )
@@ -83,10 +84,10 @@ export function ImportsPage() {
         empty="No imports yet."
         columns={[
           {
-            header: "Started (UTC)",
+            header: "Started",
             cell: (i) => (
               <Link to={`/imports/${i.id}`} className="text-brand underline">
-                {utc(i.created_at)}
+                {formatDateTime(i.created_at)}
               </Link>
             ),
           },

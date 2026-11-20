@@ -7,7 +7,8 @@ import { ApiError, unwrap } from "../../lib/api/errors";
 import { useSession } from "../../lib/session";
 import { DataTable, PagerControls, usePager } from "../masterdata/common";
 import { ReportingNav, useBranchMap, useManufacturerMap } from "./common";
-import { formatDecimal, METRIC_LABELS, type DrillRow, type MetricKey } from "./logic";
+import { METRIC_LABELS, type DrillRow, type MetricKey } from "./logic";
+import { formatDateTime, formatMoney } from "../../lib/format";
 
 export function DrilldownPage() {
   const { metric = "" } = useParams();
@@ -105,7 +106,7 @@ export function DrilldownPage() {
             <h1 className="mt-1 font-semibold text-2xl text-ink">Drill-down: {metricLabel}</h1>
             {d?.as_of && (
               <p className="text-muted text-xs">
-                As of <span className="font-mono">{d.as_of}</span>
+                As of <span className="font-mono">{formatDateTime(d.as_of)}</span>
               </p>
             )}
           </div>
@@ -145,12 +146,12 @@ export function DrilldownPage() {
         {d && (
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
             <Card title="Metric figure">
-              <p className="font-mono font-semibold text-3xl text-ink">{formatDecimal(d.figure)}</p>
+              <p className="font-mono font-semibold text-3xl text-ink">{formatMoney(d.figure)}</p>
               <p className="mt-1 text-muted text-xs">Calculated figure for this filter selection</p>
             </Card>
 
             <Card title="Drill-down total">
-              <p className="font-mono font-semibold text-3xl text-ink">{formatDecimal(d.total)}</p>
+              <p className="font-mono font-semibold text-3xl text-ink">{formatMoney(d.total)}</p>
               <p className="mt-1 text-muted text-xs">Total of drill-down line items</p>
             </Card>
           </div>
@@ -192,7 +193,7 @@ export function DrilldownPage() {
               {
                 header: "Amount",
                 cell: (row) => (
-                  <span className="block text-right font-mono font-medium">{formatDecimal(row.amount)}</span>
+                  <span className="block text-right font-mono font-medium">{formatMoney(row.amount)}</span>
                 ),
               },
               {

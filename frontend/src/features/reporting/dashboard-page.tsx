@@ -8,14 +8,8 @@ import { ApiError, unwrap } from "../../lib/api/errors";
 import { useSession } from "../../lib/session";
 import { ManufacturerSelect } from "../masterdata/common";
 import { BranchSelect, ReportingNav } from "./common";
-import {
-  formatDecimal,
-  jobPollDecision,
-  METRIC_DESCRIPTIONS,
-  METRIC_KEYS,
-  METRIC_LABELS,
-  type MetricKey,
-} from "./logic";
+import { jobPollDecision, METRIC_DESCRIPTIONS, METRIC_KEYS, METRIC_LABELS, type MetricKey } from "./logic";
+import { formatDate, formatDateTime, formatMoney } from "../../lib/format";
 
 const TONE: Record<string, string> = {
   collected: "text-ok",
@@ -265,10 +259,10 @@ export function DashboardPage() {
               Money claimed, collected and still at risk. Select any figure to see the rows behind it.
             </p>
             <p className="mt-1 text-muted text-xs">
-              As of <span className="font-mono">{d.as_of}</span>
+              As of <span className="font-mono">{formatDateTime(d.as_of)}</span>
               {d.as_of_date && (
                 <>
-                  ; at-risk computed for <span className="font-mono">{d.as_of_date}</span>
+                  ; at-risk computed for <span className="font-mono">{formatDate(d.as_of_date)}</span>
                 </>
               )}
             </p>
@@ -333,7 +327,7 @@ export function DashboardPage() {
             {METRIC_KEYS.map((key) => {
               const val = d.figures[key];
               const label = METRIC_LABELS[key] ?? key;
-              const formatted = formatDecimal(val);
+              const formatted = formatMoney(val);
               const desc = METRIC_DESCRIPTIONS[key];
               const to = drilldownUrl(key);
 
@@ -375,7 +369,7 @@ export function DashboardPage() {
                           </span>
                         </div>
                         <p className="mt-2 font-mono font-semibold text-2xl text-ink">
-                          {formatDecimal(d.figures.recovered_after_write_off)}
+                          {formatMoney(d.figures.recovered_after_write_off)}
                         </p>
                       </div>
                       <p className="mt-2 text-muted text-xs leading-relaxed">
@@ -438,10 +432,10 @@ export function DashboardPage() {
                       <td className="py-2 pr-4 text-right font-mono">
                         <Link
                           to={drilldownUrl(metric, m.month)}
-                          aria-label={`${METRIC_LABELS[metric] ?? metric} ${m.month}: ${formatDecimal(value)}, view details`}
+                          aria-label={`${METRIC_LABELS[metric] ?? metric} ${m.month}: ${formatMoney(value)}, view details`}
                           className="underline-offset-2 hover:underline"
                         >
-                          {formatDecimal(value)}
+                          {formatMoney(value)}
                         </Link>
                       </td>
                     );

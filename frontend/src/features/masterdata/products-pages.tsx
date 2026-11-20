@@ -18,9 +18,9 @@ import {
   orNull,
   useManufacturers,
   usePager,
-  utc,
 } from "./common";
 import { UomConversions } from "./uom-page";
+import { formatDateTime } from "../../lib/format";
 
 type Product = components["schemas"]["ProductDetail"];
 type AliasType = components["schemas"]["ProductAliasIn"]["alias_type"];
@@ -353,7 +353,7 @@ export function ProductDetailPage() {
                 header: "Type",
                 cell: (a) => ALIAS_TYPES.find(([v]) => v === a.alias_type)?.[1] ?? a.alias_type,
               },
-              { header: "Added (UTC)", cell: (a) => utc(a.created_at) },
+              { header: "Added", cell: (a) => formatDateTime(a.created_at) },
             ]}
           />
           {can("masterdata.write") && <AddProductAlias productId={productId} />}

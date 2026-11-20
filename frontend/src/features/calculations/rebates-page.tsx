@@ -1,13 +1,13 @@
 import { useQuery } from "@tanstack/react-query";
-import { useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 
-import { Button, Card, Empty, ErrorAlert, Field, Loading, PermissionDenied } from "../../components/ui";
+import { Card, Empty, ErrorAlert, Loading, PermissionDenied } from "../../components/ui";
 import { api } from "../../lib/api/client";
 import { ApiError, unwrap } from "../../lib/api/errors";
-import { DataTable, PagerControls, usePager } from "../masterdata/common";
+import { AgreementSelect, DataTable, PagerControls, SelectField, usePager } from "../masterdata/common";
 import { CalculationsNav, ValidationDetailsAlert } from "./common";
-import { formatDecimal, type AccrualOut } from "./logic";
+import { runSummary, type AccrualOut } from "./logic";
+import { formatDate, formatMoney, formatQty } from "../../lib/format";
 
 export function RebatesPage() {
   const pager = usePager();
@@ -15,8 +15,11 @@ export function RebatesPage() {
   const agreementFilter = searchParams.get("agreement_id") ?? "";
   const runFilter = searchParams.get("run_id") ?? "";
 
-  const [agreementInput, setAgreementInput] = useState(agreementFilter);
-  const [runInput, setRunInput] = useState(runFilter);
+  const runs = useQuery({
+    queryKey: ["calculation-runs", "picker"],
+    queryFn: () =>
+      unwrap(api.GET("/api/v1/calculation-runs", { params: { query: { status: "completed", limit: 50 } } })),
+  });
 
   const tracker = useQuery({
     queryKey: ["rebate-tracker"],
@@ -57,15 +60,10 @@ export function RebatesPage() {
     );
   }
 
-  function applyFilters(e: React.FormEvent) {
-    e.preventDefault();
+  function setFilter(key: string, value: string) {
     const next = new URLSearchParams(searchParams);
-    const ag = agreementInput.trim();
-    const rn = runInput.trim();
-    if (ag) next.set("agreement_id", ag);
-    else next.delete("agreement_id");
-    if (rn) next.set("run_id", rn);
-    else next.delete("run_id");
+    if (value) next.set(key, value);
+    else next.delete(key);
     setSearchParams(next, { replace: true });
     pager.reset();
   }
@@ -97,9 +95,9 @@ export function RebatesPage() {
                     </h2>
                     <div className="flex flex-wrap gap-3 text-xs text-muted">
                       <span>
-                        Period: {row.period_start} – {row.period_end}
+                        Period: {formatDate(row.period_start)} – {formatDate(row.period_end)}
                       </span>
-                      <span>As of: {row.as_of_date}</span>
+                      <span>As of: {formatDate(row.as_of_date)}</span>
                       <Link
                         to={`/agreements/versions/${row.agreement_version_id}`}
                         className="text-brand underline"
@@ -112,19 +110,19 @@ export function RebatesPage() {
                   <dl className="mb-4 grid gap-3 text-sm sm:grid-cols-2 lg:grid-cols-4">
                     <div>
                       <dt className="text-muted">Cumulative qualifying</dt>
-                      <dd className="font-mono font-medium">{formatDecimal(row.cumulative_qualifying)}</dd>
+                      <dd className="font-mono font-medium">{formatQty(row.cumulative_qualifying)}</dd>
                     </div>
                     <div>
                       <dt className="text-muted">Cumulative payout base</dt>
-                      <dd className="font-mono font-medium">{formatDecimal(row.cumulative_payout_base)}</dd>
+                      <dd className="font-mono font-medium">{formatMoney(row.cumulative_payout_base)}</dd>
                     </div>
                     <div>
                       <dt className="text-muted">Cumulative earned</dt>
-                      <dd className="font-mono font-medium">{formatDecimal(row.cumulative_earned)}</dd>
+                      <dd className="font-mono font-medium">{formatMoney(row.cumulative_earned)}</dd>
                     </div>
                     <div>
                       <dt className="text-muted">Accrued to date</dt>
-                      <dd className="font-mono font-medium">{formatDecimal(row.accrued_to_date)}</dd>
+                      <dd className="font-mono font-medium">{formatMoney(row.accrued_to_date)}</dd>
                     </div>
                     <div>
                       <dt className="text-muted">Current tier</dt>
@@ -136,15 +134,15 @@ export function RebatesPage() {
                     </div>
                     <div>
                       <dt className="text-muted">Next tier lower bound</dt>
-                      <dd className="font-mono">{formatDecimal(row.next_tier_lower_bound)}</dd>
+                      <dd className="font-mono">{formatQty(row.next_tier_lower_bound)}</dd>
                     </div>
                     <div>
                       <dt className="text-muted">Amount to next tier</dt>
-                      <dd className="font-mono">{formatDecimal(row.amount_to_next_tier)}</dd>
+                      <dd className="font-mono">{formatQty(row.amount_to_next_tier)}</dd>
                     </div>
                     <div>
                       <dt className="text-muted">Claim deadline</dt>
-                      <dd>{row.claim_deadline ?? "—"}</dd>
+                      <dd>{formatDate(row.claim_deadline)}</dd>
                     </div>
                   </dl>
 
@@ -179,7 +177,7 @@ export function RebatesPage() {
                               >
                                 <td className="py-1.5 pr-4">Tier {tier.tier_number}</td>
                                 <td className="py-1.5 pr-4 text-right font-mono">
-                                  {formatDecimal(tier.lower_bound)}
+                                  {formatQty(tier.lower_bound)}
                                 </td>
                                 <td className="py-1.5 pr-4 text-right font-mono">{tier.rate ?? "—"}</td>
                                 <td className="py-1.5 pr-4">{isCurrent ? "Current tier" : "—"}</td>
@@ -197,27 +195,21 @@ export function RebatesPage() {
         </Card>
 
         <Card title="Accrual ledger">
-          <form className="mb-4 flex flex-wrap items-end gap-3" onSubmit={applyFilters}>
-            <div className="min-w-56 flex-1">
-              <Field
-                label="Agreement ID"
-                value={agreementInput}
-                placeholder="UUID"
-                onChange={(e) => setAgreementInput(e.target.value)}
-              />
-            </div>
-            <div className="min-w-56 flex-1">
-              <Field
-                label="Run ID"
-                value={runInput}
-                placeholder="UUID"
-                onChange={(e) => setRunInput(e.target.value)}
-              />
-            </div>
-            <Button type="submit" variant="secondary">
-              Apply
-            </Button>
-          </form>
+          <div className="mb-4 grid gap-3 sm:grid-cols-2">
+            <AgreementSelect value={agreementFilter} onChange={(id) => setFilter("agreement_id", id)} />
+            <SelectField
+              label="Calculation run"
+              value={runFilter}
+              onChange={(e) => setFilter("run_id", e.target.value)}
+            >
+              <option value="">All runs</option>
+              {runs.data?.data.map((r) => (
+                <option key={r.id} value={r.id}>
+                  {formatDate(r.run_date)} · {runSummary(r.totals)}
+                </option>
+              ))}
+            </SelectField>
+          </div>
 
           {accrualsErr ? (
             <ValidationDetailsAlert error={accrualsErr} />
@@ -237,24 +229,27 @@ export function RebatesPage() {
                     </Link>
                   ),
                 },
-                { header: "As of", cell: (a) => a.as_of_date },
-                { header: "Period", cell: (a) => `${a.period_start} – ${a.period_end}` },
+                { header: "As of", cell: (a) => formatDate(a.as_of_date) },
+                {
+                  header: "Period",
+                  cell: (a) => `${formatDate(a.period_start)} – ${formatDate(a.period_end)}`,
+                },
                 {
                   header: "Prior accrued",
                   cell: (a) => (
                     <span className="block text-right font-mono">
-                      {formatDecimal(a.prior_cumulative_accrued)}
+                      {formatMoney(a.prior_cumulative_accrued)}
                     </span>
                   ),
                 },
                 {
                   header: "Delta",
-                  cell: (a) => <span className="block text-right font-mono">{formatDecimal(a.delta)}</span>,
+                  cell: (a) => <span className="block text-right font-mono">{formatMoney(a.delta)}</span>,
                 },
                 {
                   header: "Cumulative earned",
                   cell: (a) => (
-                    <span className="block text-right font-mono">{formatDecimal(a.cumulative_earned)}</span>
+                    <span className="block text-right font-mono">{formatMoney(a.cumulative_earned)}</span>
                   ),
                 },
                 {

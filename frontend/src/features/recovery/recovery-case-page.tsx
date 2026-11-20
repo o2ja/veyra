@@ -4,6 +4,7 @@ import { Link, useParams } from "react-router-dom";
 
 import {
   Alert,
+  Badge,
   Button,
   Card,
   Empty,
@@ -21,21 +22,21 @@ import {
   CONTROL_CHAR_REGEX,
   DEADLINE_BASIS_LABELS,
   TRANSITION_STATUSES,
-  amountText,
   batchIdFromDetails,
   caseTypeLabel,
+  disputeSentences,
+  disputeSummary,
   isValidWriteOffReason,
   newestFirst,
   ownerText,
   reasonLabel,
   statusLabel,
-  usDate,
-  usDateTime,
   writeOffProposalLabel,
   type AttachmentOut,
   type CaseOut,
   type EventOut,
 } from "./logic";
+import { formatDate, formatDateTime, formatMoney } from "../../lib/format";
 
 type DialogName = "assign" | "status" | "reclaim" | "writeoff" | null;
 
@@ -429,7 +430,12 @@ export function RecoveryCasePage() {
                         Unknown deadline
                       </span>
                     ) : (
-                      usDate(item.deadline_date)
+                      formatDate(item.deadline_date)
+                    )}
+                    {item.overdue_days != null && item.overdue_days > 0 && (
+                      <span className="block text-xs font-semibold text-danger">
+                        Overdue by {item.overdue_days} day{item.overdue_days === 1 ? "" : "s"}
+                      </span>
                     )}
                   </dd>
                 </div>
@@ -460,7 +466,14 @@ export function RecoveryCasePage() {
                 </div>
                 <div>
                   <dt className="text-muted">Owner</dt>
-                  <dd aria-label="Case owner">{ownerText(item.owner_user_id, me?.user.id)}</dd>
+                  <dd aria-label="Case owner">
+                    {(() => {
+                      const owner = (members.data?.data ?? []).find((m) => m.user_id === item.owner_user_id);
+                      return item.owner_user_id && item.owner_user_id !== me?.user.id && owner
+                        ? owner.full_name || owner.email
+                        : ownerText(item.owner_user_id, me?.user.id);
+                    })()}
+                  </dd>
                 </div>
                 <div>
                   <dt className="text-muted">Revision</dt>
@@ -470,15 +483,15 @@ export function RecoveryCasePage() {
                 </div>
                 <div>
                   <dt className="text-muted">Created</dt>
-                  <dd>{usDateTime(item.created_at)}</dd>
+                  <dd>{formatDateTime(item.created_at)}</dd>
                 </div>
                 <div>
                   <dt className="text-muted">Closed</dt>
-                  <dd>{item.closed_at ? usDateTime(item.closed_at) : "—"}</dd>
+                  <dd>{item.closed_at ? formatDateTime(item.closed_at) : "—"}</dd>
                 </div>
                 <div>
                   <dt className="text-muted">Written off</dt>
-                  <dd>{item.written_off_at ? usDateTime(item.written_off_at) : "—"}</dd>
+                  <dd>{item.written_off_at ? formatDateTime(item.written_off_at) : "—"}</dd>
                 </div>
                 {item.write_off_reason && (
                   <div className="sm:col-span-2">
@@ -488,17 +501,53 @@ export function RecoveryCasePage() {
                 )}
               </dl>
 
+              <div className="flex flex-wrap items-center gap-x-5 gap-y-2 border-t border-line pt-4 text-sm">
+                <span className="text-muted">Related:</span>
+                {item.claim_batch_id && (
+                  <Link to={`/claims/batches/${item.claim_batch_id}`} className="text-brand underline">
+                    Claim {item.claim_reference ?? "batch"}
+                  </Link>
+                )}
+                {item.claim_line_id && (
+                  <Link to={`/trace/claim_line/${item.claim_line_id}`} className="text-brand underline">
+                    Claim line
+                  </Link>
+                )}
+                {item.sales_document_line_id && (
+                  <Link to={`/lines/sales/${item.sales_document_line_id}`} className="text-brand underline">
+                    Invoice line
+                  </Link>
+                )}
+                {item.remittance_document_id && (
+                  <Link
+                    to={`/reconciliation/${item.remittance_document_id}`}
+                    className="text-brand underline"
+                  >
+                    Remittance
+                  </Link>
+                )}
+                {item.remittance_line_id && (
+                  <Link
+                    to={`/trace/remittance_line/${item.remittance_line_id}`}
+                    className="text-brand underline"
+                  >
+                    Remittance line
+                  </Link>
+                )}
+                <CopyDisputeSummary item={item} />
+              </div>
+
               {proposalMine && (
                 <Alert tone="info">
                   You proposed this write-off
-                  {item.write_off_proposed_at ? ` on ${usDateTime(item.write_off_proposed_at)}` : ""}. A
+                  {item.write_off_proposed_at ? ` on ${formatDateTime(item.write_off_proposed_at)}` : ""}. A
                   different approver must complete it.
                 </Alert>
               )}
               {proposalOther && (
                 <Alert tone="info">
                   A write-off was proposed
-                  {item.write_off_proposed_at ? ` on ${usDateTime(item.write_off_proposed_at)}` : ""} and
+                  {item.write_off_proposed_at ? ` on ${formatDateTime(item.write_off_proposed_at)}` : ""} and
                   awaits a second approver.
                 </Alert>
               )}
@@ -508,11 +557,7 @@ export function RecoveryCasePage() {
 
         {item && (
           <Card title="Dispute assessment">
-            <GenericTree
-              data={item.dispute_assessment}
-              label="Dispute assessment"
-              empty="No dispute assessment recorded."
-            />
+            <DisputeAssessment doc={item.dispute_assessment} />
           </Card>
         )}
 
@@ -528,7 +573,7 @@ export function RecoveryCasePage() {
                 <li key={event.id} className="border-l-2 border-line pl-4 text-sm">
                   <div className="flex flex-wrap items-baseline gap-2">
                     <span className="font-medium">{reasonLabel(event.event_type)}</span>
-                    <span className="text-xs text-muted">{usDateTime(event.created_at)}</span>
+                    <span className="text-xs text-muted">{formatDateTime(event.created_at)}</span>
                   </div>
                   {(event.from_status || event.to_status) && (
                     <p className="mt-1">
@@ -537,7 +582,12 @@ export function RecoveryCasePage() {
                     </p>
                   )}
                   {event.note && <p className="mt-1 whitespace-pre-wrap">{event.note}</p>}
-                  <p className="mt-1 text-xs text-muted">By {event.actor_user_id ?? "System"}</p>
+                  <p className="mt-1 text-xs text-muted">
+                    By{" "}
+                    {event.actor_name ||
+                      event.actor_email ||
+                      (event.actor_user_id ? "a former member" : "Veyra (automatic)")}
+                  </p>
                   {event.payload && Object.keys(event.payload).length > 0 && (
                     <div className="mt-2">
                       <GenericTree
@@ -652,7 +702,7 @@ export function RecoveryCasePage() {
                   {attachmentRows.map((attachment) => (
                     <tr key={attachment.id} className="border-t border-line">
                       <td className="py-2 pr-4 font-mono text-xs">{attachment.file_id}</td>
-                      <td className="py-2 pr-4">{usDateTime(attachment.added_at)}</td>
+                      <td className="py-2 pr-4">{formatDateTime(attachment.added_at)}</td>
                       <td className="py-2 pr-4 font-mono text-xs">{attachment.added_by}</td>
                       <td className="py-2 pr-4">
                         <AttachmentDownloadButton fileId={attachment.file_id} />
@@ -842,12 +892,64 @@ export function RecoveryCasePage() {
   );
 }
 
+function CopyDisputeSummary({ item }: { item: CaseOut }) {
+  const [copied, setCopied] = useState<"idle" | "done" | "failed">("idle");
+  const lineId = item.sales_document_line_id ?? "";
+  const line = useQuery({
+    queryKey: ["lines", "sales", lineId],
+    enabled: Boolean(lineId),
+    queryFn: () =>
+      unwrap(api.GET("/api/v1/sales-lines/{line_id}", { params: { path: { line_id: lineId } } })),
+  });
+  const invoice = line.data ? `${line.data.document_number}, line ${line.data.line_number}` : null;
+  async function copy() {
+    try {
+      await navigator.clipboard.writeText(disputeSummary({ ...item, invoice }));
+      setCopied("done");
+    } catch {
+      setCopied("failed");
+    }
+    setTimeout(() => setCopied("idle"), 2500);
+  }
+  return (
+    <span className="ml-auto flex items-center gap-2">
+      <span role="status" className="text-xs text-muted">
+        {copied === "done" ? "Copied" : copied === "failed" ? "Copy blocked by the browser" : ""}
+      </span>
+      <Button variant="secondary" onClick={() => void copy()}>
+        Copy dispute summary
+      </Button>
+    </span>
+  );
+}
+
+function DisputeAssessment({ doc }: { doc: Record<string, unknown> | null }) {
+  const read = disputeSentences(doc);
+  if (!read)
+    return <Empty>No dispute assessment: this case has no frozen claim line to check against.</Empty>;
+  return (
+    <div className="flex flex-col gap-3 text-sm">
+      <p className="font-medium">{read.headline}</p>
+      <ul className="flex flex-col gap-1.5">
+        {read.checks.map((c) => (
+          <li key={c.text} className="flex items-start gap-2">
+            <Badge tone={c.passed === null ? "neutral" : c.passed ? "ok" : "danger"}>
+              {c.passed === null ? "Unknown" : c.passed ? "Holds" : "Fails"}
+            </Badge>
+            <span>{c.text}</span>
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
+}
+
 function Amount({ label, value }: { label: string; value: string | null }) {
   return (
     <div>
       <dt className="text-muted">{label}</dt>
       <dd className="font-mono font-medium" aria-label={`${label} amount`}>
-        {amountText(value)}
+        {formatMoney(value)}
       </dd>
     </div>
   );

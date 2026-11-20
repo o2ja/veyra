@@ -16,8 +16,6 @@ import { useSession } from "../../lib/session";
 
 // Shared pieces for the master-data, import and line-browser screens (S3).
 
-export const utc = (ts: string | null | undefined) => (ts ? ts.replace("T", " ").slice(0, 19) : "—");
-
 /** Keyset pagination (API_SPECIFICATION.md §1.2): a stack of cursors, so "Previous" needs no offsets. */
 export interface Pager {
   stack: (string | null)[];
@@ -195,6 +193,35 @@ export function ManufacturerSelect({
       {list.data?.data.map((m) => (
         <option key={m.id} value={m.id}>
           {m.name} ({m.code})
+        </option>
+      ))}
+    </SelectField>
+  );
+}
+
+/** Pick an agreement by number and name instead of pasting its id. */
+export function AgreementSelect({
+  label = "Agreement",
+  value,
+  onChange,
+  allowAny = "All agreements",
+}: {
+  label?: string;
+  value: string;
+  onChange: (id: string) => void;
+  allowAny?: string;
+}) {
+  // shortcut: first 200 agreements only; switch to a search picker if a tenant outgrows that.
+  const list = useQuery({
+    queryKey: ["agreements", "picker"],
+    queryFn: () => unwrap(api.GET("/api/v1/agreements", { params: { query: { limit: 200 } } })),
+  });
+  return (
+    <SelectField label={label} value={value} onChange={(e) => onChange(e.target.value)}>
+      <option value="">{allowAny}</option>
+      {list.data?.data.map((a) => (
+        <option key={a.id} value={a.id}>
+          {a.external_number} · {a.name}
         </option>
       ))}
     </SelectField>

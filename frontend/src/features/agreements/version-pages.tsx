@@ -4,9 +4,10 @@ import { Link, useParams } from "react-router-dom";
 import { Alert, Card, Empty, ErrorAlert, Loading, PermissionDenied } from "../../components/ui";
 import { api } from "../../lib/api/client";
 import { ApiError, unwrap } from "../../lib/api/errors";
-import { DataTable, PagerControls, usePager, utc } from "../masterdata/common";
+import { DataTable, PagerControls, usePager } from "../masterdata/common";
 import { AgreementsNav, useManufacturerMap } from "./common";
 import { flattenRulesEntries, formatValue, VERSION_STATUS_LABELS } from "./logic";
+import { formatDate, formatDateTime, formatMoney, formatQty } from "../../lib/format";
 
 export function VersionDetailPage() {
   const { versionId = "" } = useParams();
@@ -85,11 +86,11 @@ export function VersionDetailPage() {
                       </div>
                       <div>
                         <dt className="text-muted">Valid from</dt>
-                        <dd className="font-medium">{v.valid_from}</dd>
+                        <dd className="font-medium">{formatDate(v.valid_from)}</dd>
                       </div>
                       <div>
                         <dt className="text-muted">Valid to</dt>
-                        <dd className="font-medium">{v.valid_to}</dd>
+                        <dd className="font-medium">{formatDate(v.valid_to)}</dd>
                       </div>
                       <div>
                         <dt className="text-muted">Priority</dt>
@@ -101,7 +102,7 @@ export function VersionDetailPage() {
                       </div>
                       <div>
                         <dt className="text-muted">Activated</dt>
-                        <dd className="font-medium">{utc(v.activated_at)}</dd>
+                        <dd className="font-medium">{formatDateTime(v.activated_at)}</dd>
                       </div>
                       <div>
                         <dt className="text-muted">Content hash</dt>
@@ -249,10 +250,10 @@ export function VersionDetailPage() {
                     { header: "SKU", cell: (it) => it.sku },
                     { header: "Reference cost", cell: (it) => it.reference_cost ?? "—" },
                     { header: "Deviated cost", cell: (it) => it.deviated_cost ?? "—" },
-                    { header: "Sell price", cell: (it) => it.sell_price ?? "—" },
+                    { header: "Sell price", cell: (it) => formatMoney(it.sell_price) },
                     { header: "Rate", cell: (it) => it.rate ?? "—" },
-                    { header: "Flat amount", cell: (it) => it.flat_amount ?? "—" },
-                    { header: "Max qty", cell: (it) => it.max_quantity ?? "—" },
+                    { header: "Flat amount", cell: (it) => formatMoney(it.flat_amount) },
+                    { header: "Max qty", cell: (it) => formatQty(it.max_quantity) },
                     { header: "Claim UoM", cell: (it) => it.claim_uom ?? "—" },
                   ]}
                 />

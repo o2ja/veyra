@@ -7,9 +7,10 @@ import { api } from "../../lib/api/client";
 import { ApiError, unwrap } from "../../lib/api/errors";
 import { useSession } from "../../lib/session";
 import { uploadWithProgress } from "../files/files-page";
-import { Checkbox, DataTable, SelectField, utc } from "../masterdata/common";
+import { Checkbox, DataTable, SelectField } from "../masterdata/common";
 import { ExtractionsNav } from "./common";
 import { EXTRACTION_STATUS_LABELS, type ExtractionOut } from "./logic";
+import { formatDateTime } from "../../lib/format";
 
 export function ExtractionsPage() {
   const { can } = useSession();
@@ -126,7 +127,7 @@ export function ExtractionsPage() {
                   <option value="">Choose an uploaded agreement file…</option>
                   {agreementFiles.map((f) => (
                     <option key={f.id} value={f.id}>
-                      {f.original_name} ({utc(f.created_at)})
+                      {f.original_name} ({formatDateTime(f.created_at)})
                     </option>
                   ))}
                 </SelectField>
@@ -249,7 +250,7 @@ export function ExtractionsPage() {
                     "—"
                   ),
               },
-              { header: "Created", cell: (ex) => utc(ex.created_at) },
+              { header: "Created", cell: (ex) => formatDateTime(ex.created_at) },
             ]}
           />
         </Card>

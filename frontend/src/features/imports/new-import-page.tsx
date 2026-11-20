@@ -10,6 +10,7 @@ import { useSession } from "../../lib/session";
 import { STATUS_TEXT as SCAN_TEXT, uploadWithProgress } from "../files/files-page";
 import { SelectField } from "../masterdata/common";
 import { TYPE_TEXT } from "./logic";
+import { formatDate } from "../../lib/format";
 
 type ImportType = components["schemas"]["ImportIn"]["import_type"];
 
@@ -130,7 +131,7 @@ export function NewImportPage() {
             <option value="">{files.isPending ? "Loading…" : "Choose…"}</option>
             {importable?.map((f) => (
               <option key={f.id} value={f.id}>
-                {f.original_name} · {SCAN_TEXT[f.scan_status] ?? f.scan_status} · {f.created_at.slice(0, 10)}
+                {f.original_name} · {SCAN_TEXT[f.scan_status] ?? f.scan_status} · {formatDate(f.created_at)}
               </option>
             ))}
           </SelectField>

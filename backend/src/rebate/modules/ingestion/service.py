@@ -49,7 +49,8 @@ MAX_RUNNING = 3  # imports per workspace in scanning/parsing/loading at the same
 RUNNING = ("scanning", "parsing", "loading")
 SCAN_WAIT = timedelta(hours=1)
 SCAN_POLL = timedelta(seconds=5)
-TERMINAL = frozenset({"completed", "completed_with_errors", "failed", "rejected"})
+TERMINAL = frozenset({"completed", "completed_with_errors", "failed", "rejected", "discarded"})
+WAITING = ("awaiting_confirmation",)  # the only state in which an import waits for a person
 
 
 class TooManyRunningImports(Conflict):
@@ -151,6 +152,43 @@ def list_batches(
     if import_type is not None:
         stmt = stmt.where(ImportBatch.import_type == import_type)
     return list(db.scalars(masterdata.keyset(stmt, ImportBatch.id, cursor, limit)))
+
+
+@files.register_use_source
+def _file_uses(db: Session, tenant_id: UUID, file_id: UUID) -> list[files.Use]:
+    rows = db.scalars(
+        select(ImportBatch)
+        .where(ImportBatch.tenant_id == tenant_id, ImportBatch.file_id == file_id)
+        .order_by(ImportBatch.id)
+    )
+    return [files.Use("import", b.id, f"{b.import_type.capitalize()} import ({b.status})") for b in rows]
+
+
+def waiting_count(db: Session, tenant_id: UUID) -> int:
+    """Imports waiting for a person: parsed, waiting for the mapping or the confirmation."""
+    return (
+        db.scalar(
+            select(func.count()).where(ImportBatch.tenant_id == tenant_id, ImportBatch.status.in_(WAITING))
+        )
+        or 0
+    )
+
+
+def discard(
+    db: Session, *, tenant_id: UUID, user_id: UUID, batch_id: UUID, meta: dict[str, Any]
+) -> ImportBatch:
+    """Drop an import that waits for a person (nothing was loaded yet); ``discarded`` is final."""
+    batch = get_batch(db, tenant_id, batch_id, lock=True)
+    if batch.status not in WAITING:
+        raise InvalidState("Only an import waiting for its mapping or confirmation can be discarded.")
+    before = {"status": batch.status}
+    batch.status, batch.updated_at = "discarded", clock.now()
+    db.flush()
+    _record(
+        db, batch, Action.IMPORT_DISCARDED, Actor("user", user_id), meta, before=before,
+        after={"status": "discarded"},
+    )  # fmt: skip
+    return batch
 
 
 def _file_type(name: str) -> str:

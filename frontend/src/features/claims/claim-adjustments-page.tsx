@@ -6,25 +6,18 @@ import { Button, Card, PermissionDenied } from "../../components/ui";
 import { api } from "../../lib/api/client";
 import { ApiError, unwrap } from "../../lib/api/errors";
 import { useSession } from "../../lib/session";
-import {
-  DataTable,
-  ManufacturerSelect,
-  PagerControls,
-  SelectField,
-  usePager,
-  utc,
-} from "../masterdata/common";
+import { DataTable, ManufacturerSelect, PagerControls, SelectField, usePager } from "../masterdata/common";
 import { ClaimsNav, ConfirmDialog, ValidationDetailsAlert } from "./common";
 import {
   ADJUSTMENT_STATUS_LABELS,
   ADJUSTMENT_STATUSES,
   ADJUSTMENT_TYPE_LABELS,
   ADJUSTMENT_TYPES,
-  formatDecimal,
   type AdjustmentOut,
   type AdjustmentStatus,
   type AdjustmentType,
 } from "./logic";
+import { formatDateTime, formatMoney } from "../../lib/format";
 
 const STATUS_TABS: { id: AdjustmentStatus; label: string }[] = [
   { id: "proposed", label: "Proposed" },
@@ -277,7 +270,7 @@ export function ClaimAdjustmentsPage() {
                 {
                   header: "Amount",
                   cell: (a: AdjustmentOut) => (
-                    <span className="block text-right font-mono font-medium">{formatDecimal(a.amount)}</span>
+                    <span className="block text-right font-mono font-medium">{formatMoney(a.amount)}</span>
                   ),
                 },
                 {
@@ -301,7 +294,7 @@ export function ClaimAdjustmentsPage() {
                 {
                   header: "Proposed by / at",
                   cell: (a: AdjustmentOut) =>
-                    `${a.proposed_by ?? "—"}${a.created_at ? ` (${utc(a.created_at)})` : ""}`,
+                    `${a.proposed_by ?? "—"}${a.created_at ? ` (${formatDateTime(a.created_at)})` : ""}`,
                 },
                 {
                   header: "Status",
@@ -386,7 +379,7 @@ export function ClaimAdjustmentsPage() {
               }
             }}
             title={`Approve adjustment ${approvingAdjustment.claim_reference ?? approvingAdjustment.id}`}
-            description={`Are you sure you want to approve this adjustment (${formatDecimal(approvingAdjustment.amount)})?`}
+            description={`Are you sure you want to approve this adjustment (${formatMoney(approvingAdjustment.amount)})?`}
             confirmLabel="Confirm approval"
             busy={approveMutation.isPending}
             onConfirm={() => approveMutation.mutate(approvingAdjustment.id)}

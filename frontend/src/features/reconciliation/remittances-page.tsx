@@ -12,10 +12,10 @@ import {
   REMITTANCE_DOC_TYPE_LABELS,
   REMITTANCE_STATUS_LABELS,
   REMITTANCE_STATUSES,
-  formatDecimal,
   type RemittanceOut,
   type RemittanceStatus,
 } from "./logic";
+import { formatDate, formatMoney } from "../../lib/format";
 
 export function RemittancesPage() {
   const { can } = useSession();
@@ -137,17 +137,17 @@ export function RemittancesPage() {
               },
               {
                 header: "Document date",
-                cell: (r: RemittanceOut) => r.document_date ?? "—",
+                cell: (r: RemittanceOut) => formatDate(r.document_date),
               },
               {
                 header: "Payment date",
-                cell: (r: RemittanceOut) => r.payment_date ?? "—",
+                cell: (r: RemittanceOut) => formatDate(r.payment_date),
               },
               {
                 header: "Total amount",
                 cell: (r: RemittanceOut) => (
                   <span className="block text-right font-mono font-medium">
-                    {formatDecimal(r.total_amount)}
+                    {formatMoney(r.total_amount)}
                   </span>
                 ),
               },

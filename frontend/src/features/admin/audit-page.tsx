@@ -1,9 +1,11 @@
-import { useInfiniteQuery } from "@tanstack/react-query";
+import { useInfiniteQuery, useQuery } from "@tanstack/react-query";
 import { useState } from "react";
 
 import { Button, Card, Empty, ErrorAlert, Field, Loading, PermissionDenied } from "../../components/ui";
 import { api } from "../../lib/api/client";
 import { ApiError, unwrap } from "../../lib/api/errors";
+import { formatDateTime } from "../../lib/format";
+import { SelectField } from "../masterdata/common";
 
 interface Filters {
   action: string;
@@ -41,6 +43,11 @@ export function AuditPage() {
     getNextPageParam: (last) => last.page.next_cursor,
   });
   const rows = query.data?.pages.flatMap((p) => p.data) ?? [];
+  const members = useQuery({
+    queryKey: ["users"],
+    queryFn: () => unwrap(api.GET("/api/v1/users")),
+    retry: false,
+  });
 
   if ((query.error as ApiError)?.status === 403) return <PermissionDenied />;
 
@@ -65,11 +72,18 @@ export function AuditPage() {
           value={draft.entity_type}
           onChange={(e) => setDraft({ ...draft, entity_type: e.target.value.trim() })}
         />
-        <Field
-          label="Actor user id"
+        <SelectField
+          label="Person"
           value={draft.actor_user_id}
-          onChange={(e) => setDraft({ ...draft, actor_user_id: e.target.value.trim() })}
-        />
+          onChange={(e) => setDraft({ ...draft, actor_user_id: e.target.value })}
+        >
+          <option value="">Anyone</option>
+          {members.data?.data.map((m) => (
+            <option key={m.user_id} value={m.user_id}>
+              {m.full_name || m.email}
+            </option>
+          ))}
+        </SelectField>
         <Field
           label="From"
           type="date"
@@ -96,7 +110,7 @@ export function AuditPage() {
           <table className="w-full text-left text-sm">
             <thead className="text-muted">
               <tr>
-                <th className="py-2">Time (UTC)</th>
+                <th className="py-2">Time</th>
                 <th>Action</th>
                 <th>Actor</th>
                 <th>Entity</th>
@@ -106,7 +120,7 @@ export function AuditPage() {
             <tbody>
               {rows.map((r) => (
                 <tr key={r.id} className="border-t border-line align-top">
-                  <td className="py-2 whitespace-nowrap">{r.occurred_at.replace("T", " ").slice(0, 19)}</td>
+                  <td className="py-2 whitespace-nowrap">{formatDateTime(r.occurred_at)}</td>
                   <td className="font-mono">{r.action}</td>
                   <td className="text-xs">
                     {r.actor_name ? (

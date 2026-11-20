@@ -6,7 +6,7 @@ from rebate.modules.files import jobs as _jobs  # noqa: F401  (registers job han
 from rebate.modules.files import storage
 from rebate.modules.files.models import FileObject
 from rebate.modules.files.router import router
-from rebate.modules.files.service import get
+from rebate.modules.files.service import Use, get, register_use_source
 from rebate.modules.files.validation import UndecodableText, decode_text
 
 
@@ -17,4 +17,13 @@ def read_clean(settings: Settings, row: FileObject) -> bytes:
     return b"".join(storage.read_chunks(settings, row.storage_key))
 
 
-__all__ = ["FileObject", "UndecodableText", "decode_text", "get", "read_clean", "router"]
+__all__ = [
+    "FileObject",
+    "UndecodableText",
+    "Use",
+    "decode_text",
+    "get",
+    "read_clean",
+    "register_use_source",
+    "router",
+]

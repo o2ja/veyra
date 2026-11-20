@@ -1,37 +1,31 @@
 import { useMutation, useQuery } from "@tanstack/react-query";
-import { useState } from "react";
 import { Link, useParams, useSearchParams } from "react-router-dom";
 
-import {
-  Alert,
-  Button,
-  Card,
-  Empty,
-  ErrorAlert,
-  Field,
-  Loading,
-  PermissionDenied,
-} from "../../components/ui";
+import { Alert, Button, Card, Empty, ErrorAlert, Loading, PermissionDenied } from "../../components/ui";
 import { api } from "../../lib/api/client";
 import { ApiError, unwrap } from "../../lib/api/errors";
 import { useSession } from "../../lib/session";
 import {
+  AgreementSelect,
   DataTable,
   ManufacturerSelect,
   PagerControls,
   SelectField,
   usePager,
-  utc,
 } from "../masterdata/common";
-import { CalculationsNav, KeyValueGrid, ValidationDetailsAlert } from "./common";
+import { CalculationsNav, ExceptionCell, KeyValueGrid, ValidationDetailsAlert } from "./common";
 import {
+  EXCEPTION_INFO,
   RESULT_STATUSES,
+  exceptionLabel,
+  isPlainObject,
+  runSummary,
   RESULT_STATUS_LABELS,
   RUN_STATUS_LABELS,
-  formatDecimal,
   type AdjustmentOut,
   type ResultOut,
 } from "./logic";
+import { formatDate, formatDateTime, formatMoney, formatQty } from "../../lib/format";
 
 export function RunDetailPage() {
   const { runId = "" } = useParams();
@@ -46,9 +40,6 @@ export function RunDetailPage() {
   const exceptionCode = searchParams.get("exception_code") ?? "";
   const manufacturerId = searchParams.get("manufacturer_id") ?? "";
   const agreementId = searchParams.get("agreement_id") ?? "";
-
-  const [exceptionInput, setExceptionInput] = useState(exceptionCode);
-  const [agreementInput, setAgreementInput] = useState(agreementId);
 
   const run = useQuery({
     queryKey: ["calculation-runs", runId],
@@ -137,19 +128,6 @@ export function RunDetailPage() {
     pager.reset();
   }
 
-  function applyTextFilters(e: React.FormEvent) {
-    e.preventDefault();
-    const next = new URLSearchParams(searchParams);
-    const ex = exceptionInput.trim();
-    const ag = agreementInput.trim();
-    if (ex) next.set("exception_code", ex);
-    else next.delete("exception_code");
-    if (ag) next.set("agreement_id", ag);
-    else next.delete("agreement_id");
-    setSearchParams(next, { replace: true });
-    pager.reset();
-  }
-
   return (
     <>
       <CalculationsNav />
@@ -177,15 +155,15 @@ export function RunDetailPage() {
                   </div>
                   <div>
                     <dt className="text-muted">Run date</dt>
-                    <dd className="font-medium">{run.data.run_date}</dd>
+                    <dd className="font-medium">{formatDate(run.data.run_date)}</dd>
                   </div>
                   <div>
                     <dt className="text-muted">As of</dt>
-                    <dd className="font-medium">{utc(run.data.as_of)}</dd>
+                    <dd className="font-medium">{formatDateTime(run.data.as_of)}</dd>
                   </div>
                   <div>
                     <dt className="text-muted">Data cutoff</dt>
-                    <dd className="font-medium">{utc(run.data.data_cutoff)}</dd>
+                    <dd className="font-medium">{formatDateTime(run.data.data_cutoff)}</dd>
                   </div>
                   <div>
                     <dt className="text-muted">Engine version</dt>
@@ -193,15 +171,15 @@ export function RunDetailPage() {
                   </div>
                   <div>
                     <dt className="text-muted">Created</dt>
-                    <dd>{utc(run.data.created_at)}</dd>
+                    <dd>{formatDateTime(run.data.created_at)}</dd>
                   </div>
                   <div>
                     <dt className="text-muted">Started</dt>
-                    <dd>{utc(run.data.started_at)}</dd>
+                    <dd>{formatDateTime(run.data.started_at)}</dd>
                   </div>
                   <div>
                     <dt className="text-muted">Completed</dt>
-                    <dd>{utc(run.data.completed_at)}</dd>
+                    <dd>{formatDateTime(run.data.completed_at)}</dd>
                   </div>
                 </dl>
 
@@ -211,8 +189,19 @@ export function RunDetailPage() {
                 </div>
 
                 <div>
-                  <h2 className="mb-2 text-sm font-semibold">Totals</h2>
-                  <KeyValueGrid data={run.data.totals} empty="No totals yet." />
+                  <h2 className="mb-2 text-sm font-semibold">Result</h2>
+                  <p className="text-sm">{runSummary(run.data.totals)}</p>
+                  {isPlainObject(run.data.totals?.by_exception) &&
+                    Object.keys(run.data.totals.by_exception).length > 0 && (
+                      <ul className="mt-3 flex flex-col gap-1.5 text-sm">
+                        {Object.entries(run.data.totals.by_exception).map(([code, count]) => (
+                          <li key={code} className="flex gap-3">
+                            <span className="w-10 text-right font-mono text-muted">{String(count)}</span>
+                            <ExceptionCell code={code} />
+                          </li>
+                        ))}
+                      </ul>
+                    )}
                 </div>
 
                 {run.data.error && (
@@ -249,7 +238,7 @@ export function RunDetailPage() {
                       {
                         header: "Amount",
                         cell: (a) => (
-                          <span className="block text-right font-mono">{formatDecimal(a.amount)}</span>
+                          <span className="block text-right font-mono">{formatMoney(a.amount)}</span>
                         ),
                       },
                       { header: "Status", cell: (a) => a.status },
@@ -278,7 +267,7 @@ export function RunDetailPage() {
 
         <Card title="Results">
           <div className="mb-4 flex flex-col gap-3">
-            <div className="grid gap-3 sm:grid-cols-2">
+            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
               <SelectField
                 label="Status"
                 value={statusFilter}
@@ -291,34 +280,25 @@ export function RunDetailPage() {
                   </option>
                 ))}
               </SelectField>
+              <SelectField
+                label="Exception"
+                value={exceptionCode}
+                onChange={(e) => setFilter("exception_code", e.target.value)}
+              >
+                <option value="">All exceptions</option>
+                {Object.keys(EXCEPTION_INFO).map((code) => (
+                  <option key={code} value={code}>
+                    {exceptionLabel(code)}
+                  </option>
+                ))}
+              </SelectField>
               <ManufacturerSelect
                 allowAny="All manufacturers"
                 value={manufacturerId}
                 onChange={(id) => setFilter("manufacturer_id", id)}
               />
+              <AgreementSelect value={agreementId} onChange={(id) => setFilter("agreement_id", id)} />
             </div>
-
-            <form className="flex flex-wrap items-end gap-3" onSubmit={applyTextFilters}>
-              <div className="min-w-48 flex-1">
-                <Field
-                  label="Exception code"
-                  value={exceptionInput}
-                  placeholder="e.g. price_mismatch"
-                  onChange={(e) => setExceptionInput(e.target.value)}
-                />
-              </div>
-              <div className="min-w-56 flex-1">
-                <Field
-                  label="Agreement ID"
-                  value={agreementInput}
-                  placeholder="UUID"
-                  onChange={(e) => setAgreementInput(e.target.value)}
-                />
-              </div>
-              <Button type="submit" variant="secondary">
-                Apply
-              </Button>
-            </form>
           </div>
 
           {resultsErr ? (
@@ -344,31 +324,31 @@ export function RunDetailPage() {
                   ),
                 },
                 { header: "Line", cell: (r) => r.line_number },
-                { header: "Invoice date", cell: (r) => r.invoice_date },
+                { header: "Invoice date", cell: (r) => formatDate(r.invoice_date) },
                 { header: "Status", cell: (r) => RESULT_STATUS_LABELS[r.status] ?? r.status },
-                { header: "Exception", cell: (r) => r.exception_code ?? "—" },
+                { header: "Exception", cell: (r) => <ExceptionCell code={r.exception_code} /> },
                 {
                   header: "Claim amount",
                   cell: (r) => (
-                    <span className="block text-right font-mono">{formatDecimal(r.claim_amount)}</span>
+                    <span className="block text-right font-mono">{formatMoney(r.claim_amount)}</span>
                   ),
                 },
                 {
                   header: "Unit amount",
                   cell: (r) => (
-                    <span className="block text-right font-mono">{formatDecimal(r.claim_unit_amount)}</span>
+                    <span className="block text-right font-mono">{formatMoney(r.claim_unit_amount)}</span>
                   ),
                 },
                 {
                   header: "Eligible qty",
                   cell: (r) => (
-                    <span className="block text-right font-mono">{formatDecimal(r.eligible_quantity)}</span>
+                    <span className="block text-right font-mono">{formatQty(r.eligible_quantity)}</span>
                   ),
                 },
                 {
                   header: "Excess qty",
                   cell: (r) => (
-                    <span className="block text-right font-mono">{formatDecimal(r.excess_quantity)}</span>
+                    <span className="block text-right font-mono">{formatQty(r.excess_quantity)}</span>
                   ),
                 },
                 {

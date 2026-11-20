@@ -57,17 +57,6 @@ export function isTraceKind(v: string): v is TraceKind {
   return (TRACE_KINDS as readonly string[]).includes(v);
 }
 
-export function formatDecimal(value: string | number | null | undefined): string {
-  if (value === null || value === undefined || value === "") return "—";
-  const str = String(value).trim();
-  const sign = str.startsWith("-") ? "-" : "";
-  const [intPart = "", fracPart, extra] = (sign ? str.slice(1) : str).split(".");
-  const digits = (t: string) => t !== "" && [...t].every((c) => c >= "0" && c <= "9");
-  if (extra !== undefined || !digits(intPart) || (fracPart !== undefined && !digits(fracPart))) return str;
-  const grouped = BigInt(intPart).toLocaleString("en-US");
-  return `${sign}${grouped}${fracPart === undefined ? "" : `.${fracPart}`}`;
-}
-
 export interface KeyValueItem {
   key: string;
   value: string;

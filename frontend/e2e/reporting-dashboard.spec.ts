@@ -198,8 +198,8 @@ test("S10 reporting: dashboard figures, drill-down, trace, audit pack, analyst d
   const batchTotal = (
     await page.locator("dt", { hasText: "Batch total" }).locator("xpath=following-sibling::dd").innerText()
   ).trim();
-  // Ground truth SC-22 (INV-10060 line 1, expected_calculation.json): 30 x 22.00 = 660.00; the API shows 4 decimals.
-  expect(batchTotal).toBe("660.0000");
+  // Ground truth SC-22 (INV-10060 line 1, expected_calculation.json): 30 x 22.00 = 660.00; shown as money.
+  expect(batchTotal).toBe("$660.00");
 
   await approverPage.goto(`/claims/batches/${batchId}`);
   await approverPage.getByRole("button", { name: "Approve batch" }).click();
@@ -254,7 +254,10 @@ test("S10 reporting: dashboard figures, drill-down, trace, audit pack, analyst d
   // acceptance criterion: the figure equals the sum of the rows (amounts have 4 decimals: sum in ten-thousandths)
   const amountTexts = await items.locator("tbody tr td:nth-child(5)").allInnerTexts();
   const toUnits = (t: string) => {
-    const [i = "0", f = ""] = t.replaceAll(",", "").trim().split(".");
+    const [i = "0", f = ""] = t
+      .replace(/[$,\s]/g, "")
+      .trim()
+      .split(".");
     return BigInt(i + f.padEnd(4, "0").slice(0, 4));
   };
   const sumUnits = amountTexts.reduce((acc, t) => acc + toUnits(t), 0n);

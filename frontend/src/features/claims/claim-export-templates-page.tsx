@@ -12,7 +12,6 @@ import {
   PagerControls,
   SelectField,
   usePager,
-  utc,
 } from "../masterdata/common";
 import { ClaimsNav, ValidationDetailsAlert, useManufacturerMap } from "./common";
 import {
@@ -25,6 +24,7 @@ import {
   type ExportTemplateOut,
   type OptionsIn,
 } from "./logic";
+import { formatDateTime } from "../../lib/format";
 
 interface EditorFormState {
   id?: string;
@@ -262,7 +262,7 @@ export function ClaimExportTemplatesPage() {
               },
               {
                 header: "Updated",
-                cell: (t) => utc(t.updated_at),
+                cell: (t) => formatDateTime(t.updated_at),
               },
               {
                 header: "Actions",

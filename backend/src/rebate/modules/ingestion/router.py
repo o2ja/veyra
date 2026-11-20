@@ -185,6 +185,21 @@ def confirm(
     return _accepted(batch, job_id)
 
 
+@router.post("/imports/{import_id}/discard", operation_id="import_discard")
+def discard(
+    request: Request, import_id: UUID, principal: Annotated[Principal, Depends(require(RUN))]
+) -> s.ImportOut:
+    c = ctx(request)
+    batch = service.discard(
+        c.db,
+        tenant_id=tenant_of(principal),
+        user_id=principal.user_id,
+        batch_id=import_id,
+        meta=c.audit_meta(),
+    )
+    return _out(batch)
+
+
 FORMULA_START = ("=", "+", "-", "@", "\t", "\r")
 
 

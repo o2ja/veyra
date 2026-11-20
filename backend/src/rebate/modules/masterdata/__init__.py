@@ -25,6 +25,7 @@ from rebate.modules.masterdata.service import (
     master_index,
     record_unmapped,
     resolve_matching,
+    unmapped_open_count,
 )
 
 __all__ = [
@@ -52,5 +53,6 @@ __all__ = [
     "record_unmapped",
     "resolve_matching",
     "router",
+    "unmapped_open_count",
     "uom_conversion_rows",
 ]

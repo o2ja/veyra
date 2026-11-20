@@ -9,6 +9,7 @@ from uuid import UUID
 
 from fastapi import APIRouter, Depends, Header, Query, Request, Response
 from fastapi.responses import JSONResponse
+from sqlalchemy.orm import Session
 
 from rebate.core.access import require, tenant_of
 from rebate.core.errors import PreconditionFailed
@@ -19,7 +20,7 @@ from rebate.modules.claims import RunJobRef
 from rebate.modules.masterdata import Page, Who, page
 from rebate.modules.reconciliation import ingest, matching
 from rebate.modules.reconciliation import schemas as s
-from rebate.modules.reconciliation.models import ReconciliationMatch
+from rebate.modules.reconciliation.models import ReconciliationMatch, RemittanceLine
 
 router = APIRouter(tags=["reconciliation"])
 
@@ -50,7 +51,7 @@ def _match_outs(
     request: Request, tenant_id: UUID, groups: list[list[ReconciliationMatch]]
 ) -> list[s.MatchOut]:
     ids = [r.claim_line_id for g in groups for r in g if r.claim_line_id is not None]
-    refs = claims.claim_references(ctx(request).db, tenant_id, ids) if ids else {}
+    refs = claims.claim_line_refs(ctx(request).db, tenant_id, ids)
     return [
         s.MatchOut(
             id=g[0].match_id,
@@ -64,7 +65,8 @@ def _match_outs(
                 s.AllocationOut(
                     claim_line_id=r.claim_line_id,
                     claim_adjustment_id=r.claim_adjustment_id,
-                    claim_reference=refs.get(r.claim_line_id) if r.claim_line_id else None,
+                    claim_reference=refs[r.claim_line_id].claim_reference if r.claim_line_id else None,
+                    claim_batch_id=refs[r.claim_line_id].batch_id if r.claim_line_id else None,
                     allocated_amount=r.allocated_amount,
                 )
                 for r in g
@@ -147,9 +149,30 @@ def list_lines(
     limit: Limit = 50,
     cursor: str | None = None,
 ) -> s.RemittanceLineList:
-    rows = ingest.list_lines(ctx(request).db, tenant_of(principal), remittance_id, limit=limit, cursor=cursor)
+    db, t = ctx(request).db, tenant_of(principal)
+    rows = ingest.list_lines(db, t, remittance_id, limit=limit, cursor=cursor)
     data, p = page(rows, limit)
-    return s.RemittanceLineList(data=[s.RemittanceLineOut.model_validate(r) for r in data], page=p)
+    return s.RemittanceLineList(data=_line_outs(db, t, data), page=p)
+
+
+def _line_outs(db: Session, tenant_id: UUID, lines: list[RemittanceLine]) -> list[s.RemittanceLineOut]:
+    matched = ingest.matched_claim_lines(db, tenant_id, [x.id for x in lines])
+    return [
+        s.RemittanceLineOut.model_validate(x).model_copy(
+            update={"matched_claim_lines": [s.MatchedClaimLine(**m) for m in matched.get(x.id, [])]}
+        )
+        for x in lines
+    ]
+
+
+@router.get("/manufacturers/{manufacturer_id}/unknown-reason-codes", operation_id="unknown_reason_code_list")
+def list_unknown_reason_codes(
+    request: Request, manufacturer_id: UUID, principal: Annotated[Principal, Depends(require(READ))]
+) -> s.UnknownReasonCodeList:
+    rows = ingest.unknown_reason_codes(ctx(request).db, tenant_of(principal), manufacturer_id)
+    return s.UnknownReasonCodeList(
+        data=[s.UnknownReasonCode.model_validate(r, from_attributes=True) for r in rows]
+    )
 
 
 @router.get("/remittances/{remittance_id}/extraction", operation_id="remittance_extraction_get")
@@ -219,6 +242,7 @@ def get_reconciliation(
     ):
         by_line[m.remittance_line_id].append(m)
     out = []
+    line_outs = {x.id: x for x in _line_outs(c.db, t, data)}
     for line in data:
         groups: dict[UUID, list[ReconciliationMatch]] = defaultdict(list)
         for m in sorted(by_line[line.id], key=lambda r: r.id):
@@ -228,11 +252,7 @@ def get_reconciliation(
         state = (
             "matched" if any(m.status == "confirmed" for m in live) else "suggested" if live else "unmatched"
         )
-        out.append(
-            s.ReconciliationLineOut(
-                line=s.RemittanceLineOut.model_validate(line), state=state, matches=matches
-            )
-        )
+        out.append(s.ReconciliationLineOut(line=line_outs[line.id], state=state, matches=matches))
     return s.ReconciliationOut(remittance=s.RemittanceOut.model_validate(doc), data=out, page=p)
 
 

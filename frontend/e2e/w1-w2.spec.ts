@@ -34,7 +34,7 @@ test("W1 + W2: register, verify, enrol MFA, invite an analyst and a viewer, role
   await expect(page).toHaveURL(/\/mfa\/setup/); // the workspace requires MFA
   const { codes } = await enrolMfa(page);
   expect(codes).toHaveLength(10);
-  await expect(page.getByRole("heading", { name: "Acme Electric (SYNTHETIC)" })).toBeVisible();
+  await expect(page.getByText("Acme Electric (SYNTHETIC)", { exact: true })).toBeVisible();
 
   const cookies = await page.context().cookies();
   const session = cookies.find((c) => c.name === "__Host-session");

@@ -64,7 +64,7 @@ test("S9 write-off: propose, same user disabled, second approver completes, anal
     expect(written.status).toBe("written_off");
     // 150.00 is the short-paid variance in testdata ground_truth/expected_reconciliation.json (GL-V1).
     expect(Number(written.written_off_amount).toFixed(2)).toBe("150.00"); // the API returns 4 decimal places
-    await expect(approverB.getByLabel("Written off amount")).toHaveText("150.00");
+    await expect(approverB.getByLabel("Written off amount")).toHaveText("$150.00");
 
     // An analyst gets no write-off action in the UI and a 403 from the API.
     await analyst.page.goto(`/recovery/${caseId}`);
