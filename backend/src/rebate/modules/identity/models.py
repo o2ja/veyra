@@ -116,3 +116,19 @@ class PasswordResetRequest(Base):
     id: Mapped[UUID] = mapped_column(primary_key=True)
     email: Mapped[str] = mapped_column(CIText())
     created_at: Mapped[datetime] = mapped_column(TS, server_default="now()")
+
+
+class TrustedDevice(Base):
+    """ "Trust this device" 2FA bypass: only the SHA-256 of the cookie token is stored."""
+
+    __tablename__ = "trusted_devices"
+    __table_args__ = (Index("ix_trusted_devices_user_id", "user_id"),)
+
+    id: Mapped[UUID] = mapped_column(primary_key=True)
+    user_id: Mapped[UUID] = mapped_column(ForeignKey("users.id", name="fk_trusted_devices_users"))
+    tenant_id: Mapped[UUID | None] = mapped_column(
+        ForeignKey("tenants.id", name="fk_trusted_devices_tenants")
+    )
+    token_hash: Mapped[str] = mapped_column(Text, unique=True)
+    created_at: Mapped[datetime] = mapped_column(TS, server_default="now()")
+    expires_at: Mapped[datetime] = mapped_column(TS)

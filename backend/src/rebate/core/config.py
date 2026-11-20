@@ -77,8 +77,8 @@ class Settings(BaseSettings):
     lockout_decay_hours: int = 24
 
     # Sessions
-    session_idle_minutes: int = 30
-    session_absolute_hours: int = 12
+    session_idle_minutes: int = 20160
+    session_absolute_hours: int = 336
     session_touch_seconds: int = 60
     pending_mfa_session_minutes: int = 10
     step_up_window_minutes: int = 5

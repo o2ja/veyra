@@ -7548,6 +7548,26 @@
         "title": "MfaSetupOut",
         "type": "object"
       },
+      "MfaVerifyIn": {
+        "additionalProperties": false,
+        "properties": {
+          "code": {
+            "pattern": "^(\\d{6}|[A-Za-z2-7]{4}-?[A-Za-z2-7]{4}-?[A-Za-z2-7]{4}-?[A-Za-z2-7]{4})$",
+            "title": "Code",
+            "type": "string"
+          },
+          "trust_device": {
+            "default": false,
+            "title": "Trust Device",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "code"
+        ],
+        "title": "MfaVerifyIn",
+        "type": "object"
+      },
       "MissedList": {
         "properties": {
           "data": {
@@ -15208,7 +15228,7 @@
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/MfaIn"
+                "$ref": "#/components/schemas/MfaVerifyIn"
               }
             }
           },
@@ -15504,6 +15524,20 @@
           }
         },
         "summary": "My Tenants",
+        "tags": [
+          "auth"
+        ]
+      }
+    },
+    "/api/v1/auth/trusted-devices/forget": {
+      "post": {
+        "operationId": "auth_trusted_devices_forget",
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Forget Trusted Devices",
         "tags": [
           "auth"
         ]

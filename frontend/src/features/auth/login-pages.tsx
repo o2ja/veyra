@@ -80,12 +80,12 @@ export function MfaChallengePage() {
   const [params] = useSearchParams();
   const navigate = useNavigate();
   const { refresh } = useSession();
-  const { register, handleSubmit } = useForm<{ code: string }>();
+  const { register, handleSubmit } = useForm<{ code: string; trust: boolean }>();
   const { busy, error, submit } = useApiSubmit();
 
-  const onSubmit = handleSubmit(async ({ code }) => {
+  const onSubmit = handleSubmit(async ({ code, trust }) => {
     const ok = await submit(() =>
-      unwrap(api.POST("/api/v1/auth/mfa/verify", { body: { code: code.trim() } })),
+      unwrap(api.POST("/api/v1/auth/mfa/verify", { body: { code: code.trim(), trust_device: trust } })),
     );
     if (!ok) return;
     await refresh();
@@ -107,6 +107,10 @@ export function MfaChallengePage() {
           autoFocus
           {...register("code", { required: true })}
         />
+        <label className="flex items-center gap-2 text-sm">
+          <input type="checkbox" {...register("trust")} />
+          Trust this device for 30 days
+        </label>
         <Button type="submit" disabled={busy}>
           Verify
         </Button>

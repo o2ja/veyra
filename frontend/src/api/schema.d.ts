@@ -606,6 +606,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/auth/trusted-devices/forget": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Forget Trusted Devices */
+        post: operations["auth_trusted_devices_forget"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/auth/verify-email": {
         parameters: {
             query?: never;
@@ -4902,6 +4919,16 @@ export interface components {
             /** Qr Svg Data Uri */
             qr_svg_data_uri: string;
         };
+        /** MfaVerifyIn */
+        MfaVerifyIn: {
+            /** Code */
+            code: string;
+            /**
+             * Trust Device
+             * @default false
+             */
+            trust_device: boolean;
+        };
         /** MissedList */
         MissedList: {
             /** Data */
@@ -7947,7 +7974,7 @@ export interface operations {
         };
         requestBody: {
             content: {
-                "application/json": components["schemas"]["MfaIn"];
+                "application/json": components["schemas"]["MfaVerifyIn"];
             };
         };
         responses: {
@@ -8186,6 +8213,24 @@ export interface operations {
                 content: {
                     "application/json": components["schemas"]["WorkspaceList"];
                 };
+            };
+        };
+    };
+    auth_trusted_devices_forget: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
         };
     };

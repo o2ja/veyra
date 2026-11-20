@@ -108,25 +108,31 @@ def test_logout_revokes_the_session_server_side(api: Api) -> None:
     assert r.status_code == 401 and r.json()["error"]["code"] == "session_expired"
 
 
-def test_idle_and_absolute_timeouts(api: Api, clk: FakeClock) -> None:
+def test_session_survives_a_browser_restart_then_expires(api: Api, clk: FakeClock) -> None:
     full_admin(api, unique_email("idle"))
-    clk.advance(29 * 60)
-    assert api.get("/settings").status_code == 200  # activity slides the idle window
-    clk.advance(29 * 60)
+    clk.advance(13 * 86400)  # browser closed for 13 days: the persistent cookie still works
     assert api.get("/settings").status_code == 200
-    clk.advance(31 * 60)
+    clk.advance(15 * 86400)
     idle = api.get("/settings")
     assert idle.status_code == 401 and idle.json()["error"]["code"] == "session_expired"
 
 
 def test_absolute_timeout_despite_activity(api: Api, clk: FakeClock) -> None:
     full_admin(api, unique_email("absolute"))
-    for _ in range(24):  # 24 x 29 min = 11.6 h of continuous activity
-        clk.advance(29 * 60)
+    for _ in range(13):
+        clk.advance(86400)
         assert api.get("/settings").status_code == 200
-    clk.advance(30 * 60)  # now past 12 h
+    clk.advance(2 * 86400)  # now past 14 days
     r = api.get("/settings")
     assert r.status_code == 401 and r.json()["error"]["code"] == "session_expired"
+
+
+def test_session_cookie_is_persistent_for_14_days(api: Api) -> None:
+    account = register_and_verify(api, unique_email("maxage"))
+    r = api.post("/auth/login", json={"email": account.email, "password": account.password})
+    session = next(c for c in r.headers.get_list("set-cookie") if c.startswith("__Host-session="))
+    max_age = int(session.lower().split("max-age=")[1].split(";")[0])
+    assert 14 * 86400 - 60 <= max_age <= 14 * 86400
 
 
 def test_session_rotates_on_mfa_and_the_pending_session_dies(api: Api) -> None:
