@@ -254,6 +254,29 @@ export function switchPayloadType(current: Payload, nextType: "spa" | "rebate"):
   };
 }
 
+/**
+ * Choosing the type on a read contract: sets ``header.agreement_type`` and ``rules.type`` together, so the
+ * server can tell which rules apply. Rules start clean (contract decisions stay empty); values already
+ * read for keys that type uses are kept.
+ */
+export function setAgreementType(current: Payload, nextType: "spa" | "rebate"): Payload {
+  const header = asRecord(current.header);
+  const have = asRecord(current.rules);
+  if (header.agreement_type === nextType && have.type === nextType) return current;
+  const fresh = withoutDecisions(
+    nextType === "rebate"
+      ? defaultRebateRules(String(header.valid_from ?? ""), String(header.valid_to ?? ""))
+      : defaultSpaRules(),
+  ) as unknown as Record<string, unknown>;
+  for (const k of Object.keys(fresh)) if (k !== "type" && have[k] !== undefined) fresh[k] = have[k];
+  return {
+    ...current,
+    header: { ...current.header, agreement_type: nextType },
+    rules: fresh as unknown as Payload["rules"],
+    tiers: nextType === "spa" ? [] : current.tiers,
+  };
+}
+
 export function buildAmendmentPayload(
   version: VersionOut,
   manufacturerCode: string,

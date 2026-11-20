@@ -213,12 +213,17 @@ def list_extractions(
     )
 
 
-def draft_of(db: Session, tenant_id: UUID, extraction_id: UUID) -> tuple[UUID, str] | None:
+def draft_of(
+    db: Session, tenant_id: UUID, extraction_id: UUID
+) -> tuple[UUID, str, dict[str, Any] | None] | None:
+    """``(draft id, status, live validation)``: the draft, not the snapshot taken when the read finished."""
     row = db.execute(
-        text("SELECT id, status FROM agreement_drafts WHERE tenant_id = :t AND extraction_id = :e"),
+        text(
+            "SELECT id, status, validation FROM agreement_drafts WHERE tenant_id = :t AND extraction_id = :e"
+        ),
         {"t": tenant_id, "e": extraction_id},
     ).first()
-    return None if row is None else (row[0], row[1])
+    return None if row is None else (row[0], row[1], row[2])
 
 
 def draft_id_of(db: Session, tenant_id: UUID, extraction_id: UUID) -> UUID | None:

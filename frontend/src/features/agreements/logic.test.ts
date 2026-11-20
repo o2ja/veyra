@@ -15,6 +15,7 @@ import {
   payloadFromDraft,
   viewPayload,
   switchPayloadType,
+  setAgreementType,
   type ItemOut,
   type VersionOut,
 } from "./logic";
@@ -253,4 +254,27 @@ test("validation issues read as plain English", () => {
     "Valid_to must be after valid_from",
   );
   expect(friendlyIssueMessage("SKU is listed twice.")).toBe("SKU is listed twice.");
+});
+
+test("setAgreementType sets header and rules.type together, keeps read values, leaves decisions empty", () => {
+  const read = {
+    payload_schema_version: 1,
+    header: { external_number: "X-1" },
+    rules: { date_basis: "invoice_date" },
+    items: [],
+    customers: [],
+    tiers: [{ tier_number: 1, lower_bound: "0", rate: "0.01" }],
+  } as unknown as Parameters<typeof setAgreementType>[0];
+  const spa = setAgreementType(read, "spa");
+  expect(spa.header.agreement_type).toBe("spa");
+  expect(spa.rules.type).toBe("spa");
+  expect(spa.header.external_number).toBe("X-1");
+  expect((spa.rules as { date_basis?: string }).date_basis).toBe("invoice_date");
+  expect(JSON.parse(JSON.stringify(spa.rules)).rounding).toEqual({});
+  expect(spa.tiers).toEqual([]);
+  const rebate = setAgreementType(read, "rebate");
+  expect(rebate.rules.type).toBe("rebate");
+  expect(JSON.parse(JSON.stringify(rebate.rules)).tier_mode).toBeUndefined();
+  expect(rebate.tiers).toHaveLength(1);
+  expect(setAgreementType(spa, "spa")).toBe(spa);
 });

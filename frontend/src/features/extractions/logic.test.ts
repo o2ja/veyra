@@ -6,6 +6,8 @@ import {
   formatExtractionValue,
   groupAndSortFields,
   parseExtractionResult,
+  readConfirmed,
+  writeConfirmed,
   type ExtractionFieldView,
 } from "./logic";
 
@@ -101,4 +103,11 @@ test("parseExtractionResult accepts valid result and rejects malformed shapes", 
     unresolved: {},
   });
   expect(valid?.draft_id).toBe("d1");
+});
+
+test("confirmations are remembered per extraction and dropped once the draft changed", () => {
+  writeConfirmed("ex-1", "2026-11-20T10:00:00Z", new Set(["a", "b"]));
+  expect(readConfirmed("ex-1", "2026-11-20T10:00:00Z")).toEqual(["a", "b"]);
+  expect(readConfirmed("ex-1", "2026-11-20T10:05:00Z")).toEqual([]);
+  expect(readConfirmed("ex-2", "2026-11-20T10:00:00Z")).toEqual([]);
 });

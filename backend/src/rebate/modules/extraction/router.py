@@ -165,8 +165,9 @@ def _who(request: Request, principal: Principal) -> Who:
 def _out(db: Any, row: DocumentExtraction) -> ExtractionOut:
     out = ExtractionOut.model_validate(row)
     draft = service.draft_of(db, row.tenant_id, row.id)
-    out.draft_id, out.draft_status = draft if draft else (None, None)
-    if (found := review.counts(row.result, row.validation)) is not None:
+    out.draft_id, out.draft_status = (draft[0], draft[1]) if draft else (None, None)
+    live = draft[2] if draft and draft[2] is not None else row.validation
+    if (found := review.counts(row.result, live)) is not None:
         out.found_count, out.needs_count = found
     return out
 
@@ -221,7 +222,9 @@ def get_extraction(
     db = ctx(request).db
     row = service.get_extraction(db, tenant_of(principal), extraction_id)
     base = _out(db, row)
-    return ExtractionDetail(**base.model_dump(), result=row.result, validation=row.validation)
+    draft = service.draft_of(db, row.tenant_id, row.id)
+    live = draft[2] if draft and draft[2] is not None else row.validation
+    return ExtractionDetail(**base.model_dump(), result=row.result, validation=live)
 
 
 @router.get("/ai/usage", operation_id="ai_usage", dependencies=[Depends(only_query_params())])

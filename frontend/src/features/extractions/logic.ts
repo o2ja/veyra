@@ -73,3 +73,30 @@ export function formatExtractionValue(value: unknown): string {
   if (typeof value === "number" || typeof value === "boolean") return String(value);
   return JSON.stringify(value);
 }
+
+// shortcut: UI-only field ids (nothing sensitive) in localStorage, so a reload keeps them; upgrade to a server column if they must follow the user across devices
+// eslint-disable-next-line no-restricted-globals
+const storage = (): Storage => localStorage;
+const confirmedKey = (extractionId: string) => `veyra.review-confirmed.${extractionId}`;
+
+/** Ids the user confirmed ("Looks right"); only valid while the draft is unchanged since (same updated_at). */
+export function readConfirmed(extractionId: string, draftUpdatedAt: string): string[] {
+  try {
+    const raw = JSON.parse(storage().getItem(confirmedKey(extractionId)) ?? "null") as {
+      at?: unknown;
+      ids?: unknown;
+    } | null;
+    if (raw?.at !== draftUpdatedAt || !Array.isArray(raw.ids)) return [];
+    return raw.ids.filter((i): i is string => typeof i === "string");
+  } catch {
+    return [];
+  }
+}
+
+export function writeConfirmed(extractionId: string, draftUpdatedAt: string, ids: ReadonlySet<string>): void {
+  try {
+    storage().setItem(confirmedKey(extractionId), JSON.stringify({ at: draftUpdatedAt, ids: [...ids] }));
+  } catch {
+    // storage unavailable: confirmations just last for this page visit
+  }
+}
