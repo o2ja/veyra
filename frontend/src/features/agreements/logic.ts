@@ -353,6 +353,7 @@ export function issueFieldLabel(path: string): string {
 
 const ISSUE_PATTERNS: [RegExp, (m: RegExpExecArray) => string][] = [
   [/^Field required$/i, () => "This is required."],
+  [/discriminator|does not match any of the expected tags/i, () => "Choose the agreement type first."],
   [/^Input should be a valid (?:decimal|number|integer)/i, () => "Enter a number, for example 12.50."],
   [/^Input should be a valid date/i, () => "Enter a date as YYYY-MM-DD."],
   [/^String should have at least 1 character/i, () => "This can't be empty."],

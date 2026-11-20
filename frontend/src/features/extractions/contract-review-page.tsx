@@ -73,6 +73,8 @@ function ItemRow({
   const changed = text !== undefined && text !== editText(item.path ?? "", item.value);
   const input = item.input;
   const canEdit = editable && item.path !== null && input !== null;
+  const confirmable =
+    !done && !item.blocking && (item.optional || item.path === null || item.display !== "—");
 
   return (
     <li className="rounded-lg border border-line p-4" data-testid="review-item">
@@ -128,7 +130,7 @@ function ItemRow({
               Discard
             </Button>
           )}
-          {item.needs && !changed && !done && !item.blocking && (
+          {item.needs && !changed && confirmable && (
             <Button variant="secondary" disabled={saving} onClick={onConfirm}>
               Looks right
             </Button>
@@ -136,9 +138,13 @@ function ItemRow({
         </div>
       ) : (
         <div className="mt-3 flex flex-wrap items-center gap-3 text-sm">
-          {item.path !== null && <span>Currently: {item.display}</span>}
-          {item.path === null && <span>{item.display}</span>}
-          {editable && item.needs && !done && !item.blocking && (
+          {(item.display !== "—" || item.path === null) && (
+            <span>
+              {item.path !== null && "Currently: "}
+              {item.display}
+            </span>
+          )}
+          {editable && item.needs && confirmable && (
             <Button variant="secondary" disabled={saving} onClick={onConfirm}>
               Looks right
             </Button>

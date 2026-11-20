@@ -6,6 +6,7 @@ import {
   buildReview,
   countsText,
   displayValue,
+  editText,
   fractionToPercent,
   getAt,
   isPending,
@@ -15,6 +16,7 @@ import {
   percentToFraction,
   previewSentence,
   readLabel,
+  safeText,
   setAt,
   type DraftPreview,
 } from "./review";
@@ -100,7 +102,7 @@ const result = {
 } as unknown as ExtractionResult;
 
 const draft = {
-  header: { valid_to: "2026-12-31" },
+  header: { valid_to: "2026-12-31", agreement_type: "spa" },
   rules: { rounding: { mode: "half_up" } },
   items: [
     { sku: "A", rate: "0.05" },
@@ -142,14 +144,14 @@ test("the review separates what was found from what needs a decision, in plain E
   });
   expect(byId["rules.rounding.scale"]).toMatchObject({ label: "Decimal places", blocking: true });
   expect(byId["items[0].rate"]).toMatchObject({
-    label: "Item 1 (A) · Rate",
+    label: "Item A · Rate",
     why: "That rate is unusually high.",
     blocking: false,
     warningIds: ["w1"],
     display: "5%",
   });
   expect(byId["items[1].sku"]).toMatchObject({
-    label: "Item 2 (Z) · Part number",
+    label: "Item Z · Part number",
     why: "Unknown SKU Z.",
     blocking: true,
   });
@@ -184,7 +186,7 @@ test("an optional claim unit may be left empty once confirmed", () => {
         }),
       ],
     } as unknown as ExtractionResult,
-    { rules: {} },
+    { header: { agreement_type: "spa" }, rules: {} },
     { valid: true, errors: [], warnings: [] } as unknown as Validation,
   );
   const uom = need(r, "rules.claim_uom");
@@ -221,4 +223,118 @@ test("list labels say what to do, not a confidence decimal", () => {
     "12 found with a quote · 3 need your decision",
   );
   expect(countsText({ found_count: null, needs_count: null })).toBe("—");
+});
+
+const ok = { valid: true, errors: [], warnings: [] } as unknown as Validation;
+const asResult = (...fields: ExtractionFieldView[]) => ({ fields }) as unknown as ExtractionResult;
+const unstated = (key: string, over: Partial<ExtractionFieldView> = {}) =>
+  field(key, null, { confidence: "low", reasons: ["not_stated"], evidence: null, ...over });
+const RAW = /header\.|rules\.|items\[|customers\[|exclusions_text|\[object Object\]|discriminator/;
+const bad = (...errors: ReturnType<typeof issue>[]) =>
+  ({ valid: false, errors, warnings: [] }) as unknown as Validation;
+
+test("raw field keys become plain-English labels, never dot or bracket notation", () => {
+  const r = buildReview(
+    asResult(
+      unstated("header.date_basis"),
+      unstated("rules.spa_lines_policy"),
+      unstated("rules.claim_uom"),
+      field("customers[Summit Industrial Builders LLC].name", null, { value: "Summit", evidence: null }),
+      field("items[BRK-3P-100A].uom", null, { value: "EA", confidence: "low", evidence: null }),
+      field("exclusions_text[#0]", null, { value: "Excludes tax", confidence: "low", evidence: null }),
+    ),
+    { header: { agreement_type: "spa" }, rules: {}, items: [], customers: [] },
+    bad(issue("payload.rules.date_basis", "required", "Field required")),
+  );
+  const labels = [...r.needs, ...r.found].map((i) => i.label);
+  expect(labels).toContain("Which date decides eligibility");
+  expect(labels).toContain("Unit of measure");
+  expect(labels).toContain("Customer · Summit Industrial Builders LLC");
+  expect(labels).toContain("Item BRK-3P-100A · Unit of measure");
+  expect(labels).toContain("Exclusion #1");
+  for (const l of labels) expect(l).not.toMatch(RAW);
+});
+
+test("a field the extraction and the checks both report is one item, with its editor", () => {
+  const r = buildReview(
+    asResult(unstated("header.agreement_type"), unstated("items[BRK].part_number")),
+    { header: {}, rules: {}, items: [{ rate: null }] },
+    bad(
+      issue("payload.header.agreement_type", "required", "Field required"),
+      issue("payload.rules", "invalid", "Unable to extract tag using discriminator 'type'"),
+    ),
+  );
+  expect(r.needs.filter((i) => i.path === "header.agreement_type")).toHaveLength(1);
+  const type = need(r, "header.agreement_type");
+  expect(type).toMatchObject({ label: "Agreement type", blocking: true, display: "—" });
+  expect(type.input?.kind).toBe("select");
+  expect(r.needs[0]).toBe(type);
+  expect(r.needs).toHaveLength(1); // the cascading rules error stays quiet, the empty row field is dropped
+});
+
+test("a part number that is both extracted and flagged shows once", () => {
+  const r = buildReview(
+    asResult(field("items[BRK].part_number", null, { value: "BRK", confidence: "low" })),
+    { header: { agreement_type: "spa" }, items: [{ sku: "BRK" }] },
+    bad(issue("payload.items[0].sku", "unresolved", "Unknown SKU BRK.")),
+  );
+  expect([...r.needs, ...r.found].filter((i) => i.path === "items[0].sku")).toHaveLength(1);
+});
+
+test("fields for the other agreement type are not asked about when nothing was stated", () => {
+  const spa = buildReview(
+    asResult(
+      unstated("rules.tier_mode"),
+      unstated("rules.volume_basis"),
+      unstated("rules.measurement_period"),
+      unstated("header.date_basis"),
+    ),
+    { header: { agreement_type: "spa" }, rules: {} },
+    ok,
+  );
+  expect(spa.needs.map((i) => i.id)).toEqual(["rules.date_basis"]);
+
+  const rebate = buildReview(
+    asResult(unstated("rules.spa_reference_required"), unstated("rules.tier_mode")),
+    { header: { agreement_type: "rebate" }, rules: {} },
+    bad(issue("payload.rules.tier_mode", "required", "Field required")),
+  );
+  expect(rebate.needs.map((i) => i.id)).toEqual(["rules.tier_mode"]);
+});
+
+test("until the agreement type is chosen, type-specific fields stay hidden", () => {
+  const r = buildReview(
+    asResult(unstated("header.agreement_type"), unstated("header.date_basis"), unstated("rules.tier_mode")),
+    { header: {}, rules: {} },
+    ok,
+  );
+  expect(r.needs.map((i) => i.id)).toEqual(["header.agreement_type"]);
+});
+
+test("unflagged, unstated optional fields do not clutter the list", () => {
+  const r = buildReview(
+    asResult(
+      unstated("header.external_number", { critical: false }),
+      unstated("rules.cost_source", { critical: false }),
+    ),
+    { header: { agreement_type: "spa" }, rules: {} },
+    ok,
+  );
+  expect(r.needs).toEqual([]);
+});
+
+test("objects are never printed as [object Object]", () => {
+  expect(displayValue("rules", { type: "spa" })).toBe("—");
+  expect(editText("rules.rounding", { mode: "half_up" })).toBe("");
+  expect(safeText(["a", "b"])).toBe("a, b");
+  expect(safeText([{ a: 1 }])).toBe("—");
+  const r = buildReview(
+    asResult(field("exclusions_text[#0]", null, { value: { a: 1 }, confidence: "low", evidence: null })),
+    { header: { agreement_type: "spa" } },
+    bad(issue("payload.rules", "invalid", "Something about rules")),
+  );
+  for (const i of [...r.needs, ...r.found]) {
+    expect(i.display).not.toContain("[object Object]");
+    expect(i.why).not.toMatch(RAW);
+  }
 });
