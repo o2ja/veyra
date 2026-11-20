@@ -254,7 +254,7 @@ test("S10 reporting: dashboard figures, drill-down, trace, audit pack, analyst d
   // acceptance criterion: the figure equals the sum of the rows (amounts have 4 decimals: sum in ten-thousandths)
   const amountTexts = await items.locator("tbody tr td:nth-child(5)").allInnerTexts();
   const toUnits = (t: string) => {
-    const [i = "0", f = ""] = t.replaceAll(",", "").trim().split(".");
+    const [i = "0", f = ""] = t.replace(/[$,\s]/g, "").trim().split(".");
     return BigInt(i + f.padEnd(4, "0").slice(0, 4));
   };
   const sumUnits = amountTexts.reduce((acc, t) => acc + toUnits(t), 0n);

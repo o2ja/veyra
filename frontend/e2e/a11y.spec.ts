@@ -6,6 +6,8 @@ import { PASSWORD, enrolMfa, signIn, test, tokenFromMail, uniqueEmail } from "./
 // WCAG 2.1 A/AA automated checks (NFR-09) on every page S1–S3 added. Automated checks find only part of
 // the issues; manual keyboard use was spot-checked during the S1 browser walkthrough.
 async function noViolations(page: Page, name: string) {
+  // the sidebar link fades colour on navigation; axe must not sample mid-transition
+  await page.addStyleTag({ content: "*{transition:none!important}" });
   const result = await new AxeBuilder({ page })
     .withTags(["wcag2a", "wcag2aa", "wcag21a", "wcag21aa"])
     .analyze();

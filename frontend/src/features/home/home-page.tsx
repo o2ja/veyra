@@ -289,14 +289,17 @@ function MoneyLink({
   indent?: boolean;
 }) {
   return (
-    <Link
-      to={to}
-      className={`flex items-baseline justify-between gap-6 rounded-lg px-3 py-1.5 transition-colors hover:bg-white/10 ${
+    <div
+      className={`relative flex items-baseline justify-between gap-6 rounded-lg px-3 py-1.5 transition-colors hover:bg-white/10 ${
         indent ? "pl-6 text-rail-ink/70" : "text-rail-ink"
       }`}
     >
-      <dt>{label}</dt>
+      <dt>
+        <Link to={to} className="after:absolute after:inset-0">
+          {label}
+        </Link>
+      </dt>
       <dd className="font-semibold text-white tabular-nums">{formatMoney(value)}</dd>
-    </Link>
+    </div>
   );
 }
