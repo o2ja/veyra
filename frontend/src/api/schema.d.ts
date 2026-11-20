@@ -3699,6 +3699,8 @@ export interface components {
             created_by: string;
             /** Draft Id */
             draft_id?: string | null;
+            /** Draft Status */
+            draft_status?: string | null;
             /** Error Code */
             error_code: string | null;
             /** Error Detail */
@@ -3708,6 +3710,8 @@ export interface components {
              * Format: uuid
              */
             file_id: string;
+            /** Found Count */
+            found_count?: number | null;
             /**
              * Id
              * Format: uuid
@@ -3717,6 +3721,8 @@ export interface components {
             kind: string;
             /** Model */
             model: string | null;
+            /** Needs Count */
+            needs_count?: number | null;
             /** Prompt Version */
             prompt_version: string | null;
             /** Result */
@@ -3760,6 +3766,11 @@ export interface components {
             key: string;
             pass_a: components["schemas"]["ExtractionPassView"] | null;
             pass_b: components["schemas"]["ExtractionPassView"] | null;
+            /**
+             * Payload Path
+             * @default null
+             */
+            payload_path: string | null;
             /** Reasons */
             reasons: string[];
             /** Value */
@@ -3805,6 +3816,8 @@ export interface components {
             created_by: string;
             /** Draft Id */
             draft_id?: string | null;
+            /** Draft Status */
+            draft_status?: string | null;
             /** Error Code */
             error_code: string | null;
             /** Error Detail */
@@ -3814,6 +3827,8 @@ export interface components {
              * Format: uuid
              */
             file_id: string;
+            /** Found Count */
+            found_count?: number | null;
             /**
              * Id
              * Format: uuid
@@ -3823,6 +3838,8 @@ export interface components {
             kind: string;
             /** Model */
             model: string | null;
+            /** Needs Count */
+            needs_count?: number | null;
             /** Prompt Version */
             prompt_version: string | null;
             /** Status */
@@ -3858,6 +3875,11 @@ export interface components {
             notes: {
                 [key: string]: string[];
             };
+            /**
+             * Page Count
+             * @default null
+             */
+            page_count: number | null;
             /** Payload */
             payload: {
                 [key: string]: unknown;

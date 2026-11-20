@@ -40,7 +40,7 @@ import { ResultDetailPage } from "../features/calculations/result-detail-page";
 import { RunDetailPage } from "../features/calculations/run-detail-page";
 import { RunsPage } from "../features/calculations/runs-page";
 import { AiUsagePage } from "../features/extractions/ai-usage-page";
-import { ExtractionDetailPage } from "../features/extractions/extraction-detail-page";
+import { ContractReviewPage } from "../features/extractions/contract-review-page";
 import { ExtractionsPage } from "../features/extractions/extractions-page";
 import { ClaimAdjustmentsPage } from "../features/claims/claim-adjustments-page";
 import { ClaimBatchDetailPage } from "../features/claims/claim-batch-detail-page";
@@ -213,7 +213,7 @@ export const routes: RouteObject[] = [
       // S6: AI document extractions and usage
       guarded("extractions", "data.read", <ExtractionsPage />),
       guarded("extractions/usage", "data.read", <AiUsagePage />),
-      guarded("extractions/:extractionId", "data.read", <ExtractionDetailPage />),
+      guarded("extractions/:extractionId", "data.read", <ContractReviewPage />),
       // S7: claims
       { path: "claims", element: <Navigate to="/claims/missed" replace /> },
       guarded("claims/missed", "data.read", <MissedClaimsPage />),

@@ -213,12 +213,17 @@ def list_extractions(
     )
 
 
-def draft_id_of(db: Session, tenant_id: UUID, extraction_id: UUID) -> UUID | None:
-    found: UUID | None = db.scalar(
-        text("SELECT id FROM agreement_drafts WHERE tenant_id = :t AND extraction_id = :e"),
+def draft_of(db: Session, tenant_id: UUID, extraction_id: UUID) -> tuple[UUID, str] | None:
+    row = db.execute(
+        text("SELECT id, status FROM agreement_drafts WHERE tenant_id = :t AND extraction_id = :e"),
         {"t": tenant_id, "e": extraction_id},
-    )
-    return found
+    ).first()
+    return None if row is None else (row[0], row[1])
+
+
+def draft_id_of(db: Session, tenant_id: UUID, extraction_id: UUID) -> UUID | None:
+    found = draft_of(db, tenant_id, extraction_id)
+    return None if found is None else found[0]
 
 
 def usage(db: Session, tenant_id: UUID, settings: Settings, days: int = 30) -> dict[str, Any]:
@@ -295,10 +300,11 @@ def _pass_view(r: Any) -> dict[str, Any] | None:
     }
 
 
-def field_view(f: MergedField) -> dict[str, Any]:
+def field_view(f: MergedField, paths: dict[str, str] | None = None) -> dict[str, Any]:
     verified = next((r for r in (f.a, f.b) if r is not None and r.status is Status.verified), None)
     return {
         "key": f.key,
+        "payload_path": (paths or {}).get(f.key),
         "critical": f.critical,
         "value": payload._val(f),
         "confidence": f.confidence.label,
@@ -728,10 +734,12 @@ def _run(db: Session, ctx: JobContext, ex: DocumentExtraction, ai: Engine) -> No
     warned = _warned_keys(list(validation.get("warnings", [])), report.fields)
     if warned:  # validator warnings lower the affected fields one confidence step (§6)
         report = run_verification(doc, raw_a, raw_b, schema_validator=_format_errors, warned_keys=warned)
-    fields = [field_view(f) for f in report.fields.values()]
+    paths = payload.payload_paths(report.fields)
+    fields = [field_view(f, paths) for f in report.fields.values()]
     outcome = {
         "schema_version": 1,
         "agreement_type": report.agreement_type,
+        "page_count": len(doc.pages) if isinstance(doc, PdfText) else None,
         "payload": body,
         "fields": fields,
         "blocking": list(report.blocking),

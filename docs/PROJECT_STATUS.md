@@ -23,6 +23,7 @@
 - [x] S3-S6 backends and UIs merged to `main` (#2-#13, #16); S5 signed off by the owner 2026-11-12
 - [x] S7-S10 backends merged in integration PR #25 (after #15 S7 core, #17 S8 matching); UIs merged: S7 #30, S8 #31, S9 #32, S10 #33 (each with its Playwright spec)
 - [x] S11 parts merged: S11.1 audit seal (#21), ops/backup/runbooks/dependency audit (#18), restore drill (local dump) and guides (#20), S11.3 security hardening (#22), ESLint security plugin and weekly Dependabot (#24), `make ci-local` gate (#23), Gemini and OpenRouter providers (#26)
+- [x] Phase 2 Contract Review UX (branch `feat/phase2-contract-review-ux`): one review-and-edit page for AI extractions, no silent defaults for unstated contract choices (editor view and save), counts instead of confidence decimals. Not tested: a live end-to-end read of a real PDF in the browser (unit, backend and CI only)
 - [x] Independent check of every worked example in `BUSINESS_LOGIC.md` (`testdata/verify_business_logic_examples.py`, passes)
 
 ## 3. In progress

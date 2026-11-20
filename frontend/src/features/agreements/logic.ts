@@ -154,14 +154,48 @@ function fill(def: unknown, raw: unknown): unknown {
   return raw;
 }
 
-/** Read-only view for form binding: raw values win, missing keys fall back to defaults. */
+/**
+ * Choices the contract itself must make. A draft that lacks one shows it empty ("Choose…"), never a default
+ * that would read as if the document stated it. Only a brand-new manual draft starts from the defaults.
+ */
+const DECISION_PATHS = [
+  "date_basis",
+  "calculation.basis",
+  "calculation.cost_source",
+  "customer_scope.mode",
+  "spa_reference.required",
+  "volume_basis",
+  "tier_mode",
+  "spa_lines",
+  "measurement_period.kind",
+  "measurement_period.start",
+  "measurement_period.end",
+  "rounding.mode",
+  "rounding.scale",
+  "rounding.timing",
+];
+
+function withoutDecisions<T extends object>(rules: T): T {
+  const out = structuredClone(rules) as Record<string, unknown>;
+  for (const path of DECISION_PATHS) {
+    const [head = "", leaf] = path.split(".");
+    if (leaf === undefined) {
+      if (head in out) out[head] = undefined;
+    } else if (isObj(out[head])) {
+      out[head][leaf] = undefined;
+    }
+  }
+  return out as T;
+}
+
+/** Read-only view for form binding: raw values win, missing keys fall back to defaults except the decisions above. */
 export function viewPayload(raw: Payload): Payload {
   const r = asRecord(raw);
   const h = asRecord(r.header);
   const rules = asRecord(r.rules);
   const type: "spa" | "rebate" = h.agreement_type === "rebate" || rules.type === "rebate" ? "rebate" : "spa";
   const def = emptyPayload(type);
-  const defRules = type === "rebate" ? defaultRebateRules() : defaultSpaRules();
+  const defRules = withoutDecisions(type === "rebate" ? defaultRebateRules() : defaultSpaRules());
   const list = (v: unknown, d: unknown) =>
     Array.isArray(v) ? v.map((e) => (isObj(e) ? fill(d, e) : e)) : [];
   return {

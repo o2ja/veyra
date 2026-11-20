@@ -54,7 +54,7 @@ Agreements (SPA price-difference deals and rebates) never go live directly. Ever
 
 ## 7. Extraction review (AI)
 
-Extractions page: start an extraction on an uploaded PDF or spreadsheet. It works only if your admin enabled AI document reading in Settings **and** the operator configured a provider. Otherwise the extraction ends as "needs manual entry" and an empty draft is created for you to fill in. When AI runs, each extracted field carries its evidence (page and text), two independent passes are compared, and missing or uncertain values are left empty rather than guessed. The result is an ordinary draft that follows section 6, so a person always approves. AI usage and cost are under Extractions, Usage.
+Extractions page: start an extraction on an uploaded PDF or spreadsheet. It works only if your admin enabled AI document reading in Settings **and** the operator configured a provider. Otherwise the extraction ends as "needs manual entry" and an empty draft is created for you to fill in. When AI runs, each extracted field carries its evidence (page and text), two independent passes are compared, and missing or uncertain values are left empty rather than guessed. The result opens on the **Contract Review** page: a summary with counts, the items that need your decision (each editable right next to the quote from the contract), and a collapsed list of what was found. Anything the contract does not state, such as the date basis or rounding, is left empty for you to choose; you cannot submit until every flagged item is resolved. Technical details for support are collapsed at the bottom. The result is an ordinary draft that follows section 6, so a person always approves. AI usage and cost are under Extractions, Usage.
 
 ## 8. Calculations
 

@@ -19,7 +19,7 @@ from rebate.core.errors import ValidationFailed
 from rebate.core.query import only_query_params
 from rebate.core.request import Principal, ctx
 from rebate.core.validation import STRICT, JsonUUID
-from rebate.modules.extraction import mapping, service
+from rebate.modules.extraction import mapping, review, service
 from rebate.modules.extraction.models import DocumentExtraction
 from rebate.modules.masterdata import Who
 
@@ -56,6 +56,7 @@ class ExtractionPassView(_View):
 
 class ExtractionFieldView(_View):
     key: str
+    payload_path: str | None = None  # where the value sits in the draft payload; None for older results
     critical: bool
     value: Any
     confidence: str
@@ -78,6 +79,7 @@ class ExtractionIndicator(_View):
 class ExtractionResult(_View):
     schema_version: int
     agreement_type: str | None
+    page_count: int | None = None  # PDF page count; None for spreadsheets and older results
     payload: dict[str, Any]
     fields: list[ExtractionFieldView]
     blocking: list[str]
@@ -111,6 +113,9 @@ class ExtractionOut(BaseModel):
     created_at: datetime
     completed_at: datetime | None
     draft_id: UUID | None = None
+    draft_status: str | None = None
+    found_count: int | None = None  # fields found with a quote
+    needs_count: int | None = None  # items that need the user's decision
 
 
 class ExtractionDetail(ExtractionOut):
@@ -159,7 +164,10 @@ def _who(request: Request, principal: Principal) -> Who:
 
 def _out(db: Any, row: DocumentExtraction) -> ExtractionOut:
     out = ExtractionOut.model_validate(row)
-    out.draft_id = service.draft_id_of(db, row.tenant_id, row.id)
+    draft = service.draft_of(db, row.tenant_id, row.id)
+    out.draft_id, out.draft_status = draft if draft else (None, None)
+    if (found := review.counts(row.result, row.validation)) is not None:
+        out.found_count, out.needs_count = found
     return out
 
 

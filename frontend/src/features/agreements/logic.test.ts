@@ -181,6 +181,34 @@ test("payloadFromDraft keeps server values verbatim; edits apply only the user's
   expect(out.tiers).toEqual(raw.tiers);
 });
 
+test("a decision the document did not state stays empty: not shown as a default and never saved as one", () => {
+  const raw = {
+    header: { agreement_type: "spa", external_number: "X-1" },
+    rules: { type: "spa", price_check: { mode: "flag", tolerance: "0.005" } },
+  };
+  const p = payloadFromDraft(raw);
+  const v = viewPayload(p);
+  const rules = v.rules as unknown as Record<string, Record<string, unknown> | undefined>;
+  expect(rules.date_basis).toBeUndefined();
+  expect(rules.calculation?.basis).toBeUndefined();
+  expect(rules.rounding?.mode).toBeUndefined();
+  expect(rules.rounding?.scale).toBeUndefined();
+  expect(rules.spa_reference?.required).toBeUndefined();
+  expect(rules.price_check?.mode).toBe("flag"); // a stated value still shows
+
+  const edited = applyEdit(p, v, { ...v, header: { ...v.header, name: "N" } });
+  expect(JSON.stringify(edited)).not.toMatch(/ship_date|price_difference|half_up|per_line/);
+
+  const chosen = applyEdit(p, v, { ...v, rules: { ...v.rules, date_basis: "invoice_date" } }) as typeof raw;
+  expect(JSON.stringify(chosen.rules)).toBe(
+    JSON.stringify({
+      type: "spa",
+      price_check: { mode: "flag", tolerance: "0.005" },
+      date_basis: "invoice_date",
+    }),
+  );
+});
+
 test("buildAmendmentPayload copies rules as returned", () => {
   const rules = { type: "spa", weird: [1], price_check: { tolerance: 3 } };
   const p = buildAmendmentPayload(

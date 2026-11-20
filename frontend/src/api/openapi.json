@@ -3834,6 +3834,17 @@
             ],
             "title": "Draft Id"
           },
+          "draft_status": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Draft Status"
+          },
           "error_code": {
             "anyOf": [
               {
@@ -3861,6 +3872,17 @@
             "title": "File Id",
             "type": "string"
           },
+          "found_count": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Found Count"
+          },
           "id": {
             "format": "uuid",
             "title": "Id",
@@ -3880,6 +3902,17 @@
               }
             ],
             "title": "Model"
+          },
+          "needs_count": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Needs Count"
           },
           "prompt_version": {
             "anyOf": [
@@ -4068,6 +4101,18 @@
               }
             ]
           },
+          "payload_path": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Payload Path"
+          },
           "reasons": {
             "items": {
               "type": "string"
@@ -4234,6 +4279,17 @@
             ],
             "title": "Draft Id"
           },
+          "draft_status": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Draft Status"
+          },
           "error_code": {
             "anyOf": [
               {
@@ -4261,6 +4317,17 @@
             "title": "File Id",
             "type": "string"
           },
+          "found_count": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Found Count"
+          },
           "id": {
             "format": "uuid",
             "title": "Id",
@@ -4280,6 +4347,17 @@
               }
             ],
             "title": "Model"
+          },
+          "needs_count": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Needs Count"
           },
           "prompt_version": {
             "anyOf": [
@@ -4418,6 +4496,18 @@
             },
             "title": "Notes",
             "type": "object"
+          },
+          "page_count": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Page Count"
           },
           "payload": {
             "additionalProperties": true,
