@@ -57,7 +57,7 @@ Legend: PK primary key · FK composite `(tenant_id, x)` unless noted · `NN` not
 
 **mfa_recovery_codes** (global): `id`, `user_id FK users`, `code_hash text NN`, `used_at`.
 
-**trusted_devices** (global; no privileges for `rebate_readonly`): `id`, `user_id FK users`, `tenant_id FK tenants`, `token_hash text NN unique` (SHA-256 of the cookie token), `created_at`, `expires_at` (30 days).
+**trusted_devices** (global; no privileges for `rebate_readonly`): `id`, `user_id FK users`, `active_tenant_id FK tenants`, `token_hash text NN unique` (SHA-256 of the cookie token), `created_at`, `expires_at` (30 days).
 
 **user_tokens** (global): `id`, `user_id`, `purpose` (`email_verify`,`password_reset`,`email_change`), `token_hash text NN UNIQUE`, `new_email citext` (only for `email_change`), `expires_at NN`, `used_at`, `created_at`.
 

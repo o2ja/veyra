@@ -18,14 +18,14 @@ def upgrade() -> None:
         CREATE TABLE trusted_devices (
             id uuid NOT NULL,
             user_id uuid NOT NULL,
-            tenant_id uuid,
+            active_tenant_id uuid,
             token_hash text NOT NULL,
             created_at timestamptz NOT NULL DEFAULT now(),
             expires_at timestamptz NOT NULL,
             CONSTRAINT pk_trusted_devices PRIMARY KEY (id),
             CONSTRAINT uq_trusted_devices_token_hash UNIQUE (token_hash),
             CONSTRAINT fk_trusted_devices_users FOREIGN KEY (user_id) REFERENCES users (id),
-            CONSTRAINT fk_trusted_devices_tenants FOREIGN KEY (tenant_id) REFERENCES tenants (id)
+            CONSTRAINT fk_trusted_devices_tenants FOREIGN KEY (active_tenant_id) REFERENCES tenants (id)
         )
         """
     )

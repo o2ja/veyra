@@ -27,7 +27,7 @@ def issue(db: Session, response: Response, user_id: UUID, tenant_id: UUID | None
         TrustedDevice(
             id=new_id(),
             user_id=user_id,
-            tenant_id=tenant_id,
+            active_tenant_id=tenant_id,
             token_hash=hash_token(token),
             created_at=now,
             expires_at=now + timedelta(days=DAYS),
@@ -45,7 +45,7 @@ def is_trusted(db: Session, token: str | None, user_id: UUID, tenant_id: UUID | 
     return (
         row is not None
         and row.user_id == user_id
-        and row.tenant_id == tenant_id
+        and row.active_tenant_id == tenant_id
         and row.expires_at > clock.now()
     )
 

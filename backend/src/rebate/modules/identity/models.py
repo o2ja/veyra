@@ -126,7 +126,7 @@ class TrustedDevice(Base):
 
     id: Mapped[UUID] = mapped_column(primary_key=True)
     user_id: Mapped[UUID] = mapped_column(ForeignKey("users.id", name="fk_trusted_devices_users"))
-    tenant_id: Mapped[UUID | None] = mapped_column(
+    active_tenant_id: Mapped[UUID | None] = mapped_column(
         ForeignKey("tenants.id", name="fk_trusted_devices_tenants")
     )
     token_hash: Mapped[str] = mapped_column(Text, unique=True)
