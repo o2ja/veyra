@@ -124,7 +124,7 @@ const FIELDS: Record<string, { label: string; input: Input | null; optional?: bo
     label: "Where the cost comes from",
     input: { kind: "select", options: OPT.cost_source },
   },
-  "rules.claim_uom": { label: "Claim unit", input: { kind: "text" }, optional: true },
+  "rules.claim_uom": { label: "Unit of measure", input: { kind: "text" }, optional: true },
   "rules.customer_scope.mode": {
     label: "Which customers it covers",
     input: {
@@ -219,7 +219,7 @@ const FIELDS: Record<string, { label: string; input: Input | null; optional?: bo
   "items[].rate": { label: "Rate", input: { kind: "percent" } },
   "items[].flat_amount": { label: "Flat amount", input: { kind: "text" } },
   "items[].max_quantity": { label: "Maximum quantity", input: { kind: "text" } },
-  "items[].claim_uom": { label: "Claim unit", input: { kind: "text" }, optional: true },
+  "items[].claim_uom": { label: "Unit of measure", input: { kind: "text" }, optional: true },
   "tiers[].lower_bound": { label: "Starts at", input: { kind: "text" } },
   "tiers[].rate": { label: "Rate", input: { kind: "percent" } },
 };
@@ -241,10 +241,97 @@ export function labelFor(path: string, payload: unknown): string {
   const row = /^(items|customers|tiers)\[(\d+)\]\.(.+)$/.exec(path);
   if (!row) return known?.label ?? issueFieldLabel(path);
   const kind = row[1] as keyof typeof ROW;
-  const id = kind === "tiers" ? undefined : getAt(payload, `${kind}[${row[2]}].${ROW_ID[kind]}`);
-  const who = typeof id === "string" && id ? ` (${id})` : "";
-  return `${ROW[kind]} ${Number(row[2]) + 1}${who} · ${known?.label ?? issueFieldLabel(row[3] as string)}`;
+  const n = Number(row[2]);
+  const id = kind === "tiers" ? undefined : getAt(payload, `${kind}[${n}].${ROW_ID[kind]}`);
+  const who =
+    typeof id === "string" && id
+      ? kind === "customers"
+        ? `${ROW[kind]} · ${id}`
+        : `${ROW[kind]} ${id}`
+      : `${ROW[kind]} ${n + 1}`;
+  if (row[3] === "customer_code") return who;
+  return `${who} · ${known?.label ?? issueFieldLabel(row[3] as string)}`;
 }
+
+// extraction field key -> draft payload path (mirrors the backend's FIELD_PATHS)
+const KEY_PATH: Record<string, string> = {
+  "header.agreement_type": "header.agreement_type",
+  "header.external_number": "header.external_number",
+  "header.manufacturer_name": "header.manufacturer_code",
+  "header.valid_from": "header.valid_from",
+  "header.valid_to": "header.valid_to",
+  "header.date_basis": "rules.date_basis",
+  "rules.calculation_basis": "rules.calculation.basis",
+  "rules.cost_source": "rules.calculation.cost_source",
+  "rules.claim_uom": "rules.claim_uom",
+  "rules.rounding": "rules.rounding",
+  "rules.spa_reference_required": "rules.spa_reference.required",
+  "rules.tier_mode": "rules.tier_mode",
+  "rules.volume_basis": "rules.volume_basis",
+  "rules.spa_lines_policy": "rules.spa_lines",
+  "rules.measurement_period": "rules.measurement_period",
+};
+const KEY_ROW = /^(items|customers|tiers|exclusions_text)\[([^\]]*)\]\.?(\w*)$/;
+const ROW_FIELD: Record<string, string> = { part_number: "sku", uom: "claim_uom", name: "customer_code" };
+
+/** Where an extraction field key lands in the draft, and its plain-English label. ``row``: a list-row field. */
+function resolveKey(key: string, payload: unknown): { path: string | null; label: string; row: boolean } {
+  const direct = KEY_PATH[key];
+  if (direct) return { path: direct, label: labelFor(direct, payload), row: false };
+  const m = KEY_ROW.exec(key);
+  if (!m) return { path: null, label: issueFieldLabel(key), row: false };
+  const [, section = "", id = "", raw = ""] = m;
+  const unnamed = /^#(\d+)$/.exec(id);
+  if (section === "exclusions_text") {
+    const label = unnamed ? `Exclusion #${Number(unnamed[1]) + 1}` : id ? `Exclusion · ${id}` : "Exclusion";
+    return { path: null, label, row: false };
+  }
+  const kind = section as keyof typeof ROW;
+  const field = ROW_FIELD[raw] ?? raw;
+  const idKey = kind === "tiers" ? null : ROW_ID[kind];
+  const list = getAt(payload, kind);
+  const at =
+    idKey && !unnamed && Array.isArray(list) ? list.findIndex((r) => isObj(r) && r[idKey] === id) : -1;
+  if (at >= 0) {
+    const path = `${kind}[${at}].${field}`;
+    return { path, label: labelFor(path, payload), row: true };
+  }
+  const who = unnamed
+    ? `${ROW[kind]} ${Number(unnamed[1]) + 1}`
+    : kind === "customers"
+      ? `${ROW[kind]} · ${id}`
+      : `${ROW[kind]} ${id}`;
+  const fieldLabel = FIELDS[`${kind}[].${field}`]?.label ?? issueFieldLabel(field);
+  return { path: null, label: field === "customer_code" ? who : `${who} · ${fieldLabel}`, row: true };
+}
+
+// ---- which agreement type a field belongs to --------------------------------------------------------------
+
+const SPA_ONLY = [
+  "rules.date_basis",
+  "rules.calculation",
+  "rules.claim_uom",
+  "rules.spa_reference",
+  "items[].reference_cost",
+  "items[].deviated_cost",
+  "items[].sell_price",
+  "items[].claim_uom",
+];
+const REBATE_ONLY = [
+  "rules.tier_mode",
+  "rules.volume_basis",
+  "rules.measurement_period",
+  "rules.spa_lines",
+  "items[].rate",
+  "items[].flat_amount",
+  "tiers[]",
+];
+const scopeOf = (path: string): "spa" | "rebate" | null => {
+  const g = generic(path);
+  if (SPA_ONLY.some((p) => g.startsWith(p))) return "spa";
+  return REBATE_ONLY.some((p) => g.startsWith(p)) ? "rebate" : null;
+};
+const DISCRIMINATOR = /discriminator|does not match any of the expected tags/i;
 
 const REASONS: Record<string, string> = {
   not_stated: "The document doesn't state this.",
@@ -294,25 +381,34 @@ export function percentToFraction(s: string): string | null {
   return out === "" ? "0" : out.endsWith(".") ? out.slice(0, -1) : out;
 }
 
+const scalarText = (v: unknown): string | null =>
+  typeof v === "string" || typeof v === "number" || typeof v === "boolean" ? String(v) : null;
+
+/** Text for a value of any shape; objects (and anything else not plainly readable) become "—", never "[object Object]". */
+export function safeText(value: unknown): string {
+  if (Array.isArray(value)) {
+    const parts = value.map(scalarText);
+    return parts.length > 0 && parts.every((p) => p) ? parts.join(", ") : "—";
+  }
+  return scalarText(value) || "—";
+}
+
 export function displayValue(path: string, value: unknown): string {
-  if (value === undefined || value === null || value === "") return "—";
+  const text = safeText(value);
+  if (text === "—") return text;
   const g = generic(path);
   const input = FIELDS[g]?.input;
-  if (input?.kind === "select") {
-    return input.options.find(([v]) => v === String(value))?.[1] ?? String(value);
-  }
-  if (input?.kind === "date") return formatDate(String(value));
-  if (input?.kind === "percent") return fractionToPercent(String(value));
-  if (MONEY.has(g)) return formatMoney(String(value));
-  return String(value);
+  if (input?.kind === "select") return input.options.find(([v]) => v === text)?.[1] ?? text;
+  if (input?.kind === "date") return formatDate(text);
+  if (input?.kind === "percent") return fractionToPercent(text);
+  if (MONEY.has(g)) return formatMoney(text);
+  return text;
 }
 
 /** What the input shows for the stored value (percent as typed, booleans as their option value). */
 export function editText(path: string, value: unknown): string {
-  if (value === undefined || value === null) return "";
-  return FIELDS[generic(path)]?.input?.kind === "percent"
-    ? fractionToPercent(String(value)).replace(/%$/, "")
-    : String(value);
+  const text = scalarText(value) ?? "";
+  return FIELDS[generic(path)]?.input?.kind === "percent" ? fractionToPercent(text).replace(/%$/, "") : text;
 }
 
 /** The value to store for what the user entered; ``undefined`` when it cannot be stored as it is. */
@@ -342,21 +438,40 @@ export function buildReview(
   payload: Json,
   validation: Validation | null | undefined,
 ): Review {
-  const errors = (validation?.errors ?? []).map((e) => ({ ...e, path: normPath(e.field), error: true }));
-  const warnings = (validation?.warnings ?? []).map((e) => ({ ...e, path: normPath(e.field), error: false }));
+  const chosen = getAt(payload, "header.agreement_type");
+  const kind = chosen === "spa" || chosen === "rebate" ? chosen : null;
+  // until the type is chosen, the server's "cannot tell which rules apply" error is just noise
+  const live = <T extends { message: string }>(list: T[]) =>
+    kind === null ? list.filter((e) => !DISCRIMINATOR.test(e.message)) : list;
+  const errors = live(validation?.errors ?? []).map((e) => ({ ...e, path: normPath(e.field), error: true }));
+  const warnings = live(validation?.warnings ?? []).map((e) => ({
+    ...e,
+    path: normPath(e.field),
+    error: false,
+  }));
   const issues = [...errors, ...warnings];
   const items: ReviewItem[] = [];
+  const ids = new Set<string>();
   const covered = new Set<string>();
+  const add = (item: ReviewItem | null) => {
+    if (!item || ids.has(item.id)) return;
+    ids.add(item.id);
+    items.push(item);
+  };
 
   const make = (
     path: string | null,
     field: ExtractionFieldView | null,
     fallbackLabel: string,
-  ): ReviewItem => {
+  ): ReviewItem | null => {
     const value = path ? getAt(payload, path) : field?.value;
     const mine = path ? issues.filter((i) => related(i.path, path)) : [];
     const meta = path ? FIELDS[generic(path)] : undefined;
     const optional = meta?.optional === true;
+    const scope = path ? scopeOf(path) : null;
+    const quiet = !present(value) && mine.length === 0; // nothing stated, nothing flagged
+    if (scope && (kind === null || (scope !== kind && quiet))) return null;
+    if (field && validation && quiet && !field.critical) return null; // not stated, not needed
     const missing = !present(value) && !optional;
     const confidence = field?.confidence;
     const hasError = mine.some((i) => i.error);
@@ -382,7 +497,7 @@ export function buildReview(
       quote: field?.evidence?.quote ?? null,
       page: field?.evidence?.page ?? null,
       value,
-      display: path ? displayValue(path, value) : String(field?.value ?? "—"),
+      display: path ? displayValue(path, value) : safeText(field?.value),
       input: meta?.input ?? null,
       why,
       needs,
@@ -393,18 +508,24 @@ export function buildReview(
   };
 
   for (const f of result.fields) {
-    const base = f.payload_path ?? null;
+    let base = f.payload_path ?? null;
+    let label = f.key;
+    if (!base) {
+      const r = resolveKey(f.key, payload);
+      base = r.path;
+      label = r.label;
+      if (!base && r.row && !present(f.value)) continue; // an unstated row field with no draft row: nothing to decide
+    }
     const paths = base ? (SUB[base]?.map((s) => `${base}.${s}`) ?? [base]) : [null];
     for (const p of paths) {
       if (p) covered.add(p);
-      items.push(make(p, f, f.key));
+      add(make(p, f, label));
     }
   }
-  const seen = new Set<string>();
   for (const i of issues) {
-    if (seen.has(i.path) || [...covered].some((c) => related(i.path, c))) continue;
-    seen.add(i.path);
-    items.push(make(i.path || null, null, i.path || "Agreement"));
+    if ([...covered].some((c) => related(i.path, c))) continue;
+    covered.add(i.path);
+    add(make(i.path || null, null, i.path ? issueFieldLabel(i.path) : "Agreement"));
   }
 
   const rows = (section: "customers" | "items", field: string) => {
@@ -420,8 +541,9 @@ export function buildReview(
     return { matched: Math.max(0, total - bad.size), total };
   };
 
+  const typeFirst = (i: ReviewItem) => (i.id === "header.agreement_type" ? 0 : 1);
   return {
-    needs: items.filter((i) => i.needs),
+    needs: items.filter((i) => i.needs).sort((a, b) => typeFirst(a) - typeFirst(b)),
     found: items.filter((i) => !i.needs),
     conflicts: errors.filter((e) => CONFLICT_CODES.has(e.code)).length,
     customers: rows("customers", "customer_code"),
