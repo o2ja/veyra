@@ -179,7 +179,7 @@ export function AppLayout() {
                         end={n.to === "/"}
                         onClick={() => setOpen(false)}
                         className={({ isActive }) =>
-                          `block rounded-lg px-2.5 py-1.5 transition-colors duration-150 ${
+                          `block rounded-lg px-2.5 py-1.5 transition-none ${
                             isActive
                               ? "bg-brand font-medium text-panel"
                               : "text-muted hover:bg-brand-soft hover:text-ink"

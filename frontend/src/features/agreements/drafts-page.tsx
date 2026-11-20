@@ -11,6 +11,7 @@ import { ConfirmDialog } from "../claims/common";
 import { AgreementsNav } from "./common";
 import { DRAFT_STATUSES, DRAFT_STATUS_LABELS, emptyPayload } from "./logic";
 import { formatDateTime } from "../../lib/format";
+import { countsText, readLabel } from "../extractions/review";
 
 type DraftStatus = (typeof DRAFT_STATUSES)[number];
 type FilterStatus = DraftStatus | "all" | "open";
@@ -59,6 +60,12 @@ export function DraftsPage() {
         }),
       ),
   });
+
+  const readsQuery = useQuery({
+    queryKey: ["document-extractions"],
+    queryFn: () => unwrap(api.GET("/api/v1/document-extractions", { params: { query: { limit: 50 } } })),
+  });
+  const reads = new Map((readsQuery.data?.data ?? []).map((e) => [e.id, e]));
 
   const createDraft = useMutation({
     mutationFn: () =>
@@ -143,14 +150,20 @@ export function DraftsPage() {
             },
             {
               header: "Status",
-              cell: (d) => (
-                <span className="flex flex-wrap items-center gap-1.5">
-                  {DRAFT_STATUS_LABELS[d.status] ?? d.status}
-                  {d.source === "ai_extraction" && DELETABLE.includes(d.status) && (
-                    <Badge tone="warn">Needs review</Badge>
-                  )}
-                </span>
-              ),
+              cell: (d) => {
+                const read = d.extraction_id ? reads.get(d.extraction_id) : undefined;
+                const label =
+                  read && d.status === "draft" ? readLabel({ ...read, draft_status: d.status }) : null;
+                return (
+                  <span className="flex flex-col gap-0.5">
+                    <span className="flex flex-wrap items-center gap-1.5">
+                      {DRAFT_STATUS_LABELS[d.status] ?? d.status}
+                      {label && <Badge tone={read?.needs_count ? "warn" : "ok"}>{label}</Badge>}
+                    </span>
+                    {read && label && <span className="text-xs text-muted">{countsText(read)}</span>}
+                  </span>
+                );
+              },
             },
             { header: "Source", cell: (d) => SOURCE_LABELS[d.source] ?? d.source },
             {

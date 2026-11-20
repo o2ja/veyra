@@ -12,6 +12,7 @@ import {
 function field(overrides: Partial<ExtractionFieldView>): ExtractionFieldView {
   return {
     key: "header.name",
+    payload_path: null,
     critical: false,
     value: "Test",
     confidence: "0.95",

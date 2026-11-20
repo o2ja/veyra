@@ -59,7 +59,7 @@
 | FR-AG-03 | Manual entry form for all rule fields, with inline validation and a "preview calculation" against a sample of imported lines (read-only). | P0 |
 | FR-AG-04 | Bulk SPA items (SKU, customer scope, deviated cost, reference cost, sell price, quantity cap) from an Excel/CSV template using the import pipeline. | P0 |
 | FR-AG-05 | AI extraction from PDF/XLSX/CSV produces a draft where every field carries evidence (page + text span or cell). | P0 |
-| FR-AG-06 | Review screen: source on the left, extracted fields on the right, evidence highlighting, unresolved/low-confidence fields called out. | P0 |
+| FR-AG-06 | Contract Review screen: summary and counts on top, then the items that need the user's decision (editable in place beside their verbatim quote and page link), then the verified fields; unstated choices are never pre-filled (see AI_PROCESSING.md section 7). | P0 |
 | FR-AG-07 | Activation requires `approver` or `admin`; the reviewer and time are recorded. If four-eyes policy is on, the approver must differ from the creator. | P0 |
 | FR-AG-08 | Active versions are **immutable**. Amendments create a new version (including retroactive amendments) using split-supersede (`BUSINESS_LOGIC.md` §9). | P0 |
 | FR-AG-09 | Version history and field-level diff between versions. | P0 |

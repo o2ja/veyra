@@ -10,6 +10,7 @@ import { uploadWithProgress } from "../files/files-page";
 import { Checkbox, DataTable, SelectField } from "../masterdata/common";
 import { ExtractionsNav } from "./common";
 import { EXTRACTION_STATUS_LABELS, type ExtractionOut } from "./logic";
+import { countsText, readLabel } from "./review";
 import { formatDateTime } from "../../lib/format";
 
 export function ExtractionsPage() {
@@ -221,19 +222,17 @@ export function ExtractionsPage() {
                 header: "Status",
                 cell: (ex) => (
                   <span className={ex.status === "failed" ? "font-medium text-danger" : "font-medium"}>
-                    {EXTRACTION_STATUS_LABELS[ex.status] ?? ex.status}
+                    {readLabel(ex) ?? EXTRACTION_STATUS_LABELS[ex.status] ?? ex.status}
                   </span>
                 ),
               },
-              { header: "Kind", cell: (ex) => ex.kind },
-              { header: "Confidence", cell: (ex) => ex.confidence ?? "—" },
-              { header: "Model", cell: (ex) => ex.model ?? "—" },
+              { header: "Found / needs a decision", cell: (ex) => countsText(ex) },
               {
-                header: "Draft",
+                header: "Review",
                 cell: (ex) =>
-                  ex.draft_id ? (
-                    <Link to={`/agreement-drafts/${ex.draft_id}`} className="text-brand underline">
-                      Open draft
+                  ex.status === "completed" ? (
+                    <Link to={`/extractions/${ex.id}`} className="text-brand underline">
+                      Open review
                     </Link>
                   ) : (
                     "—"

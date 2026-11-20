@@ -7,6 +7,8 @@ parsers (``verification.canonical``), never from the model's quote.
 Structural defaults that no contract states and that the engine needs (price check, cap scope, product scope,
 tier metric, returns treatment) are the documented defaults of ``testdata`` manual payloads; the reviewer sees
 them in the draft like any other value. ``header.name`` is derived (number + manufacturer) for the same reason.
+Date basis, calculation basis, rounding, volume basis, tier mode and the like are never defaulted: when the
+document does not state them they stay absent and the reviewer must choose (Contract Review page).
 """
 
 import re
@@ -82,6 +84,53 @@ def _put(target: dict[str, Any], key: str, value: Any) -> None:
         target[key] = value
 
 
+def ordered_tiers(fields: dict[str, MergedField]) -> list[tuple[str, dict[str, Any]]]:
+    """Tier rows in draft order (by lower bound); ``tier_number`` is the 1-based position."""
+    return sorted(
+        rows_of(fields, "tiers"),
+        key=lambda kr: Decimal(kr[1]["lower_bound"]) if kr[1].get("lower_bound") is not None else Decimal(-1),
+    )
+
+
+# extraction field key -> draft payload path, for the fields that are not rows
+FIELD_PATHS = {
+    "header.agreement_type": "header.agreement_type",
+    "header.external_number": "header.external_number",
+    "header.manufacturer_name": "header.manufacturer_code",
+    "header.valid_from": "header.valid_from",
+    "header.valid_to": "header.valid_to",
+    "header.date_basis": "rules.date_basis",
+    "rules.calculation_basis": "rules.calculation.basis",
+    "rules.cost_source": "rules.calculation.cost_source",
+    "rules.claim_uom": "rules.claim_uom",
+    "rules.rounding": "rules.rounding",
+    "rules.spa_reference_required": "rules.spa_reference.required",
+    "rules.tier_mode": "rules.tier_mode",
+    "rules.volume_basis": "rules.volume_basis",
+    "rules.spa_lines_policy": "rules.spa_lines",
+    "rules.measurement_period": "rules.measurement_period",
+}
+ROW_NAMES = {"part_number": "sku", "uom": "claim_uom", "name": "customer_code"}  # others keep their name
+
+
+def payload_paths(fields: dict[str, MergedField]) -> dict[str, str]:
+    """Where each extraction field lands in the draft (``items[2].sku``); fields with no place get no entry.
+    Row indexes follow ``build_payload`` exactly, so a row dropped for having no value has no path."""
+    out = {k: p for k, p in FIELD_PATHS.items() if k in fields}
+    index = {
+        "customers": {k: i for i, (k, _) in enumerate(rows_of(fields, "customers"))},
+        "items": {k: i for i, (k, _) in enumerate(rows_of(fields, "items"))},
+        "tiers": {k: i for i, (k, _) in enumerate(ordered_tiers(fields))},
+    }
+    for key in fields:
+        m = ROW.match(key)
+        if m and m.group(3) and m.group(2) in index.get(m.group(1), {}):
+            out[key] = (
+                f"{m.group(1)}[{index[m.group(1)][m.group(2)]}].{ROW_NAMES.get(m.group(3), m.group(3))}"
+            )
+    return out
+
+
 def build_payload(
     fields: dict[str, MergedField],
     *,
@@ -154,11 +203,7 @@ def build_payload(
         items.append(item)
 
     tiers = []
-    ordered = sorted(
-        rows_of(fields, "tiers"),
-        key=lambda kr: Decimal(kr[1]["lower_bound"]) if kr[1].get("lower_bound") is not None else Decimal(-1),
-    )
-    for n, (_, row) in enumerate(ordered, start=1):
+    for n, (_, row) in enumerate(ordered_tiers(fields), start=1):
         tier: dict[str, Any] = {"tier_number": n}
         _put(tier, "lower_bound", row.get("lower_bound"))
         _put(tier, "rate", row.get("rate"))

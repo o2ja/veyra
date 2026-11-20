@@ -124,12 +124,23 @@ export function SelectField({
   );
   const v = props.value;
   const odd = v !== undefined && v !== null && String(v) !== "" && !known.includes(String(v));
+  const unchosen = (v === undefined || v === "") && !known.includes("");
   return (
     <div className="flex flex-col gap-1">
       <label htmlFor={id} className="text-sm font-medium">
         {label}
       </label>
-      <select className="rounded-md border border-line bg-panel px-3 py-2 text-sm" {...props} id={id}>
+      <select
+        className="rounded-md border border-line bg-panel px-3 py-2 text-sm"
+        {...props}
+        {...("value" in props && props.value === undefined ? { value: "" } : {})}
+        id={id}
+      >
+        {unchosen && (
+          <option value="" disabled>
+            Choose…
+          </option>
+        )}
         {odd && <option value={String(v)}>{String(v)}</option>}
         {children}
       </select>

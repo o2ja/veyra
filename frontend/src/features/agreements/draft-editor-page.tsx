@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Link, useBlocker, useParams } from "react-router-dom";
+import { Link, Navigate, useBlocker, useParams, useSearchParams } from "react-router-dom";
 
 import { Alert, Button, Card, Empty, ErrorAlert, Field, Loading, fieldError } from "../../components/ui";
 import { api } from "../../lib/api/client";
@@ -298,11 +298,15 @@ function RulesSection({
                 onChange={(e) => onChange({ ...rules, adapter: orNull(e.target.value) })}
               />
             </FormGrid>
-            <Checkbox
+            <SelectField
+              id="field-rules-spa_reference-required"
               label="SPA reference required"
-              checked={rules.spa_reference.required}
-              onChange={(checked) => onChange({ ...rules, spa_reference: { required: checked } })}
-            />
+              value={rules.spa_reference.required === undefined ? "" : String(rules.spa_reference.required)}
+              onChange={(e) => onChange({ ...rules, spa_reference: { required: e.target.value === "true" } })}
+            >
+              <option value="true">Required</option>
+              <option value="false">Not required</option>
+            </SelectField>
           </>
         ) : (
           <FormGrid>
@@ -372,7 +376,7 @@ function RulesSection({
             <Field
               id="field-rules-measurement_period-kind"
               label="Measurement period kind"
-              value={rules.measurement_period.kind}
+              value={rules.measurement_period.kind ?? ""}
               error={fieldError(error, "payload.rules.measurement_period.kind")}
               onChange={(e) =>
                 onChange({
@@ -385,7 +389,7 @@ function RulesSection({
               id="field-rules-measurement_period-start"
               label="Measurement period start"
               type="date"
-              value={rules.measurement_period.start}
+              value={rules.measurement_period.start ?? ""}
               error={fieldError(error, "payload.rules.measurement_period.start")}
               onChange={(e) =>
                 onChange({
@@ -398,7 +402,7 @@ function RulesSection({
               id="field-rules-measurement_period-end"
               label="Measurement period end"
               type="date"
-              value={rules.measurement_period.end}
+              value={rules.measurement_period.end ?? ""}
               error={fieldError(error, "payload.rules.measurement_period.end")}
               onChange={(e) =>
                 onChange({
@@ -426,7 +430,7 @@ function RulesSection({
             label="Rounding scale"
             type="number"
             min={0}
-            value={rules.rounding.scale}
+            value={rules.rounding.scale ?? ""}
             onChange={(e) => setRounding({ scale: intOrRaw(e.target.value) as never })}
           />
           <SelectField
@@ -1122,6 +1126,7 @@ function BulkItemsImport({
 
 export function DraftEditorPage() {
   const { draftId = "" } = useParams();
+  const [search] = useSearchParams();
   const query = useQuery({
     queryKey: ["agreement-drafts", draftId],
     queryFn: () =>
@@ -1157,7 +1162,13 @@ export function DraftEditorPage() {
     );
   }
 
-  return <DraftEditorForm key={query.data.id} initial={query.data} />;
+  const d = query.data;
+  // an AI draft being worked on belongs on the Contract Review page, where the quotes are; ?editor=1 opens the table editor
+  if (d.source === "ai_extraction" && d.status === "draft" && d.extraction_id && !search.has("editor")) {
+    return <Navigate to={`/extractions/${d.extraction_id}`} replace />;
+  }
+
+  return <DraftEditorForm key={d.id} initial={d} />;
 }
 
 function DraftEditorForm({ initial }: { initial: DraftOut }) {
@@ -1168,10 +1179,7 @@ function DraftEditorForm({ initial }: { initial: DraftOut }) {
   const [draft, setDraft] = useState<DraftOut>(initial);
   const [payload, setPayload] = useState<Payload>(() => payloadFromDraft(initial.payload));
   const [changeSummary, setChangeSummary] = useState("");
-  const [dirty, setDirty] = useState(() => {
-    const p = payloadFromDraft(initial.payload);
-    return JSON.stringify(p) !== JSON.stringify(viewPayload(p));
-  });
+  const [dirty, setDirty] = useState(false);
   const [staleConflict, setStaleConflict] = useState(false);
   const [itemsPage, setItemsPage] = useState(1);
   const pendingFocusRef = useRef<string | null>(null);
@@ -1187,7 +1195,6 @@ function DraftEditorForm({ initial }: { initial: DraftOut }) {
 
   const editable = draft.status === "draft" && can("agreement.draft");
   const view = useMemo(() => viewPayload(payload), [payload]);
-  const missingDefaults = useMemo(() => JSON.stringify(payload) !== JSON.stringify(view), [payload, view]);
 
   useEffect(() => {
     if (!dirty || !editable) return;
@@ -1218,7 +1225,7 @@ function DraftEditorForm({ initial }: { initial: DraftOut }) {
     const nextPayload = payloadFromDraft(fresh.payload);
     setDraft(fresh);
     setPayload(nextPayload);
-    setDirty(JSON.stringify(nextPayload) !== JSON.stringify(viewPayload(nextPayload)));
+    setDirty(false);
     setStaleConflict(false);
     setAcknowledgedWarnings(new Set());
     approveKeyRef.current = null;
@@ -1247,7 +1254,7 @@ function DraftEditorForm({ initial }: { initial: DraftOut }) {
         api.PUT("/api/v1/agreement-drafts/{draft_id}", {
           params: { path: { draft_id: draftId }, header: { "if-match": `"${draft.revision}"` } },
           body: {
-            payload: (missingDefaults ? view : payload) as unknown as Record<string, unknown>,
+            payload: payload as unknown as Record<string, unknown>,
             change_summary: orNull(changeSummary),
           },
         }),
@@ -1407,6 +1414,11 @@ function DraftEditorForm({ initial }: { initial: DraftOut }) {
               <span>Revision {draft.revision}</span>
               <span>Source: {draft.source}</span>
               <span>Updated {formatDateTime(draft.updated_at)}</span>
+              {draft.extraction_id && (
+                <Link to={`/extractions/${draft.extraction_id}`} className="text-brand underline">
+                  Contract review
+                </Link>
+              )}
               {draft.agreement_id && (
                 <Link to={`/agreements/${draft.agreement_id}`} className="text-brand underline">
                   Agreement
@@ -1522,11 +1534,6 @@ function DraftEditorForm({ initial }: { initial: DraftOut }) {
                   }}
                 />
               </div>
-              {missingDefaults && (
-                <p className="text-xs text-muted">
-                  Some fields were missing and show defaults; save to store them.
-                </p>
-              )}
               {dirty && (
                 <p className="text-xs text-muted">
                   Save your edits before running Validate or Submit so the server checks the latest values.
