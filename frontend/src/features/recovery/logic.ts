@@ -1,5 +1,6 @@
 import type { components } from "../../api/schema";
 import { formatDate, formatMoney, formatQty } from "../../lib/format";
+import { REASON_CODE_LABELS } from "../masterdata/reason-codes";
 
 export type CaseOut = components["schemas"]["CaseOut"];
 export type SummaryOut = components["schemas"]["SummaryOut"];
@@ -59,7 +60,8 @@ export const statusLabel = (status: string): string => CASE_STATUS_LABELS[status
 
 export const caseTypeLabel = (caseType: string): string => CASE_TYPE_LABELS[caseType as CaseType] ?? caseType;
 
-export const reasonLabel = (code: string): string => code.replaceAll("_", " ");
+export const reasonLabel = (code: string): string =>
+  REASON_CODE_LABELS[code as keyof typeof REASON_CODE_LABELS] ?? code.replaceAll("_", " ");
 
 interface DisputeCheck {
   name: string;
@@ -117,6 +119,34 @@ export function disputeSentences(
     headline: ASSESSMENT_TEXT[String(doc.assessment)] ?? String(doc.assessment),
     checks: checks.map((c) => ({ text: checkSentence(c), passed: c.passed })),
   };
+}
+
+/** Fixed-template text for emailing a manufacturer about one case. Only server figures, never recomputed. */
+export function disputeSummary(
+  c: Pick<
+    CaseOut,
+    | "claim_reference"
+    | "claimed_amount"
+    | "paid_amount"
+    | "variance_amount"
+    | "reason_code"
+    | "external_reason_code"
+  > & { invoice?: string | null },
+): string {
+  const reason = c.external_reason_code
+    ? `${reasonLabel(c.reason_code)} (your code ${c.external_reason_code})`
+    : reasonLabel(c.reason_code);
+  return [
+    "Dispute summary",
+    `Claim reference: ${c.claim_reference ?? "not on file"}`,
+    ...(c.invoice ? [`Invoice: ${c.invoice}`] : []),
+    `Claimed: ${formatMoney(c.claimed_amount)}`,
+    `Paid: ${formatMoney(c.paid_amount)}`,
+    `Variance: ${formatMoney(c.variance_amount)}`,
+    `Reason given: ${reason}`,
+    "",
+    "Please review and pay the variance, or tell us what is missing.",
+  ].join("\n");
 }
 
 export const ownerText = (

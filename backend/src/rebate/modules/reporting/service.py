@@ -13,12 +13,12 @@ from zoneinfo import ZoneInfo
 from sqlalchemy import delete, func, insert, select
 from sqlalchemy.orm import Session
 
-from rebate.core import clock
+from rebate.core import clock, jobs
 from rebate.core.errors import NotFound
 from rebate.core.figures import FigureSet, Filter
 from rebate.core.ids import new_id
 from rebate.core.trace import merge
-from rebate.modules import claims, reconciliation, recovery, tenancy
+from rebate.modules import agreements, claims, ingestion, masterdata, reconciliation, recovery, tenancy
 from rebate.modules.reporting.models import SummaryClaimsMonthly as S
 
 # metric -> the module that owns its definition (ARCHITECTURE.md §3: reporting reads claims, reconciliation, recovery)
@@ -39,6 +39,40 @@ FOLLOW_LIMIT = 50  # claim lines followed from one remittance line in a trace
 def _tz_and_today(db: Session, tenant: UUID) -> tuple[str, date]:
     tz = tenancy.get_settings(db, tenant).business_timezone
     return tz, clock.now().astimezone(ZoneInfo(tz)).date()
+
+
+def attention(db: Session, tenant: UUID, *, see_jobs: bool) -> dict[str, Any]:
+    """Home: live counts of work waiting for people, and the money found (BUSINESS_LOGIC.md §12.3). Read live, not
+    from the summary table. ``failed_jobs`` only for callers who manage jobs (else None)."""
+    today = recovery.business_today(db, tenant)
+    cases = recovery.deadline_figures(db, tenant, today)
+    drafts = agreements.draft_counts(db, tenant)
+    unclaimed, short_paid = claims.unclaimed_total(db, tenant), Decimal(cases["open"]["amount"])
+    failed = None
+    if see_jobs:
+        failed = db.scalar(
+            select(func.count()).where(jobs.Job.tenant_id == tenant, jobs.Job.status == "failed")
+        )
+    return {
+        "as_of_date": today,
+        "deadline_within_days": recovery.AT_RISK_DAYS,
+        "imports_waiting": ingestion.waiting_count(db, tenant),
+        "unmapped_open": masterdata.unmapped_open_count(db, tenant),
+        "drafts_to_review": drafts["to_review"],
+        "drafts_to_review_ai": drafts["to_review_ai"],
+        "drafts_to_approve": drafts["to_approve"],
+        "drafts_to_approve_ai": drafts["to_approve_ai"],
+        "cases_overdue": cases["overdue"]["count"],
+        "cases_due_soon": cases["expiring"]["count"],
+        "cases_unassigned": cases["unassigned"],
+        "failed_jobs": failed,
+        "money_found": {
+            "unclaimed": unclaimed,
+            "short_paid_open": short_paid,
+            "expiring_soon": cases["expiring"]["amount"],
+            "total": unclaimed + short_paid,  # expiring_soon is part of short_paid_open, never added again
+        },
+    }
 
 
 def refresh(db: Session, tenant: UUID) -> int:

@@ -7,11 +7,12 @@ because only clean rows get download URLs).
 """
 
 import hashlib
+from collections.abc import Callable
 from dataclasses import dataclass
-from typing import IO, Any
+from typing import IO, Any, Literal
 from uuid import UUID
 
-from sqlalchemy import and_, not_, or_, select
+from sqlalchemy import and_, func, not_, or_, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
@@ -164,10 +165,92 @@ def get(db: Session, tenant_id: UUID, file_id: UUID) -> FileObject:
     return row
 
 
+@dataclass(frozen=True)
+class Use:
+    """A record that points at a file (``GET /files/{id}`` ``used_by``)."""
+
+    kind: str
+    id: UUID
+    label: str
+
+
+UseSource = Callable[[Session, UUID, UUID], list[Use]]
+_USE_SOURCES: list[UseSource] = []
+
+
+def register_use_source(source: UseSource) -> UseSource:
+    """Modules that reference ``file_objects`` register a reader of their references (files cannot import them)."""
+    _USE_SOURCES.append(source)
+    return source
+
+
+def used_by(db: Session, tenant_id: UUID, file_id: UUID) -> list[Use]:
+    return [u for source in _USE_SOURCES for u in source(db, tenant_id, file_id)]
+
+
+def remove(
+    c: RequestContext, principal: Principal, tenant_id: UUID, file_id: UUID
+) -> Literal["deleted", "archived"]:
+    """Delete an unused file (row now, stored object by a job after commit) or archive a used one. A foreign key
+    refusal (a reference no module reported) also archives, so a file behind any record is never removed."""
+    row = c.db.scalar(
+        select(FileObject)
+        .where(FileObject.tenant_id == tenant_id, FileObject.id == file_id)
+        .with_for_update()
+    )
+    if row is None:
+        raise NotFound()
+    check_readable(row, principal)
+    if row.archived_at is not None:
+        return "archived"
+    actor, meta = Actor("user", principal.user_id), c.audit_meta()
+    if not used_by(c.db, tenant_id, file_id):
+        if row.scan_status == "pending":
+            raise InvalidState("Wait until the malware scan of this file has finished.")
+        snapshot = {"kind": row.kind, "original_name": row.original_name, "sha256": row.sha256}
+        key = row.storage_key
+        try:
+            with c.db.begin_nested():
+                deleted = c.db.scalar(select(func.fn_delete_unreferenced_file(file_id)))
+        except IntegrityError as exc:
+            if getattr(exc.orig, "sqlstate", None) != "23503":
+                raise
+            deleted = False
+        if deleted:
+            c.db.expunge(row)
+            jobs.enqueue(
+                c.db,
+                "files_delete_objects",
+                tenant_id=tenant_id,
+                payload={"file_id": str(file_id), "key": key},
+                created_by=principal.user_id,
+                dedupe_key=f"files_delete_objects:{file_id}",
+            )
+            audit.record(
+                c.db, tenant_id=tenant_id, actor=actor, action=Action.FILE_DELETED, entity_type="file",
+                entity_id=file_id, before=snapshot, meta=meta,
+            )  # fmt: skip
+            return "deleted"
+    row.archived_at = clock.now()
+    c.db.flush()
+    audit.record(
+        c.db, tenant_id=tenant_id, actor=actor, action=Action.FILE_ARCHIVED, entity_type="file",
+        entity_id=file_id, after={"archived_at": row.archived_at}, meta=meta,
+    )  # fmt: skip
+    return "archived"
+
+
 def list_files(
-    db: Session, principal: Principal, tenant_id: UUID, limit: int, before: UUID | None
+    db: Session,
+    principal: Principal,
+    tenant_id: UUID,
+    limit: int,
+    before: UUID | None,
+    include_archived: bool = False,
 ) -> list[FileObject]:
     stmt = select(FileObject).where(FileObject.tenant_id == tenant_id)
+    if not include_archived:
+        stmt = stmt.where(FileObject.archived_at.is_(None))
     hidden = [  # export files whose permission the caller lacks (see export_permission)
         and_(FileObject.kind == "export", FileObject.original_name.startswith(prefix))
         for prefix, p in _EXPORT_PREFIXES

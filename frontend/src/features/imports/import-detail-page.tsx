@@ -1,12 +1,13 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
-import { Link, useParams } from "react-router-dom";
+import { Link, useNavigate, useParams } from "react-router-dom";
 
 import type { components } from "../../api/schema";
 import { Alert, Button, Card, ErrorAlert, Field, Loading, fieldError } from "../../components/ui";
 import { api } from "../../lib/api/client";
 import { ApiError, unwrap } from "../../lib/api/errors";
 import { useSession } from "../../lib/session";
+import { ConfirmDialog } from "../claims/common";
 import { Checkbox, DataTable, PagerControls, SelectField, usePager } from "../masterdata/common";
 import {
   type Mapping,
@@ -441,8 +442,18 @@ export function ImportDetailPage() {
   const { importId = "" } = useParams();
   const client = useQueryClient();
   const { can } = useSession();
+  const navigate = useNavigate();
   const [remap, setRemap] = useState(false);
+  const [discarding, setDiscarding] = useState(false);
   const path = { import_id: importId };
+  const discard = useMutation({
+    mutationFn: () => unwrap(api.POST("/api/v1/imports/{import_id}/discard", { params: { path } })),
+    onSuccess: () => {
+      setDiscarding(false);
+      void client.invalidateQueries({ queryKey: ["imports"] });
+      navigate("/imports");
+    },
+  });
   const batch = useQuery({
     queryKey: ["imports", importId],
     queryFn: () => unwrap(api.GET("/api/v1/imports/{import_id}", { params: { path } })),
@@ -463,8 +474,27 @@ export function ImportDetailPage() {
 
   return (
     <div className="flex flex-col gap-6">
-      <Card title={i ? `${TYPE_TEXT[i.import_type] ?? i.import_type} import` : "Import"}>
-        <ErrorAlert error={batch.error as ApiError | null} />
+      <Card
+        title={i ? `${TYPE_TEXT[i.import_type] ?? i.import_type} import` : "Import"}
+        actions={
+          i?.status === "awaiting_confirmation" && can("import.run") ? (
+            <Button variant="secondary" onClick={() => setDiscarding(true)}>
+              Discard import
+            </Button>
+          ) : undefined
+        }
+      >
+        <ErrorAlert error={(batch.error ?? discard.error) as ApiError | null} />
+        <ConfirmDialog
+          open={discarding}
+          onOpenChange={setDiscarding}
+          title="Discard this import?"
+          description="Nothing from this file has been loaded yet. The import is closed and kept in the history; the file stays in Files. This is recorded in the audit log."
+          confirmLabel="Discard import"
+          confirmVariant="danger"
+          busy={discard.isPending}
+          onConfirm={() => discard.mutate()}
+        />
         {batch.isPending && <Loading />}
         {i && (
           <div className="flex flex-col gap-4">
@@ -511,6 +541,14 @@ export function ImportDetailPage() {
       {i && step === "processing" && (
         <Card title="Reading the file">
           <Loading label={STATUS_TEXT[i.status] ?? "Working…"} />
+        </Card>
+      )}
+      {i && step === "discarded" && (
+        <Card title="Discarded">
+          <Alert tone="info">This import was discarded before any rows were loaded.</Alert>
+          <Link to="/imports/new" className="mt-3 inline-block text-brand underline">
+            Start a new import
+          </Link>
         </Card>
       )}
       {i && step === "failed" && (
@@ -573,7 +611,7 @@ export function ImportDetailPage() {
           )}
         </Card>
       )}
-      {i && step !== "processing" && (
+      {i && step !== "processing" && step !== "discarded" && (
         <Card title="Row errors">
           <RowErrors i={i} />
         </Card>

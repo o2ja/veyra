@@ -47,6 +47,10 @@ class CaseOut(BaseModel):
     written_off_at: datetime | None
     created_at: datetime
     closed_at: datetime | None
+    overdue_days: int | None = None  # live reclaimable case past its deadline, in days (business date)
+    claim_batch_id: UUID | None = None
+    claim_reference: str | None = None
+    sales_document_line_id: UUID | None = None
 
     @computed_field  # type: ignore[prop-decorator]
     @property
@@ -69,6 +73,8 @@ class EventOut(BaseModel):
     note: str | None
     payload: dict[str, Any] | None
     actor_user_id: UUID | None
+    actor_name: str | None = None
+    actor_email: str | None = None
     created_at: datetime
 
 
@@ -100,10 +106,17 @@ class AtRisk(BaseModel):
     deadline_within_days: int
 
 
+class Overdue(BaseModel):
+    count: int
+    amount: Money
+
+
 class SummaryOut(BaseModel):
     by_status: list[SummaryRow]
     by_reason: list[SummaryRow]
-    at_risk: AtRisk
+    at_risk: AtRisk  # D-N6: deadline unknown, overdue or within 14 days
+    overdue: Overdue  # deadline passed
+    expiring: AtRisk  # deadline from today to 14 days ahead (not passed)
 
 
 class CasePatch(BaseModel):

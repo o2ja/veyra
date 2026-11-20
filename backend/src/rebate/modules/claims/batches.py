@@ -24,7 +24,7 @@ from sqlalchemy.orm import Session
 from rebate.core import clock
 from rebate.core.errors import Conflict, FourEyesViolation, InvalidState, NotFound, ValidationFailed
 from rebate.core.ids import new_id
-from rebate.modules import audit, masterdata, tenancy
+from rebate.modules import audit, files, masterdata, tenancy
 from rebate.modules.claims import adjustments, export_jobs, missed, templates
 from rebate.modules.claims import batch_schemas as s
 from rebate.modules.claims.models import ClaimBatch, ClaimExportTemplate, ClaimLine
@@ -42,6 +42,16 @@ class AlreadyClaimed(Conflict):
 class BatchTotalNotPositive(ValidationFailed):
     code = "batch_total_not_positive"
     message = "A claim batch must claim a positive amount."
+
+
+@files.register_use_source
+def _file_uses(db: Session, tenant_id: UUID, file_id: UUID) -> list[files.Use]:
+    rows = db.scalars(
+        select(ClaimBatch)
+        .where(ClaimBatch.tenant_id == tenant_id, ClaimBatch.exported_file_id == file_id)
+        .order_by(ClaimBatch.id)
+    )
+    return [files.Use("claim_batch", b.id, f"Claim batch {b.batch_number}") for b in rows]
 
 
 def _require_positive(db: Session, tenant_id: UUID, manufacturer_id: UUID, total: Decimal) -> None:

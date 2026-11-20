@@ -25,6 +25,7 @@ import {
   batchIdFromDetails,
   caseTypeLabel,
   disputeSentences,
+  disputeSummary,
   isValidWriteOffReason,
   newestFirst,
   ownerText,
@@ -431,6 +432,11 @@ export function RecoveryCasePage() {
                     ) : (
                       formatDate(item.deadline_date)
                     )}
+                    {item.overdue_days != null && item.overdue_days > 0 && (
+                      <span className="block text-xs font-semibold text-danger">
+                        Overdue by {item.overdue_days} day{item.overdue_days === 1 ? "" : "s"}
+                      </span>
+                    )}
                   </dd>
                 </div>
                 <div>
@@ -460,7 +466,14 @@ export function RecoveryCasePage() {
                 </div>
                 <div>
                   <dt className="text-muted">Owner</dt>
-                  <dd aria-label="Case owner">{ownerText(item.owner_user_id, me?.user.id)}</dd>
+                  <dd aria-label="Case owner">
+                    {(() => {
+                      const owner = (members.data?.data ?? []).find((m) => m.user_id === item.owner_user_id);
+                      return item.owner_user_id && item.owner_user_id !== me?.user.id && owner
+                        ? owner.full_name || owner.email
+                        : ownerText(item.owner_user_id, me?.user.id);
+                    })()}
+                  </dd>
                 </div>
                 <div>
                   <dt className="text-muted">Revision</dt>
@@ -487,6 +500,42 @@ export function RecoveryCasePage() {
                   </div>
                 )}
               </dl>
+
+              <div className="flex flex-wrap items-center gap-x-5 gap-y-2 border-t border-line pt-4 text-sm">
+                <span className="text-muted">Related:</span>
+                {item.claim_batch_id && (
+                  <Link to={`/claims/batches/${item.claim_batch_id}`} className="text-brand underline">
+                    Claim {item.claim_reference ?? "batch"}
+                  </Link>
+                )}
+                {item.claim_line_id && (
+                  <Link to={`/trace/claim_line/${item.claim_line_id}`} className="text-brand underline">
+                    Claim line
+                  </Link>
+                )}
+                {item.sales_document_line_id && (
+                  <Link to={`/lines/sales/${item.sales_document_line_id}`} className="text-brand underline">
+                    Invoice line
+                  </Link>
+                )}
+                {item.remittance_document_id && (
+                  <Link
+                    to={`/reconciliation/${item.remittance_document_id}`}
+                    className="text-brand underline"
+                  >
+                    Remittance
+                  </Link>
+                )}
+                {item.remittance_line_id && (
+                  <Link
+                    to={`/trace/remittance_line/${item.remittance_line_id}`}
+                    className="text-brand underline"
+                  >
+                    Remittance line
+                  </Link>
+                )}
+                <CopyDisputeSummary item={item} />
+              </div>
 
               {proposalMine && (
                 <Alert tone="info">
@@ -533,7 +582,12 @@ export function RecoveryCasePage() {
                     </p>
                   )}
                   {event.note && <p className="mt-1 whitespace-pre-wrap">{event.note}</p>}
-                  <p className="mt-1 text-xs text-muted">By {event.actor_user_id ?? "System"}</p>
+                  <p className="mt-1 text-xs text-muted">
+                    By{" "}
+                    {event.actor_name ||
+                      event.actor_email ||
+                      (event.actor_user_id ? "a former member" : "Veyra (automatic)")}
+                  </p>
                   {event.payload && Object.keys(event.payload).length > 0 && (
                     <div className="mt-2">
                       <GenericTree
@@ -835,6 +889,37 @@ export function RecoveryCasePage() {
         )}
       </div>
     </>
+  );
+}
+
+function CopyDisputeSummary({ item }: { item: CaseOut }) {
+  const [copied, setCopied] = useState<"idle" | "done" | "failed">("idle");
+  const lineId = item.sales_document_line_id ?? "";
+  const line = useQuery({
+    queryKey: ["lines", "sales", lineId],
+    enabled: Boolean(lineId),
+    queryFn: () =>
+      unwrap(api.GET("/api/v1/sales-lines/{line_id}", { params: { path: { line_id: lineId } } })),
+  });
+  const invoice = line.data ? `${line.data.document_number}, line ${line.data.line_number}` : null;
+  async function copy() {
+    try {
+      await navigator.clipboard.writeText(disputeSummary({ ...item, invoice }));
+      setCopied("done");
+    } catch {
+      setCopied("failed");
+    }
+    setTimeout(() => setCopied("idle"), 2500);
+  }
+  return (
+    <span className="ml-auto flex items-center gap-2">
+      <span role="status" className="text-xs text-muted">
+        {copied === "done" ? "Copied" : copied === "failed" ? "Copy blocked by the browser" : ""}
+      </span>
+      <Button variant="secondary" onClick={() => void copy()}>
+        Copy dispute summary
+      </Button>
+    </span>
   );
 }
 

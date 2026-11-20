@@ -1,7 +1,7 @@
 import { useQuery } from "@tanstack/react-query";
 import { Link, useSearchParams } from "react-router-dom";
 
-import { Alert, Button, Card, Empty, ErrorAlert, Loading, PermissionDenied } from "../../components/ui";
+import { Button, Card, Empty, ErrorAlert, Loading, PermissionDenied } from "../../components/ui";
 import { api } from "../../lib/api/client";
 import { type ApiError, unwrap } from "../../lib/api/errors";
 import { useSession } from "../../lib/session";
@@ -124,10 +124,21 @@ export function RecoveryQueuePage() {
                   }))}
                 />
               </div>
-              <Alert tone="info">
-                At risk within {summaryData.at_risk.deadline_within_days} days: {summaryData.at_risk.count}{" "}
-                cases, {formatMoney(summaryData.at_risk.amount)}
-              </Alert>
+              <div className="grid gap-3 sm:grid-cols-2">
+                <div className="rounded-lg border border-danger/30 bg-danger-soft px-4 py-3 text-sm text-danger">
+                  <span className="font-semibold">
+                    Overdue: {summaryData.overdue.count} cases, {formatMoney(summaryData.overdue.amount)}
+                  </span>
+                  <span className="block text-xs">Deadline already passed. Chase these first.</span>
+                </div>
+                <div className="rounded-lg border border-warn/30 bg-warn-soft px-4 py-3 text-sm text-warn">
+                  <span className="font-semibold">
+                    At risk within {summaryData.expiring.deadline_within_days} days:{" "}
+                    {summaryData.expiring.count} cases, {formatMoney(summaryData.expiring.amount)}
+                  </span>
+                  <span className="block text-xs">Not overdue yet; the deadline is coming up.</span>
+                </div>
+              </div>
             </div>
           ) : null}
         </Card>
@@ -257,6 +268,11 @@ export function RecoveryQueuePage() {
                               formatDate(item.deadline_date)
                             )}
                           </Link>
+                          {item.overdue_days != null && item.overdue_days > 0 && (
+                            <span className="block text-xs font-semibold text-danger">
+                              Overdue by {item.overdue_days} day{item.overdue_days === 1 ? "" : "s"}
+                            </span>
+                          )}
                         </td>
                         <td className="py-2 pr-4">
                           {item.deadline_basis ? DEADLINE_BASIS_LABELS[item.deadline_basis] : "—"}

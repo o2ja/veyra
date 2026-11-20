@@ -4,6 +4,7 @@ import {
   TRANSITION_STATUSES,
   batchIdFromDetails,
   disputeSentences,
+  disputeSummary,
   isValidWriteOffReason,
   newestFirst,
   notificationCaseLink,
@@ -127,5 +128,33 @@ describe("disputeSentences", () => {
     );
     expect(out?.checks[1]?.text).toBe("Whether the customer is covered is not on file.");
     expect(disputeSentences(null)).toBeNull();
+  });
+});
+
+describe("disputeSummary", () => {
+  it("fills the fixed template from server figures", () => {
+    expect(
+      disputeSummary({
+        claim_reference: "CLM-0042",
+        invoice: "INV-10060, line 1",
+        claimed_amount: "2080.0000",
+        paid_amount: "0.0000",
+        variance_amount: "2080.0000",
+        reason_code: "rejected_price_mismatch",
+        external_reason_code: "E12",
+      }),
+    ).toBe(
+      [
+        "Dispute summary",
+        "Claim reference: CLM-0042",
+        "Invoice: INV-10060, line 1",
+        "Claimed: $2,080.00",
+        "Paid: $0.00",
+        "Variance: $2,080.00",
+        "Reason given: Rejected: price mismatch (your code E12)",
+        "",
+        "Please review and pay the variance, or tell us what is missing.",
+      ].join("\n"),
+    );
   });
 });

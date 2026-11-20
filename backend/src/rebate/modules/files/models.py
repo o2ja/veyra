@@ -41,3 +41,4 @@ class FileObject(Base):
     uploaded_by: Mapped[UUID] = mapped_column(ForeignKey("users.id", name="fk_file_objects_users"))
     created_at: Mapped[datetime] = mapped_column(TS, server_default="now()")
     scanned_at: Mapped[datetime | None] = mapped_column(TS)
+    archived_at: Mapped[datetime | None] = mapped_column(TS)

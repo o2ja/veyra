@@ -4,7 +4,7 @@ type ImportOut = components["schemas"]["ImportOut"];
 type FieldOut = components["schemas"]["FieldOut"];
 export type Mapping = Record<string, string | null>;
 
-export type Step = "processing" | "map" | "review" | "loading" | "done" | "failed";
+export type Step = "processing" | "map" | "review" | "loading" | "done" | "failed" | "discarded";
 
 /** Which wizard step an import is at, from the server's status (the server owns the state machine). */
 export function stepOf(i: Pick<ImportOut, "status" | "needs_mapping">): Step {
@@ -19,6 +19,8 @@ export function stepOf(i: Pick<ImportOut, "status" | "needs_mapping">): Step {
     case "failed":
     case "rejected":
       return "failed";
+    case "discarded":
+      return "discarded";
     default:
       return "processing"; // uploaded, scanning, parsing
   }
@@ -38,6 +40,7 @@ export const STATUS_TEXT: Record<string, string> = {
   completed_with_errors: "Completed, some rows rejected",
   failed: "Failed",
   rejected: "Rejected",
+  discarded: "Discarded",
 };
 
 export const TYPE_TEXT: Record<string, string> = {

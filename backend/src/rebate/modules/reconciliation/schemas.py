@@ -6,7 +6,7 @@ from decimal import Decimal
 from typing import Annotated, Any, Literal
 from uuid import UUID
 
-from pydantic import BaseModel, ConfigDict, Field, StringConstraints, field_validator
+from pydantic import BaseModel, ConfigDict, Field, StringConstraints, computed_field, field_validator
 
 from rebate.core.money import Money
 from rebate.core.validation import NO_CONTROL, STRICT, JsonUUID
@@ -85,6 +85,14 @@ class RemittanceAccepted(BaseModel):
     job: RunJobRef
 
 
+class MatchedClaimLine(BaseModel):
+    claim_line_id: UUID
+    claim_reference: str | None
+    claim_batch_id: UUID
+    claim_amount: Money  # the claim line's frozen amount
+    allocated_amount: Money  # what this remittance line's confirmed match allocates to it
+
+
 class RemittanceLineOut(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
@@ -104,6 +112,25 @@ class RemittanceLineOut(BaseModel):
     reason_code: str | None
     category: Literal["unmatched_payment"] | None
     categorised_at: datetime | None
+    matched_claim_lines: list[MatchedClaimLine] = []  # confirmed allocations to claim lines
+
+    @computed_field  # type: ignore[prop-decorator]
+    @property
+    def variance(self) -> Money | None:
+        """What the line says was claimed minus what it paid; None when the line states no claimed amount."""
+        if self.amount_claimed_stated is None:
+            return None
+        return self.amount_claimed_stated - self.amount_paid
+
+
+class UnknownReasonCode(BaseModel):
+    external_code: str
+    line_count: int
+    last_seen_at: datetime
+
+
+class UnknownReasonCodeList(BaseModel):
+    data: list[UnknownReasonCode]
 
 
 class RemittanceLineList(BaseModel):
@@ -174,6 +201,7 @@ class AllocationOut(BaseModel):
     claim_line_id: UUID | None
     claim_adjustment_id: UUID | None
     claim_reference: str | None
+    claim_batch_id: UUID | None = None  # the claim line's batch (null for an adjustment item)
     allocated_amount: Money
 
 

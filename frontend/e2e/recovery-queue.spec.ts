@@ -34,10 +34,15 @@ test("S9 recovery queue: server order, unknown deadline first, reason filter, su
 
     const summary = page.getByRole("region", { name: "Recovery summary" });
     const serverSummary = await apiJson<{
-      at_risk: { deadline_within_days: number; count: number; amount: string };
+      overdue: { count: number; amount: string };
+      expiring: { deadline_within_days: number; count: number; amount: string };
     }>(page, "GET", "/api/v1/cases/summary");
+    // Overdue and "at risk" are separate: a passed deadline is never counted as merely at risk.
     await expect(summary).toContainText(
-      `At risk within ${serverSummary.at_risk.deadline_within_days} days: ${serverSummary.at_risk.count} cases, ${formatMoney(serverSummary.at_risk.amount)}`,
+      `Overdue: ${serverSummary.overdue.count} cases, ${formatMoney(serverSummary.overdue.amount)}`,
+    );
+    await expect(summary).toContainText(
+      `At risk within ${serverSummary.expiring.deadline_within_days} days: ${serverSummary.expiring.count} cases, ${formatMoney(serverSummary.expiring.amount)}`,
     );
 
     const table = page.getByRole("table", { name: "Recovery cases" });

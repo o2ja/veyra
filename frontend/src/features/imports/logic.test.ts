@@ -21,6 +21,7 @@ test("each server status maps to one wizard step", () => {
   expect(at("loading")).toBe("loading");
   expect([at("completed"), at("completed_with_errors")]).toEqual(["done", "done"]);
   expect([at("failed"), at("rejected")]).toEqual(["failed", "failed"]);
+  expect(at("discarded")).toBe("discarded"); // terminal: must not fall into "processing" and poll forever
 });
 
 test("the mapping form starts from the current mapping, then the server's suggestion", () => {

@@ -7,6 +7,7 @@ from uuid import UUID
 
 from fastapi import APIRouter, Depends, Header, Query, Request, Response
 from fastapi.responses import JSONResponse
+from sqlalchemy.orm import Session
 
 from rebate.core.access import require, tenant_of
 from rebate.core.errors import PreconditionFailed
@@ -17,6 +18,7 @@ from rebate.modules.masterdata import Page, Who, page
 from rebate.modules.recovery import schemas as s
 from rebate.modules.recovery import service
 from rebate.modules.recovery.domain.states import CaseStatus
+from rebate.modules.recovery.models import VarianceCase
 
 router = APIRouter(tags=["recovery"])
 
@@ -40,8 +42,13 @@ def _revision(if_match: str | None) -> int:
     return int(value)
 
 
-def _out(response: Response, c: object) -> s.CaseOut:
-    out = s.CaseOut.model_validate(c)
+def _cases(db: Session, tenant_id: UUID, rows: list[VarianceCase]) -> list[s.CaseOut]:
+    extras = service.case_extras(db, tenant_id, rows)
+    return [s.CaseOut.model_validate(r).model_copy(update=extras[r.id]) for r in rows]
+
+
+def _out(request: Request, response: Response, c: VarianceCase) -> s.CaseOut:
+    (out,) = _cases(ctx(request).db, c.tenant_id, [c])
     response.headers["ETag"] = f'"{out.revision}"'
     return out
 
@@ -80,7 +87,8 @@ def list_cases(
         cursor=cursor,
     )
     return s.CaseList(
-        data=[s.CaseOut.model_validate(r) for r in rows], page=Page(next_cursor=nxt, has_more=nxt is not None)
+        data=_cases(ctx(request).db, tenant_of(principal), rows),
+        page=Page(next_cursor=nxt, has_more=nxt is not None),
     )
 
 
@@ -96,15 +104,17 @@ def get_case(
     case_id: UUID,
     principal: Annotated[Principal, Depends(require(READ))],
 ) -> s.CaseOut:
-    return _out(response, service.get(ctx(request).db, tenant_of(principal), case_id))
+    return _out(request, response, service.get(ctx(request).db, tenant_of(principal), case_id))
 
 
 @router.get("/cases/{case_id}/events", operation_id="case_event_list", dependencies=[NO_QUERY])
 def list_events(
     request: Request, case_id: UUID, principal: Annotated[Principal, Depends(require(READ))]
 ) -> s.EventList:
-    rows = service.list_events(ctx(request).db, tenant_of(principal), case_id)
-    return s.EventList(data=[s.EventOut.model_validate(r) for r in rows])
+    db = ctx(request).db
+    rows = service.list_events(db, tenant_of(principal), case_id)
+    actors = service.event_actors(db, rows)
+    return s.EventList(data=[s.EventOut.model_validate(r).model_copy(update=actors[r.id]) for r in rows])
 
 
 @router.get("/cases/{case_id}/attachments", operation_id="case_attachment_list", dependencies=[NO_QUERY])
@@ -127,7 +137,7 @@ def update_case(
     c = service.assign(
         ctx(request).db, _who(request, principal), case_id, body.owner_user_id, _revision(if_match)
     )
-    return _out(response, c)
+    return _out(request, response, c)
 
 
 @router.post("/cases/{case_id}/transition", operation_id="case_transition")
@@ -147,7 +157,7 @@ def transition(
         body.note,
         _revision(if_match),
     )
-    return _out(response, c)
+    return _out(request, response, c)
 
 
 @router.post("/cases/{case_id}/notes", status_code=201, operation_id="case_note_add")
@@ -190,7 +200,7 @@ def write_off(
     replayed = ingestion.replay(c.db, who.tenant_id, key, endpoint, payload)
     if replayed is not None:
         return JSONResponse(replayed[1], replayed[0], headers={"ETag": f'"{replayed[1]["revision"]}"'})
-    out = _out(response, service.write_off(c.db, who, case_id, body.reason, _revision(if_match)))
+    out = _out(request, response, service.write_off(c.db, who, case_id, body.reason, _revision(if_match)))
     ingestion.store(c.db, who.tenant_id, key, endpoint, payload, 200, out.model_dump(mode="json"))
     return out
 
@@ -206,7 +216,7 @@ def reclaim(
     c, adjustment_id = service.reclaim(
         ctx(request).db, _who(request, principal), case_id, _revision(if_match)
     )
-    return s.ReclaimOut(case=_out(response, c), adjustment_id=adjustment_id)
+    return s.ReclaimOut(case=_out(request, response, c), adjustment_id=adjustment_id)
 
 
 @router.get(

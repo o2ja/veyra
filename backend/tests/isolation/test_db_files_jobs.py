@@ -129,6 +129,40 @@ def test_app_role_cannot_delete_files_or_jobs(app_engine: Engine, world: World, 
     assert "permission denied" in err
 
 
+def test_a_final_file_may_be_archived_once_and_nothing_else(app_engine: Engine, world: World) -> None:
+    fid, tenant = world.a.file_ids[0], world.a.tenant_id
+    with as_app(app_engine, tenant) as conn:
+        _make_final(conn, fid, tenant, "clean")
+        assert _error(conn, "UPDATE file_objects SET archived_at = now() WHERE id = :i", {"i": fid}) == ""
+        conn.execute(text("UPDATE file_objects SET archived_at = now() WHERE id = :i"), {"i": fid})
+        assert "is final" in _error(
+            conn, "UPDATE file_objects SET archived_at = NULL WHERE id = :i", {"i": fid}
+        )
+        err = _error(
+            conn,
+            "UPDATE file_objects SET scan_detail = 'x', archived_at = archived_at WHERE id = :i",
+            {"i": fid},
+        )
+        assert "is final" in err
+
+
+def test_guarded_file_delete_reaches_only_the_sessions_workspace(app_engine: Engine, world: World) -> None:
+    """``fn_delete_unreferenced_file`` deletes by the session's app.tenant_id (explicitly, not only through RLS)."""
+    foreign = world.b.file_ids[0]
+    with as_app(app_engine, world.a.tenant_id) as conn:
+        assert (
+            conn.execute(text("SELECT fn_delete_unreferenced_file(:i)"), {"i": foreign}).scalar_one() is False
+        )
+    with as_app(app_engine, world.b.tenant_id) as conn:
+        assert (
+            conn.execute(text("SELECT count(*) FROM file_objects WHERE id = :i"), {"i": foreign}).scalar_one()
+            == 1
+        )
+    with app_engine.connect() as conn, conn.begin():
+        err = _error(conn, "SELECT fn_delete_unreferenced_file(:i)", {"i": foreign})  # no workspace set
+    assert "no workspace context" in err
+
+
 def test_job_attempts_are_bounded_by_the_schema(app_engine: Engine, world: World) -> None:
     with as_app(app_engine, world.a.tenant_id) as conn:
         err = _error(

@@ -30,6 +30,29 @@ class FileOut(BaseModel):
     uploaded_by: UUID
     created_at: datetime
     scanned_at: datetime | None
+    archived_at: datetime | None
+
+
+class UseOut(BaseModel):
+    kind: Literal[
+        "import",
+        "extraction",
+        "agreement_draft",
+        "agreement_version",
+        "remittance",
+        "case_attachment",
+        "claim_batch",
+    ]
+    id: UUID
+    label: str
+
+
+class FileDetail(FileOut):
+    used_by: list[UseOut]
+
+
+class FileRemoved(BaseModel):
+    result: Literal["deleted", "archived"]
 
 
 class FileList(BaseModel):
@@ -66,8 +89,11 @@ def list_files(
     principal: Annotated[Principal, Depends(require("data.read"))],
     limit: Annotated[int, Query(ge=1, le=200)] = 50,
     before: UUID | None = None,
+    include_archived: bool = False,
 ) -> FileList:
-    rows = service.list_files(ctx(request).db, principal, tenant_of(principal), limit, before)
+    rows = service.list_files(
+        ctx(request).db, principal, tenant_of(principal), limit, before, include_archived
+    )
     return FileList(
         data=[FileOut.model_validate(r) for r in rows],
         next_before=rows[-1].id if len(rows) == limit else None,
@@ -77,10 +103,20 @@ def list_files(
 @router.get("/files/{file_id}", operation_id="file_get")
 def get_file(
     request: Request, file_id: UUID, principal: Annotated[Principal, Depends(require("data.read"))]
-) -> FileOut:
-    row = service.get(ctx(request).db, tenant_of(principal), file_id)
+) -> FileDetail:
+    db, tenant_id = ctx(request).db, tenant_of(principal)
+    row = service.get(db, tenant_id, file_id)
     service.check_readable(row, principal)
-    return FileOut.model_validate(row)
+    uses = [UseOut.model_validate(u, from_attributes=True) for u in service.used_by(db, tenant_id, file_id)]
+    return FileDetail.model_validate({**FileOut.model_validate(row).model_dump(), "used_by": uses})
+
+
+@router.delete("/files/{file_id}", operation_id="file_delete")
+def delete_file(
+    request: Request, file_id: UUID, principal: Annotated[Principal, Depends(require("file.upload"))]
+) -> FileRemoved:
+    """Unused file: deleted. Used by any record: archived (hidden from the list, still readable)."""
+    return FileRemoved(result=service.remove(ctx(request), principal, tenant_of(principal), file_id))
 
 
 @router.get("/files/{file_id}/download-url", operation_id="file_download_url")

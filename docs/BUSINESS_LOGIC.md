@@ -400,6 +400,10 @@ For a case, re-check the frozen calculation result and the agreement version aga
 
 The assessment lists the checks run with their inputs. An LLM **may** draft a prose explanation from this structure; it may not change the assessment.
 
+### 10.5 Remittance line variance (display, Phase 1 UX)
+
+Per accepted remittance line: `variance = amount_claimed_stated − amount_paid`, i.e. what the manufacturer's own document says was claimed minus what that line paid; null when the line states no claimed amount. It is a property of the document line, not a finding: cases are classified per claim line (§10.3), where a claim line paid over several remittance lines is compared with all its confirmed allocations. Next to it the line lists its confirmed allocations to claim lines with each claim line's frozen `claim_amount`, batch and reference. Example: stated claimed 2,200.00, paid 2,050.00 → variance 150.00.
+
 ## 11. Exceptions and the missed-claims scan
 
 **Missed claims** = results with `status = eligible` in the latest completed run for the scope whose source line has no active (`released_at IS NULL`) claim line. Output: lines, amounts by manufacturer/agreement, totals; exceptions listed separately with their codes. Exceptions with positive stored amounts (`outside_claim_window`) are reported as "lost to expiry".
@@ -454,6 +458,23 @@ All figures are per manufacturer, branch (the invoice branch of the claim line; 
 - **expiring**: the part of at-risk with a known deadline from the as-of date to 14 days after it.
 
 At-risk and expiring are bucketed by the month of the case's creation (the same month as short_paid), not by the deadline month.
+
+### 12.3 Overdue, due soon and "money found" (Phase 1 UX; live, not from the summary)
+
+Population: live cases (`open`, `to_reclaim`, `submitted`) of the reclaimable types of §12.2, the same population as at-risk. Amounts are variance minus recovered. The as-of date is today's business date.
+
+- **overdue**: deadline known and before the as-of date. A case's `overdue_days` = as-of date − deadline (calendar days); null for any case outside this set (including non-reclaimable types and closed cases).
+- **expiring / due soon**: deadline from the as-of date to 14 days after it (the §12.2 `expiring` definition; not passed). at-risk (D-N6) = overdue + expiring + deadline unknown, so `GET /cases/summary` keeps `at_risk` unchanged and reports `overdue` and `expiring` beside it.
+- **unassigned**: live cases of any type without an owner.
+
+Money found (`GET /home/attention`):
+
+- **unclaimed** = the missed-claims total (§11: eligible results of the latest completed run per line, not in an active claim line). Rebate accrual deltas not yet claimed are not included.
+- **short_paid_open** = Σ (variance − recovered) over the population above (all deadlines, known or not).
+- **expiring_soon** = the expiring amount; it is a part of short_paid_open ("of which").
+- **total** = unclaimed + short_paid_open. Unclaimed results and cases never overlap (a case exists only for a submitted claim line, which is no longer a missed claim), and expiring_soon is never added again, so nothing is counted twice.
+
+Example (the S9 test story on 2026-07-10, VOLT dispute window 60 days): SC-01 short-paid 150.00 from a remittance of 2026-04-01 (deadline 2026-05-31, 40 days overdue), SC-07b rejected 2,080.00 from 2026-05-20 (deadline 2026-07-19, due soon), a 75.00 unmatched payment (not reclaimable); missed claims 11,430.50 eligible − 10,410.00 claimed = 1,020.50. Overdue 150.00; expiring 2,080.00; short_paid_open 2,230.00; total 3,250.50.
 
 ## 13. Trace format
 

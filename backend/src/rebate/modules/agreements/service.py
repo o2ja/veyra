@@ -384,9 +384,81 @@ def list_drafts(
     stmt: Select[Any] = select(AgreementDraft).where(AgreementDraft.tenant_id == tenant_id)
     if status:
         stmt = stmt.where(AgreementDraft.status.in_(status))
+    else:  # deleted drafts are listed only when asked for (status=cancelled)
+        stmt = stmt.where(AgreementDraft.status != "cancelled")
     if agreement_id is not None:
         stmt = stmt.where(AgreementDraft.agreement_id == agreement_id)
     return list(db.scalars(keyset(stmt, AgreementDraft.id, cursor, limit)))
+
+
+UNSUBMITTED = ("draft", "needs_manual_entry")
+
+
+def delete_draft(db: Session, who: Who, draft_id: UUID) -> None:
+    """Withdraw a never-submitted draft: status ``cancelled`` (final, hidden from the default list). The row stays,
+    because its revisions are append-only evidence and an extraction may point at it."""
+    draft = _draft(db, who.tenant_id, draft_id, lock=True)
+    if draft.status not in UNSUBMITTED:
+        raise InvalidState("Only a draft that was never submitted can be deleted.")
+    before = _draft_audit(draft)
+    draft.status, draft.updated_at = "cancelled", clock.now()
+    db.flush()
+    audit_event(
+        db,
+        who,
+        Action.AGREEMENT_DRAFT_DELETED,
+        "agreement_draft",
+        draft.id,
+        before=before,
+        after=_draft_audit(draft),
+    )
+
+
+def draft_counts(db: Session, tenant_id: UUID) -> dict[str, int]:
+    """Drafts waiting for a person: to review (unsubmitted) and to approve, and how many of each came from AI."""
+    ai = AgreementDraft.source == "ai_extraction"
+    review, approve = AgreementDraft.status.in_(UNSUBMITTED), AgreementDraft.status == "pending_approval"
+    row = db.execute(
+        select(
+            func.count().filter(review),
+            func.count().filter(review, ai),
+            func.count().filter(approve),
+            func.count().filter(approve, ai),
+        ).where(AgreementDraft.tenant_id == tenant_id)
+    ).one()
+    return dict(zip(("to_review", "to_review_ai", "to_approve", "to_approve_ai"), row, strict=True))
+
+
+@files.register_use_source
+def _file_uses(db: Session, tenant_id: UUID, file_id: UUID) -> list[files.Use]:
+    drafts = db.scalars(
+        select(AgreementDraft)
+        .where(AgreementDraft.tenant_id == tenant_id, AgreementDraft.source_file_id == file_id)
+        .order_by(AgreementDraft.id)
+    )
+    versions = db.execute(
+        select(AgreementVersion.id, AgreementVersion.version_number, Agreement.external_number)
+        .join(
+            Agreement,
+            (Agreement.tenant_id == AgreementVersion.tenant_id)
+            & (Agreement.id == AgreementVersion.agreement_id),
+        )
+        .where(AgreementVersion.tenant_id == tenant_id, AgreementVersion.source_file_id == file_id)
+        .order_by(AgreementVersion.id)
+    )
+    out = []
+    for d in drafts:
+        header = d.payload.get("header")
+        number = header.get("external_number") if isinstance(header, dict) else None
+        name = (
+            f"Agreement draft {number}" if isinstance(number, str) and number.strip() else "Agreement draft"
+        )
+        out.append(files.Use("agreement_draft", d.id, f"{name} ({d.status})"))
+    out += [
+        files.Use("agreement_version", v.id, f"{v.external_number} version {v.version_number}")
+        for v in versions
+    ]
+    return out
 
 
 def validate_draft(db: Session, who: Who, draft_id: UUID) -> AgreementDraft:

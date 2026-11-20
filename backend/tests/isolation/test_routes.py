@@ -527,6 +527,20 @@ def test_r2_s3_lists_never_contain_the_other_tenant(sides: tuple[Side, Side], pa
     assert not own & other, f"{path}: A sees {len(own & other)} of B's rows"
 
 
+def test_r2_home_attention_counts_only_the_callers_workspace(sides: tuple[Side, Side]) -> None:
+    """Both workspaces hold the same kind of rows; a leak would count the other tenant's rows too."""
+    for side in sides:
+        h = side.api.get("/home/attention").json()
+        unmapped = walk(_ws(side), "/unmapped-entities", {"status": "open", "limit": 200})
+        cases = side.api.get("/cases", params={"limit": 200}).json()["data"]
+        unassigned = [
+            c for c in cases if c["status"] in ("open", "to_reclaim", "submitted") and not c["owner_user_id"]
+        ]
+        assert h["unmapped_open"] == len(unmapped) > 0
+        assert h["cases_unassigned"] == len(unassigned) > 0
+        assert h["failed_jobs"] is not None
+
+
 def test_r2_extraction_list_and_usage_never_contain_the_other_tenant(sides: tuple[Side, Side]) -> None:
     a, b = sides
     own = {x["id"] for x in a.api.get("/document-extractions").json()["data"]}

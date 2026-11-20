@@ -370,9 +370,9 @@ test.describe("S8 reconciliation workbench", () => {
     await expect(manualMatchDialog).toBeVisible();
     await manualMatchDialog.getByLabel("Submitted claim batch:").selectOption({ index: 1 });
     const claimLine = manualMatchDialog.getByLabel("Claim line:");
-    await expect(claimLine.locator("option", { hasText: "Claimed: 660" })).toHaveCount(1);
+    await expect(claimLine.locator("option", { hasText: "Claimed: $660.00" })).toHaveCount(1);
     await claimLine.selectOption({
-      label: (await claimLine.locator("option", { hasText: "Claimed: 660" }).innerText()).trim(),
+      label: (await claimLine.locator("option", { hasText: "Claimed: $660.00" }).innerText()).trim(),
     });
     await manualMatchDialog.getByLabel("Allocated amount").fill("75.00");
     await page.keyboard.press("Escape");

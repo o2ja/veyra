@@ -1,4 +1,5 @@
-import { useMutation, useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useState } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
 
 import { Badge, Button, Card, ErrorAlert, PermissionDenied } from "../../components/ui";
@@ -6,6 +7,7 @@ import { api } from "../../lib/api/client";
 import { ApiError, unwrap } from "../../lib/api/errors";
 import { useSession } from "../../lib/session";
 import { DataTable, PagerControls, SelectField, usePager } from "../masterdata/common";
+import { ConfirmDialog } from "../claims/common";
 import { AgreementsNav } from "./common";
 import { DRAFT_STATUSES, DRAFT_STATUS_LABELS, emptyPayload } from "./logic";
 import { formatDateTime } from "../../lib/format";
@@ -13,7 +15,9 @@ import { formatDateTime } from "../../lib/format";
 type DraftStatus = (typeof DRAFT_STATUSES)[number];
 type FilterStatus = DraftStatus | "all" | "open";
 
-const OPEN_STATUSES: DraftStatus[] = ["draft", "pending_approval"];
+const OPEN_STATUSES: DraftStatus[] = ["draft", "needs_manual_entry", "pending_approval"];
+// An unsubmitted draft can be deleted (the server soft-deletes it to `cancelled`).
+const DELETABLE: string[] = ["draft", "needs_manual_entry"];
 const SOURCE_LABELS: Record<string, string> = {
   manual: "Typed in",
   spreadsheet_template: "Spreadsheet",
@@ -29,6 +33,8 @@ export function DraftsPage() {
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
   const pager = usePager();
+  const client = useQueryClient();
+  const [deleting, setDeleting] = useState<string | null>(null);
 
   // Default to every open draft so an AI-generated draft is never hidden behind a role-based filter.
   const paramStatus = searchParams.get("status");
@@ -67,6 +73,15 @@ export function DraftsPage() {
     },
   });
 
+  const remove = useMutation({
+    mutationFn: (id: string) =>
+      unwrap(api.DELETE("/api/v1/agreement-drafts/{draft_id}", { params: { path: { draft_id: id } } })),
+    onSuccess: () => {
+      setDeleting(null);
+      void client.invalidateQueries({ queryKey: ["agreement-drafts"] });
+    },
+  });
+
   if ((list.error as ApiError)?.status === 403) {
     return (
       <>
@@ -100,7 +115,7 @@ export function DraftsPage() {
               pager.reset();
             }}
           >
-            <option value="open">All open (draft + pending approval)</option>
+            <option value="open">All open (to review + pending approval)</option>
             <option value="all">All statuses</option>
             {DRAFT_STATUSES.map((st) => (
               <option key={st} value={st}>
@@ -110,7 +125,7 @@ export function DraftsPage() {
           </SelectField>
         </div>
 
-        <ErrorAlert error={createDraft.error as ApiError | null} />
+        <ErrorAlert error={(createDraft.error ?? remove.error) as ApiError | null} />
         <DataTable
           caption="Agreement drafts"
           loading={list.isPending}
@@ -131,7 +146,7 @@ export function DraftsPage() {
               cell: (d) => (
                 <span className="flex flex-wrap items-center gap-1.5">
                   {DRAFT_STATUS_LABELS[d.status] ?? d.status}
-                  {d.source === "ai_extraction" && d.status === "draft" && (
+                  {d.source === "ai_extraction" && DELETABLE.includes(d.status) && (
                     <Badge tone="warn">Needs review</Badge>
                   )}
                 </span>
@@ -151,7 +166,31 @@ export function DraftsPage() {
             },
             { header: "Revision", cell: (d) => `r${d.revision}` },
             { header: "Updated", cell: (d) => formatDateTime(d.updated_at) },
+            {
+              header: "Actions",
+              cell: (d) =>
+                can("agreement.draft") && DELETABLE.includes(d.status) ? (
+                  <Button
+                    variant="secondary"
+                    className="px-2.5 py-1 text-xs"
+                    aria-label={`Delete draft ${d.id.slice(0, 8)}`}
+                    onClick={() => setDeleting(d.id)}
+                  >
+                    Delete
+                  </Button>
+                ) : null,
+            },
           ]}
+        />
+        <ConfirmDialog
+          open={deleting !== null}
+          onOpenChange={(open) => !open && setDeleting(null)}
+          title="Delete this draft?"
+          description="The draft is removed from the list. It was never submitted, so no agreement changes. This is recorded in the audit log."
+          confirmLabel="Delete draft"
+          confirmVariant="danger"
+          busy={remove.isPending}
+          onConfirm={() => deleting && remove.mutate(deleting)}
         />
         <PagerControls pager={pager} page={list.data?.page} />
       </Card>

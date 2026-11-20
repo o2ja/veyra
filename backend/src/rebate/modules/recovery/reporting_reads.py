@@ -33,6 +33,13 @@ AT_RISK_WHERE = (
     f"{_OPEN} AND (v.deadline_date IS NULL OR v.deadline_date <= CAST(:as_of AS date) + {AT_RISK_DAYS})"
 )
 REMAINING = "v.variance_amount - v.recovered_amount"
+OPEN_RECLAIMABLE = _OPEN
+LIVE_SQL = LIVE
+# expiring = the known-deadline part of at-risk that has not passed; overdue = live reclaimable, deadline passed
+EXPIRING_WHERE = (
+    f"{_OPEN} AND v.deadline_date BETWEEN CAST(:as_of AS date) AND CAST(:as_of AS date) + {AT_RISK_DAYS}"
+)
+OVERDUE_WHERE = f"{_OPEN} AND v.deadline_date < CAST(:as_of AS date)"
 
 
 def _source(amount: str, where: str) -> str:
@@ -76,10 +83,7 @@ figures = FigureSet(
         "recovered": _source("v.recovered_amount", "v.recovered_amount > 0"),
         "written_off": _source("v.written_off_amount", "v.written_off_amount > 0"),
         "at_risk": _source(REMAINING, AT_RISK_WHERE),
-        "expiring": _source(
-            REMAINING,
-            f"{_OPEN} AND v.deadline_date BETWEEN CAST(:as_of AS date) AND CAST(:as_of AS date) + {AT_RISK_DAYS}",
-        ),
+        "expiring": _source(REMAINING, EXPIRING_WHERE),
     }
 )
 

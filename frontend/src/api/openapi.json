@@ -552,6 +552,18 @@
             ],
             "title": "Claim Adjustment Id"
           },
+          "claim_batch_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Claim Batch Id"
+          },
           "claim_line_id": {
             "anyOf": [
               {
@@ -659,6 +671,86 @@
           "added_at"
         ],
         "title": "AttachmentOut",
+        "type": "object"
+      },
+      "AttentionOut": {
+        "properties": {
+          "as_of_date": {
+            "format": "date",
+            "title": "As Of Date",
+            "type": "string"
+          },
+          "cases_due_soon": {
+            "title": "Cases Due Soon",
+            "type": "integer"
+          },
+          "cases_overdue": {
+            "title": "Cases Overdue",
+            "type": "integer"
+          },
+          "cases_unassigned": {
+            "title": "Cases Unassigned",
+            "type": "integer"
+          },
+          "deadline_within_days": {
+            "title": "Deadline Within Days",
+            "type": "integer"
+          },
+          "drafts_to_approve": {
+            "title": "Drafts To Approve",
+            "type": "integer"
+          },
+          "drafts_to_approve_ai": {
+            "title": "Drafts To Approve Ai",
+            "type": "integer"
+          },
+          "drafts_to_review": {
+            "title": "Drafts To Review",
+            "type": "integer"
+          },
+          "drafts_to_review_ai": {
+            "title": "Drafts To Review Ai",
+            "type": "integer"
+          },
+          "failed_jobs": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Failed Jobs"
+          },
+          "imports_waiting": {
+            "title": "Imports Waiting",
+            "type": "integer"
+          },
+          "money_found": {
+            "$ref": "#/components/schemas/MoneyFound"
+          },
+          "unmapped_open": {
+            "title": "Unmapped Open",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "as_of_date",
+          "deadline_within_days",
+          "imports_waiting",
+          "unmapped_open",
+          "drafts_to_review",
+          "drafts_to_review_ai",
+          "drafts_to_approve",
+          "drafts_to_approve_ai",
+          "cases_overdue",
+          "cases_due_soon",
+          "cases_unassigned",
+          "failed_jobs",
+          "money_found"
+        ],
+        "title": "AttentionOut",
         "type": "object"
       },
       "AuditEntry": {
@@ -1407,6 +1499,18 @@
             "title": "Case Type",
             "type": "string"
           },
+          "claim_batch_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Claim Batch Id"
+          },
           "claim_line_id": {
             "anyOf": [
               {
@@ -1418,6 +1522,17 @@
               }
             ],
             "title": "Claim Line Id"
+          },
+          "claim_reference": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Claim Reference"
           },
           "claimed_amount": {
             "anyOf": [
@@ -1512,6 +1627,17 @@
             "title": "Manufacturer Id",
             "type": "string"
           },
+          "overdue_days": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Overdue Days"
+          },
           "owner_user_id": {
             "anyOf": [
               {
@@ -1570,6 +1696,18 @@
           "revision": {
             "title": "Revision",
             "type": "integer"
+          },
+          "sales_document_line_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Sales Document Line Id"
           },
           "status": {
             "enum": [
@@ -3332,6 +3470,28 @@
       },
       "EventOut": {
         "properties": {
+          "actor_email": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Actor Email"
+          },
+          "actor_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Actor Name"
+          },
           "actor_user_id": {
             "anyOf": [
               {
@@ -4385,6 +4545,108 @@
         "title": "Figures",
         "type": "object"
       },
+      "FileDetail": {
+        "properties": {
+          "archived_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Archived At"
+          },
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "detected_mime": {
+            "title": "Detected Mime",
+            "type": "string"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "kind": {
+            "title": "Kind",
+            "type": "string"
+          },
+          "original_name": {
+            "title": "Original Name",
+            "type": "string"
+          },
+          "scan_detail": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Scan Detail"
+          },
+          "scan_status": {
+            "title": "Scan Status",
+            "type": "string"
+          },
+          "scanned_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Scanned At"
+          },
+          "sha256": {
+            "title": "Sha256",
+            "type": "string"
+          },
+          "size_bytes": {
+            "title": "Size Bytes",
+            "type": "integer"
+          },
+          "uploaded_by": {
+            "format": "uuid",
+            "title": "Uploaded By",
+            "type": "string"
+          },
+          "used_by": {
+            "items": {
+              "$ref": "#/components/schemas/UseOut"
+            },
+            "title": "Used By",
+            "type": "array"
+          }
+        },
+        "required": [
+          "id",
+          "kind",
+          "original_name",
+          "size_bytes",
+          "sha256",
+          "detected_mime",
+          "scan_status",
+          "scan_detail",
+          "uploaded_by",
+          "created_at",
+          "scanned_at",
+          "archived_at",
+          "used_by"
+        ],
+        "title": "FileDetail",
+        "type": "object"
+      },
       "FileList": {
         "properties": {
           "data": {
@@ -4416,6 +4678,18 @@
       },
       "FileOut": {
         "properties": {
+          "archived_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Archived At"
+          },
           "created_at": {
             "format": "date-time",
             "title": "Created At",
@@ -4490,9 +4764,27 @@
           "scan_detail",
           "uploaded_by",
           "created_at",
-          "scanned_at"
+          "scanned_at",
+          "archived_at"
         ],
         "title": "FileOut",
+        "type": "object"
+      },
+      "FileRemoved": {
+        "properties": {
+          "result": {
+            "enum": [
+              "deleted",
+              "archived"
+            ],
+            "title": "Result",
+            "type": "string"
+          }
+        },
+        "required": [
+          "result"
+        ],
+        "title": "FileRemoved",
         "type": "object"
       },
       "FinaliseOut": {
@@ -6917,6 +7209,48 @@
         "title": "MatchOut",
         "type": "object"
       },
+      "MatchedClaimLine": {
+        "properties": {
+          "allocated_amount": {
+            "title": "Allocated Amount",
+            "type": "string"
+          },
+          "claim_amount": {
+            "title": "Claim Amount",
+            "type": "string"
+          },
+          "claim_batch_id": {
+            "format": "uuid",
+            "title": "Claim Batch Id",
+            "type": "string"
+          },
+          "claim_line_id": {
+            "format": "uuid",
+            "title": "Claim Line Id",
+            "type": "string"
+          },
+          "claim_reference": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Claim Reference"
+          }
+        },
+        "required": [
+          "claim_line_id",
+          "claim_reference",
+          "claim_batch_id",
+          "claim_amount",
+          "allocated_amount"
+        ],
+        "title": "MatchedClaimLine",
+        "type": "object"
+      },
       "MeOut": {
         "properties": {
           "enrollment_required": {
@@ -7306,6 +7640,34 @@
         "title": "MissedSummary",
         "type": "object"
       },
+      "MoneyFound": {
+        "properties": {
+          "expiring_soon": {
+            "title": "Expiring Soon",
+            "type": "string"
+          },
+          "short_paid_open": {
+            "title": "Short Paid Open",
+            "type": "string"
+          },
+          "total": {
+            "title": "Total",
+            "type": "string"
+          },
+          "unclaimed": {
+            "title": "Unclaimed",
+            "type": "string"
+          }
+        },
+        "required": [
+          "unclaimed",
+          "short_paid_open",
+          "expiring_soon",
+          "total"
+        ],
+        "title": "MoneyFound",
+        "type": "object"
+      },
       "MonthFigures": {
         "properties": {
           "figures": {
@@ -7495,6 +7857,24 @@
           }
         },
         "title": "OptionsIn",
+        "type": "object"
+      },
+      "Overdue": {
+        "properties": {
+          "amount": {
+            "title": "Amount",
+            "type": "string"
+          },
+          "count": {
+            "title": "Count",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "count",
+          "amount"
+        ],
+        "title": "Overdue",
         "type": "object"
       },
       "Page": {
@@ -9201,6 +9581,14 @@
             "title": "Line Number",
             "type": "integer"
           },
+          "matched_claim_lines": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/MatchedClaimLine"
+            },
+            "title": "Matched Claim Lines",
+            "type": "array"
+          },
           "quantity": {
             "anyOf": [
               {
@@ -9244,6 +9632,19 @@
               }
             ],
             "title": "Source Row Number"
+          },
+          "variance": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "What the line says was claimed minus what it paid; None when the line states no claimed amount.",
+            "readOnly": true,
+            "title": "Variance"
           }
         },
         "required": [
@@ -9262,7 +9663,8 @@
           "external_reason_text",
           "reason_code",
           "category",
-          "categorised_at"
+          "categorised_at",
+          "variance"
         ],
         "title": "RemittanceLineOut",
         "type": "object"
@@ -11262,12 +11664,20 @@
             },
             "title": "By Status",
             "type": "array"
+          },
+          "expiring": {
+            "$ref": "#/components/schemas/AtRisk"
+          },
+          "overdue": {
+            "$ref": "#/components/schemas/Overdue"
           }
         },
         "required": [
           "by_status",
           "by_reason",
-          "at_risk"
+          "at_risk",
+          "overdue",
+          "expiring"
         ],
         "title": "SummaryOut",
         "type": "object"
@@ -11996,6 +12406,46 @@
         "title": "TransitionIn",
         "type": "object"
       },
+      "UnknownReasonCode": {
+        "properties": {
+          "external_code": {
+            "title": "External Code",
+            "type": "string"
+          },
+          "last_seen_at": {
+            "format": "date-time",
+            "title": "Last Seen At",
+            "type": "string"
+          },
+          "line_count": {
+            "title": "Line Count",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "external_code",
+          "line_count",
+          "last_seen_at"
+        ],
+        "title": "UnknownReasonCode",
+        "type": "object"
+      },
+      "UnknownReasonCodeList": {
+        "properties": {
+          "data": {
+            "items": {
+              "$ref": "#/components/schemas/UnknownReasonCode"
+            },
+            "title": "Data",
+            "type": "array"
+          }
+        },
+        "required": [
+          "data"
+        ],
+        "title": "UnknownReasonCodeList",
+        "type": "object"
+      },
       "UnmappedList": {
         "properties": {
           "data": {
@@ -12357,6 +12807,39 @@
           "token_cap"
         ],
         "title": "UsageToday",
+        "type": "object"
+      },
+      "UseOut": {
+        "properties": {
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "kind": {
+            "enum": [
+              "import",
+              "extraction",
+              "agreement_draft",
+              "agreement_version",
+              "remittance",
+              "case_attachment",
+              "claim_batch"
+            ],
+            "title": "Kind",
+            "type": "string"
+          },
+          "label": {
+            "title": "Label",
+            "type": "string"
+          }
+        },
+        "required": [
+          "kind",
+          "id",
+          "label"
+        ],
+        "title": "UseOut",
         "type": "object"
       },
       "UserOut": {
@@ -13194,6 +13677,40 @@
       }
     },
     "/api/v1/agreement-drafts/{draft_id}": {
+      "delete": {
+        "operationId": "agreement_draft_delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "draft_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Draft Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Delete Draft",
+        "tags": [
+          "agreements"
+        ]
+      },
       "get": {
         "operationId": "agreement_draft_get",
         "parameters": [
@@ -17790,6 +18307,16 @@
               ],
               "title": "Before"
             }
+          },
+          {
+            "in": "query",
+            "name": "include_archived",
+            "required": false,
+            "schema": {
+              "default": false,
+              "title": "Include Archived",
+              "type": "boolean"
+            }
           }
         ],
         "responses": {
@@ -17860,6 +18387,48 @@
       }
     },
     "/api/v1/files/{file_id}": {
+      "delete": {
+        "description": "Unused file: deleted. Used by any record: archived (hidden from the list, still readable).",
+        "operationId": "file_delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "file_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "File Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FileRemoved"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Delete File",
+        "tags": [
+          "files"
+        ]
+      },
       "get": {
         "operationId": "file_get",
         "parameters": [
@@ -17879,7 +18448,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/FileOut"
+                  "$ref": "#/components/schemas/FileDetail"
                 }
               }
             },
@@ -17990,6 +18559,27 @@
         ]
       }
     },
+    "/api/v1/home/attention": {
+      "get": {
+        "operationId": "home_attention",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AttentionOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Get Attention",
+        "tags": [
+          "reporting"
+        ]
+      }
+    },
     "/api/v1/imports": {
       "get": {
         "operationId": "import_list",
@@ -18010,7 +18600,8 @@
                     "completed",
                     "completed_with_errors",
                     "failed",
-                    "rejected"
+                    "rejected",
+                    "discarded"
                   ],
                   "type": "string"
                 },
@@ -18320,6 +18911,49 @@
           }
         },
         "summary": "Confirm",
+        "tags": [
+          "imports"
+        ]
+      }
+    },
+    "/api/v1/imports/{import_id}/discard": {
+      "post": {
+        "operationId": "import_discard",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "import_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Import Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ImportOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Discard",
         "tags": [
           "imports"
         ]
@@ -19255,6 +19889,49 @@
         "summary": "Put Settings",
         "tags": [
           "master data"
+        ]
+      }
+    },
+    "/api/v1/manufacturers/{manufacturer_id}/unknown-reason-codes": {
+      "get": {
+        "operationId": "unknown_reason_code_list",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "manufacturer_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Manufacturer Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UnknownReasonCodeList"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List Unknown Reason Codes",
+        "tags": [
+          "reconciliation"
         ]
       }
     },

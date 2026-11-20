@@ -26,14 +26,22 @@ from rebate.core.errors import (
 )
 from rebate.core.ids import new_id
 from rebate.core.jobs import enqueue
-from rebate.modules import audit, claims, files, tenancy
+from rebate.modules import audit, claims, files, identity, tenancy
 from rebate.modules.masterdata import Who, keyset
 from rebate.modules.reconciliation import FinalisedRemittance, Finding
 from rebate.modules.recovery import assessment
 from rebate.modules.recovery.domain import deadlines
 from rebate.modules.recovery.domain import states as st
 from rebate.modules.recovery.models import CaseAttachment, Notification, VarianceCase, VarianceCaseEvent
-from rebate.modules.recovery.reporting_reads import AT_RISK_DAYS, AT_RISK_WHERE, REMAINING
+from rebate.modules.recovery.reporting_reads import (
+    AT_RISK_DAYS,
+    AT_RISK_WHERE,
+    EXPIRING_WHERE,
+    LIVE_SQL,
+    OPEN_RECLAIMABLE,
+    OVERDUE_WHERE,
+    REMAINING,
+)
 
 LIVE = (st.CaseStatus.OPEN, st.CaseStatus.TO_RECLAIM, st.CaseStatus.SUBMITTED)
 RECLAIMABLE_TYPES = ("short_paid", "rejected", "unpaid")
@@ -409,11 +417,73 @@ def summary(db: Session, tenant_id: UUID) -> dict[str, Any]:
         ),
         {"t": tenant_id, "as_of": business_today(db, tenant_id)},
     ).one()
+    f = deadline_figures(db, tenant_id, business_today(db, tenant_id))
     return {
         "by_status": group(VarianceCase.status),
         "by_reason": group(VarianceCase.reason_code),
         "at_risk": {"count": at_risk[0], "amount": at_risk[1], "deadline_within_days": AT_RISK_DAYS},
+        "overdue": f["overdue"],
+        "expiring": {**f["expiring"], "deadline_within_days": AT_RISK_DAYS},
     }
+
+
+def deadline_figures(db: Session, tenant_id: UUID, today: date) -> dict[str, Any]:
+    """Live reclaimable cases (the at-risk population, BUSINESS_LOGIC.md 12.2), by deadline: ``overdue`` (passed),
+    ``expiring`` (from today to 14 days ahead), ``open`` (all of them; their open amount is the unrecovered
+    short-pay); amounts are variance minus recovered. ``unassigned``: live cases of any type without an owner."""
+    r = db.execute(
+        text(
+            "SELECT "  # noqa: S608  # nosec B608 (module constants and fixed column names; every value is a bound parameter)
+            f"count(*) FILTER (WHERE {OVERDUE_WHERE}) AS overdue_n, "
+            f"COALESCE(sum({REMAINING}) FILTER (WHERE {OVERDUE_WHERE}), 0) AS overdue_a, "
+            f"count(*) FILTER (WHERE {EXPIRING_WHERE}) AS expiring_n, "
+            f"COALESCE(sum({REMAINING}) FILTER (WHERE {EXPIRING_WHERE}), 0) AS expiring_a, "
+            f"count(*) FILTER (WHERE {OPEN_RECLAIMABLE}) AS open_n, "
+            f"COALESCE(sum({REMAINING}) FILTER (WHERE {OPEN_RECLAIMABLE}), 0) AS open_a, "
+            "count(*) FILTER (WHERE v.owner_user_id IS NULL) AS unassigned_n "
+            f"FROM variance_cases v WHERE v.tenant_id = :t AND v.status IN {LIVE_SQL}"
+        ),
+        {"t": tenant_id, "as_of": today},
+    ).one()
+    return {
+        "overdue": {"count": r.overdue_n, "amount": r.overdue_a},
+        "expiring": {"count": r.expiring_n, "amount": r.expiring_a},
+        "open": {"count": r.open_n, "amount": r.open_a},
+        "unassigned": r.unassigned_n,
+    }
+
+
+def overdue_days(c: VarianceCase, today: date) -> int | None:
+    """Days past the deadline of a live reclaimable case (the ``overdue`` population); otherwise None."""
+    if c.status not in LIVE or c.case_type not in RECLAIMABLE_TYPES or c.deadline_date is None:
+        return None
+    return (today - c.deadline_date).days if c.deadline_date < today else None
+
+
+def case_extras(db: Session, tenant_id: UUID, cases: list[VarianceCase]) -> dict[UUID, dict[str, Any]]:
+    """Per case: ``overdue_days`` and the claim line's links (batch, reference, invoice line)."""
+    today = business_today(db, tenant_id)
+    refs = claims.claim_line_refs(db, tenant_id, [c.claim_line_id for c in cases if c.claim_line_id])
+    out = {}
+    for c in cases:
+        ref = refs.get(c.claim_line_id) if c.claim_line_id else None
+        out[c.id] = {
+            "overdue_days": overdue_days(c, today),
+            "claim_batch_id": ref.batch_id if ref else None,
+            "claim_reference": ref.claim_reference if ref else None,
+            "sales_document_line_id": ref.sales_document_line_id if ref else None,
+        }
+    return out
+
+
+def event_actors(db: Session, events: list[VarianceCaseEvent]) -> dict[UUID, dict[str, str | None]]:
+    """Per event: ``actor_name`` and ``actor_email`` of the user who acted (both None for system events)."""
+    labels = identity.actor_labels(db, {e.actor_user_id for e in events if e.actor_user_id})
+    out: dict[UUID, dict[str, str | None]] = {}
+    for e in events:
+        label = labels.get(e.actor_user_id) if e.actor_user_id else None
+        out[e.id] = {"actor_name": label[0] if label else None, "actor_email": label[1] if label else None}
+    return out
 
 
 def list_events(db: Session, tenant_id: UUID, case_id: UUID) -> list[VarianceCaseEvent]:
@@ -505,6 +575,21 @@ def add_attachment(db: Session, who: Who, case_id: UUID, file_id: UUID) -> CaseA
     _event(db, c, "attachment", who.user_id, payload={"file_id": str(f.id), "name": f.original_name})
     _audit(db, who, audit.Action.VARIANCE_CASE_ATTACHMENT_ADDED, c, after=view(c))
     return a
+
+
+@files.register_use_source
+def _file_uses(db: Session, tenant_id: UUID, file_id: UUID) -> list[files.Use]:
+    rows = db.execute(
+        select(VarianceCase.id, VarianceCase.case_type, VarianceCase.reason_code)
+        .join(
+            CaseAttachment,
+            (CaseAttachment.tenant_id == VarianceCase.tenant_id)
+            & (CaseAttachment.case_id == VarianceCase.id),
+        )
+        .where(CaseAttachment.tenant_id == tenant_id, CaseAttachment.file_id == file_id)
+        .order_by(VarianceCase.id)
+    )
+    return [files.Use("case_attachment", r.id, f"Recovery case {r.case_type} {r.reason_code}") for r in rows]
 
 
 def list_attachments(db: Session, tenant_id: UUID, case_id: UUID) -> list[CaseAttachment]:

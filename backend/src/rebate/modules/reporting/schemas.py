@@ -51,6 +51,29 @@ class DashboardOut(BaseModel):
     months: list[MonthFigures]
 
 
+class MoneyFound(BaseModel):
+    unclaimed: Money  # missed claims (eligible, not in an active claim line)
+    short_paid_open: Money  # unrecovered variance of live short_paid / rejected / unpaid cases
+    expiring_soon: Money  # of which: deadline from today to deadline_within_days ahead
+    total: Money  # unclaimed + short_paid_open
+
+
+class AttentionOut(BaseModel):
+    as_of_date: date  # business date the deadlines were compared with
+    deadline_within_days: int
+    imports_waiting: int
+    unmapped_open: int
+    drafts_to_review: int  # status draft or needs_manual_entry
+    drafts_to_review_ai: int
+    drafts_to_approve: int  # status pending_approval
+    drafts_to_approve_ai: int
+    cases_overdue: int
+    cases_due_soon: int  # deadline not passed and within deadline_within_days
+    cases_unassigned: int  # live cases of any type without an owner
+    failed_jobs: int | None  # null unless the caller holds jobs.manage
+    money_found: MoneyFound
+
+
 class DrillRow(BaseModel):
     id: UUID
     trace_kind: TraceKind | Literal["remittance_line"]

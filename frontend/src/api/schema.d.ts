@@ -34,7 +34,8 @@ export interface paths {
         /** Update Draft */
         put: operations["agreement_draft_update"];
         post?: never;
-        delete?: never;
+        /** Delete Draft */
+        delete: operations["agreement_draft_delete"];
         options?: never;
         head?: never;
         patch?: never;
@@ -1258,7 +1259,11 @@ export interface paths {
         get: operations["file_get"];
         put?: never;
         post?: never;
-        delete?: never;
+        /**
+         * Delete File
+         * @description Unused file: deleted. Used by any record: archived (hidden from the list, still readable).
+         */
+        delete: operations["file_delete"];
         options?: never;
         head?: never;
         patch?: never;
@@ -1307,6 +1312,23 @@ export interface paths {
         };
         /** Ready */
         get: operations["health_ready"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/home/attention": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Attention */
+        get: operations["home_attention"];
         put?: never;
         post?: never;
         delete?: never;
@@ -1378,6 +1400,23 @@ export interface paths {
         put?: never;
         /** Confirm */
         post: operations["import_confirm"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/imports/{import_id}/discard": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Discard */
+        post: operations["import_discard"];
         delete?: never;
         options?: never;
         head?: never;
@@ -1623,6 +1662,23 @@ export interface paths {
         get: operations["manufacturer_settings_get"];
         /** Put Settings */
         put: operations["manufacturer_settings_put"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/manufacturers/{manufacturer_id}/unknown-reason-codes": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List Unknown Reason Codes */
+        get: operations["unknown_reason_code_list"];
+        put?: never;
         post?: never;
         delete?: never;
         options?: never;
@@ -2541,6 +2597,8 @@ export interface components {
             allocated_amount: string;
             /** Claim Adjustment Id */
             claim_adjustment_id: string | null;
+            /** Claim Batch Id */
+            claim_batch_id?: string | null;
             /** Claim Line Id */
             claim_line_id: string | null;
             /** Claim Reference */
@@ -2590,6 +2648,37 @@ export interface components {
              * Format: uuid
              */
             id: string;
+        };
+        /** AttentionOut */
+        AttentionOut: {
+            /**
+             * As Of Date
+             * Format: date
+             */
+            as_of_date: string;
+            /** Cases Due Soon */
+            cases_due_soon: number;
+            /** Cases Overdue */
+            cases_overdue: number;
+            /** Cases Unassigned */
+            cases_unassigned: number;
+            /** Deadline Within Days */
+            deadline_within_days: number;
+            /** Drafts To Approve */
+            drafts_to_approve: number;
+            /** Drafts To Approve Ai */
+            drafts_to_approve_ai: number;
+            /** Drafts To Review */
+            drafts_to_review: number;
+            /** Drafts To Review Ai */
+            drafts_to_review_ai: number;
+            /** Failed Jobs */
+            failed_jobs: number | null;
+            /** Imports Waiting */
+            imports_waiting: number;
+            money_found: components["schemas"]["MoneyFound"];
+            /** Unmapped Open */
+            unmapped_open: number;
         };
         /** AuditEntry */
         AuditEntry: {
@@ -2829,8 +2918,12 @@ export interface components {
              * @enum {string}
              */
             case_type: "short_paid" | "rejected" | "unpaid" | "overpaid" | "unmatched_payment" | "source_changed";
+            /** Claim Batch Id */
+            claim_batch_id?: string | null;
             /** Claim Line Id */
             claim_line_id: string | null;
+            /** Claim Reference */
+            claim_reference?: string | null;
             /** Claimed Amount */
             claimed_amount: string | null;
             /** Closed At */
@@ -2862,6 +2955,8 @@ export interface components {
              * Format: uuid
              */
             manufacturer_id: string;
+            /** Overdue Days */
+            overdue_days?: number | null;
             /** Owner User Id */
             owner_user_id: string | null;
             /** Paid Amount */
@@ -2876,6 +2971,8 @@ export interface components {
             remittance_line_id: string | null;
             /** Revision */
             revision: number;
+            /** Sales Document Line Id */
+            sales_document_line_id?: string | null;
             /**
              * Status
              * @enum {string}
@@ -3449,6 +3546,10 @@ export interface components {
         };
         /** EventOut */
         EventOut: {
+            /** Actor Email */
+            actor_email?: string | null;
+            /** Actor Name */
+            actor_name?: string | null;
             /** Actor User Id */
             actor_user_id: string | null;
             /**
@@ -3814,15 +3915,10 @@ export interface components {
             /** Written Off */
             written_off: string;
         };
-        /** FileList */
-        FileList: {
-            /** Data */
-            data: components["schemas"]["FileOut"][];
-            /** Next Before */
-            next_before: string | null;
-        };
-        /** FileOut */
-        FileOut: {
+        /** FileDetail */
+        FileDetail: {
+            /** Archived At */
+            archived_at: string | null;
             /**
              * Created At
              * Format: date-time
@@ -3854,6 +3950,59 @@ export interface components {
              * Format: uuid
              */
             uploaded_by: string;
+            /** Used By */
+            used_by: components["schemas"]["UseOut"][];
+        };
+        /** FileList */
+        FileList: {
+            /** Data */
+            data: components["schemas"]["FileOut"][];
+            /** Next Before */
+            next_before: string | null;
+        };
+        /** FileOut */
+        FileOut: {
+            /** Archived At */
+            archived_at: string | null;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /** Detected Mime */
+            detected_mime: string;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Kind */
+            kind: string;
+            /** Original Name */
+            original_name: string;
+            /** Scan Detail */
+            scan_detail: string | null;
+            /** Scan Status */
+            scan_status: string;
+            /** Scanned At */
+            scanned_at: string | null;
+            /** Sha256 */
+            sha256: string;
+            /** Size Bytes */
+            size_bytes: number;
+            /**
+             * Uploaded By
+             * Format: uuid
+             */
+            uploaded_by: string;
+        };
+        /** FileRemoved */
+        FileRemoved: {
+            /**
+             * Result
+             * @enum {string}
+             */
+            result: "deleted" | "archived";
         };
         /** FinaliseOut */
         FinaliseOut: {
@@ -4648,6 +4797,25 @@ export interface components {
              */
             status: "suggested" | "confirmed" | "rejected";
         };
+        /** MatchedClaimLine */
+        MatchedClaimLine: {
+            /** Allocated Amount */
+            allocated_amount: string;
+            /** Claim Amount */
+            claim_amount: string;
+            /**
+             * Claim Batch Id
+             * Format: uuid
+             */
+            claim_batch_id: string;
+            /**
+             * Claim Line Id
+             * Format: uuid
+             */
+            claim_line_id: string;
+            /** Claim Reference */
+            claim_reference: string | null;
+        };
         /** MeOut */
         MeOut: {
             /** Enrollment Required */
@@ -4770,6 +4938,17 @@ export interface components {
             lost_to_expiry: components["schemas"]["LostToExpiry"];
             totals: components["schemas"]["SummaryTotals"];
         };
+        /** MoneyFound */
+        MoneyFound: {
+            /** Expiring Soon */
+            expiring_soon: string;
+            /** Short Paid Open */
+            short_paid_open: string;
+            /** Total */
+            total: string;
+            /** Unclaimed */
+            unclaimed: string;
+        };
         /** MonthFigures */
         MonthFigures: {
             figures: components["schemas"]["Figures"];
@@ -4844,6 +5023,13 @@ export interface components {
              * @default Claims
              */
             sheet_name: string;
+        };
+        /** Overdue */
+        Overdue: {
+            /** Amount */
+            amount: string;
+            /** Count */
+            count: number;
         };
         /** Page */
         Page: {
@@ -5418,6 +5604,11 @@ export interface components {
             invoice_number: string | null;
             /** Line Number */
             line_number: number;
+            /**
+             * Matched Claim Lines
+             * @default []
+             */
+            matched_claim_lines: components["schemas"]["MatchedClaimLine"][];
             /** Quantity */
             quantity: string | null;
             /** Reason Code */
@@ -5426,6 +5617,11 @@ export interface components {
             sku_raw: string | null;
             /** Source Row Number */
             source_row_number: number | null;
+            /**
+             * Variance
+             * @description What the line says was claimed minus what it paid; None when the line states no claimed amount.
+             */
+            readonly variance: string | null;
         };
         /** RemittanceList */
         RemittanceList: {
@@ -6066,6 +6262,8 @@ export interface components {
             by_reason: components["schemas"]["SummaryRow"][];
             /** By Status */
             by_status: components["schemas"]["SummaryRow"][];
+            expiring: components["schemas"]["AtRisk"];
+            overdue: components["schemas"]["Overdue"];
         };
         /** SummaryRow */
         SummaryRow: {
@@ -6338,6 +6536,23 @@ export interface components {
              */
             to_status: "open" | "to_reclaim" | "submitted" | "recovered" | "written_off" | "closed_no_action";
         };
+        /** UnknownReasonCode */
+        UnknownReasonCode: {
+            /** External Code */
+            external_code: string;
+            /**
+             * Last Seen At
+             * Format: date-time
+             */
+            last_seen_at: string;
+            /** Line Count */
+            line_count: number;
+        };
+        /** UnknownReasonCodeList */
+        UnknownReasonCodeList: {
+            /** Data */
+            data: components["schemas"]["UnknownReasonCode"][];
+        };
         /** UnmappedList */
         UnmappedList: {
             /** Data */
@@ -6461,6 +6676,21 @@ export interface components {
             token_cap: number;
             /** Tokens */
             tokens: number;
+        };
+        /** UseOut */
+        UseOut: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /**
+             * Kind
+             * @enum {string}
+             */
+            kind: "import" | "extraction" | "agreement_draft" | "agreement_version" | "remittance" | "case_attachment" | "claim_batch";
+            /** Label */
+            label: string;
         };
         /** UserOut */
         UserOut: {
@@ -6861,6 +7091,35 @@ export interface operations {
             };
             /** @description Revision mismatch */
             412: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    agreement_draft_delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                draft_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -9417,6 +9676,7 @@ export interface operations {
             query?: {
                 limit?: number;
                 before?: string | null;
+                include_archived?: boolean;
             };
             header?: never;
             path?: never;
@@ -9494,7 +9754,38 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["FileOut"];
+                    "application/json": components["schemas"]["FileDetail"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    file_delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                file_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FileRemoved"];
                 };
             };
             /** @description Validation Error */
@@ -9586,10 +9877,30 @@ export interface operations {
             };
         };
     };
+    home_attention: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AttentionOut"];
+                };
+            };
+        };
+    };
     import_list: {
         parameters: {
             query?: {
-                status?: ("uploaded" | "scanning" | "parsing" | "awaiting_confirmation" | "loading" | "completed" | "completed_with_errors" | "failed" | "rejected") | null;
+                status?: ("uploaded" | "scanning" | "parsing" | "awaiting_confirmation" | "loading" | "completed" | "completed_with_errors" | "failed" | "rejected" | "discarded") | null;
                 import_type?: ("sales" | "purchases" | "customers" | "products" | "uom") | null;
                 limit?: number;
                 cursor?: string | null;
@@ -9742,6 +10053,37 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ImportAccepted"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    import_discard: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                import_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ImportOut"];
                 };
             };
             /** @description Validation Error */
@@ -10372,6 +10714,37 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    unknown_reason_code_list: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                manufacturer_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["UnknownReasonCodeList"];
+                };
             };
             /** @description Validation Error */
             422: {
