@@ -15,6 +15,7 @@ export function SecurityPage() {
     <div className="flex flex-col gap-6">
       <ChangePassword />
       {me?.user.mfa_enabled && <RecoveryCodes />}
+      {me?.user.mfa_enabled && <TrustedDevices />}
       <ChangeEmail />
     </div>
   );
@@ -106,6 +107,33 @@ function RecoveryCodes() {
           Create new recovery codes
         </Button>
       )}
+    </Card>
+  );
+}
+
+function TrustedDevices() {
+  const stepUp = useStepUp();
+  const { busy, error, submit } = useApiSubmit();
+  const [done, setDone] = useState(false);
+
+  async function forget() {
+    const ok = await submit(async () => {
+      await stepUp(() => unwrap(api.POST("/api/v1/auth/trusted-devices/forget")));
+      return true;
+    });
+    if (ok) setDone(true);
+  }
+
+  return (
+    <Card title="Trusted devices">
+      <ErrorAlert error={error} />
+      {done && (
+        <Alert tone="ok">All trusted devices were forgotten. Two-factor is required at next sign-in.</Alert>
+      )}
+      <p className="mb-3 text-sm text-muted">Devices you trusted skip the two-factor prompt for 30 days.</p>
+      <Button variant="secondary" onClick={forget} disabled={busy}>
+        Forget trusted devices
+      </Button>
     </Card>
   );
 }

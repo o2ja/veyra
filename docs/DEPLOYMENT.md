@@ -71,7 +71,7 @@ Defined by `core/config.py` (pydantic-settings). `.env.example` contains placeho
 | `ENCRYPTION_KEYS` | `k1:<base64 32 bytes>` | MFA secrets (AES-256-GCM). Comma-separated `kid:key`; the **first is active** for new encryptions, all listed keys decrypt. **Rotation:** add the new key first in the list, deploy, run the re-encrypt command (added with the first rotation need; until then old keys stay listed), remove the old key. Never reuse a kid |
 | `TRUSTED_PROXY_IPS` | `` (empty) | `X-Forwarded-For` honoured only from these peers (Caddy) |
 | `CLOUDFLARE_IP_RANGES` | `` (empty) | Comma-separated Cloudflare CIDRs. `CF-Connecting-IP` is used only when the peer is in `TRUSTED_PROXY_IPS` and Caddy saw the request arrive from one of these ranges. List source and update: `infra/runbooks/cloudflare-ip-update.md` |
-| `SESSION_IDLE_MINUTES` / `SESSION_ABSOLUTE_HOURS` | `30` / `12` | |
+| `SESSION_IDLE_MINUTES` / `SESSION_ABSOLUTE_HOURS` | `20160` / `336` | |
 | `SENTRY_DSN` | | Optional |
 | `PUBLIC_BASE_URL` | `https://app.example.com` | Links in emails, cookie/Origin checks |
 | `LOG_LEVEL` | `INFO` | |

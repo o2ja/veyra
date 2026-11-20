@@ -95,7 +95,7 @@ services:
     command: uvicorn rebate.api.asgi:app --host 0.0.0.0 --port 8000 --reload --reload-dir src
     environment:
       <<: *app-env
-      SESSION_IDLE_MINUTES: ${SESSION_IDLE_MINUTES:-30}  # shortened only for manual expiry checks
+      SESSION_IDLE_MINUTES: ${SESSION_IDLE_MINUTES:-20160}  # shortened only for manual expiry checks
       TRUSTED_PROXY_IPS: ${TRUSTED_PROXY_IPS:-}  # e2e: the frontend container's IP, so per-test X-Forwarded-For counts
       WATCHFILES_FORCE_POLLING: "true"
     ports:

@@ -17,6 +17,7 @@ SELECT count(*) = 1 AS found FROM users WHERE id = :'user_id' \gset
 UPDATE users SET mfa_enabled = false, mfa_secret_enc = NULL, mfa_last_used_step = NULL, updated_at = now()
  WHERE id = :'user_id';
 DELETE FROM mfa_recovery_codes WHERE user_id = :'user_id';
+DELETE FROM trusted_devices WHERE user_id = :'user_id';
 UPDATE sessions SET revoked_at = now() WHERE user_id = :'user_id' AND revoked_at IS NULL;
 
 -- One audit row per active membership. RLS is forced for the owner too, so each insert sets the tenant.

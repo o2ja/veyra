@@ -12,7 +12,7 @@ from rebate.core.request import Principal, ctx
 from rebate.core.security import new_token
 from rebate.core.validation import STRICT, Email, JsonUUID, Name, Token, TotpCode
 from rebate.modules import tenancy
-from rebate.modules.identity import service, sessions
+from rebate.modules.identity import service, sessions, trusted
 
 router = APIRouter(tags=["auth"])
 
@@ -101,7 +101,9 @@ def login(request: Request, response: Response, body: LoginIn) -> LoginOut:
     c = ctx(request)
     if c.principal is not None:
         sessions.revoke(c.db, c.principal.session_id)  # no session fixation / stacking
-    result = service.login(c, email=body.email, password=body.password)
+    result = service.login(
+        c, email=body.email, password=body.password, trusted_token=request.cookies.get(trusted.COOKIE)
+    )
     sessions.set_cookies(response, c.settings, result.session)
     return LoginOut(status="mfa_required" if result.mfa_required else "signed_in")
 
@@ -167,17 +169,35 @@ class MfaIn(BaseModel):
     code: TotpCode
 
 
+class MfaVerifyIn(MfaIn):
+    trust_device: bool = False
+
+
 @router.post("/auth/mfa/verify", operation_id="auth_mfa_verify")
 def mfa_verify(
     request: Request,
     response: Response,
-    body: MfaIn,
+    body: MfaVerifyIn,
     principal: Annotated[Principal, Depends(authenticated(allow_mfa_pending=True, allow_enrollment=True))],
 ) -> LoginOut:
     c = ctx(request)
     new = service.verify_mfa(c, principal, body.code)
     sessions.set_cookies(response, c.settings, new)
+    if body.trust_device:
+        trusted.issue(c.db, response, new.row.user_id, new.row.active_tenant_id)
     return LoginOut(status="signed_in")
+
+
+@router.post("/auth/trusted-devices/forget", status_code=204, operation_id="auth_trusted_devices_forget")
+def forget_trusted_devices(
+    request: Request, principal: Annotated[Principal, Depends(authenticated())]
+) -> Response:
+    c = ctx(request)
+    require_recent_reauth(principal, c.settings.step_up_window_minutes)
+    trusted.revoke_all(c.db, principal.user_id)
+    response = Response(status_code=204)
+    trusted.clear_cookie(response)
+    return response
 
 
 class MfaSetupOut(BaseModel):

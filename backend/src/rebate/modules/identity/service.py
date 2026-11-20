@@ -35,7 +35,7 @@ from rebate.core.security import Passwords, SecretBox, hash_token, keyed_hash
 from rebate.core.validation import email_key
 from rebate.modules import audit, tenancy
 from rebate.modules.audit import Action, Actor
-from rebate.modules.identity import lockout, mfa, passwords, ratelimit, sessions
+from rebate.modules.identity import lockout, mfa, passwords, ratelimit, sessions, trusted
 from rebate.modules.identity.models import (
     AuthSession,
     PasswordResetRequest,
@@ -184,7 +184,7 @@ def _fail_known(c: RequestContext, user: User, *, mfa_stage: bool) -> None:
     raise InvalidMfaCode() if mfa_stage else InvalidCredentials()
 
 
-def login(c: RequestContext, *, email: str, password: str) -> LoginResult:
+def login(c: RequestContext, *, email: str, password: str, trusted_token: str | None = None) -> LoginResult:
     ratelimit.hit(c.db, f"login:ip:{c.ip}", limit=c.settings.login_ip_limit_per_minute, window_seconds=60)
     ratelimit.hit(
         c.db, f"login:{_hkey(c, 'login', f'{c.ip}|{email_key(email)}')}", limit=5, window_seconds=60
@@ -208,20 +208,23 @@ def login(c: RequestContext, *, email: str, password: str) -> LoginResult:
     if result.needs_rehash:
         user.password_hash = password_hasher(c.settings).hash(password)
     tenant_id = _choose_tenant(c.db, user.id)
+    # A trusted device skips the 2FA prompt but gets no step-up: sensitive actions still need password + code.
+    skip_mfa = user.mfa_enabled and trusted.is_trusted(c.db, trusted_token, user.id, tenant_id)
+    pending = user.mfa_enabled and not skip_mfa
     new = sessions.create(
         c.db,
         c.settings,
         user_id=user.id,
         tenant_id=tenant_id,
-        mfa_verified=False,
-        pending_mfa=user.mfa_enabled,
+        mfa_verified=skip_mfa,
+        pending_mfa=pending,
         ip=c.ip,
         user_agent=c.user_agent,
         reauthenticated=not user.mfa_enabled,
     )
-    if not user.mfa_enabled:
+    if not pending:
         _complete_login(c, user)
-    return LoginResult(session=new, mfa_required=user.mfa_enabled)
+    return LoginResult(session=new, mfa_required=pending)
 
 
 def _complete_login(c: RequestContext, user: User) -> None:
@@ -326,6 +329,7 @@ def mfa_enable(c: RequestContext, principal: Principal, code: str) -> tuple[sess
         raise InvalidMfaCode()
     user.mfa_enabled, user.mfa_last_used_step = True, step
     codes = mfa.new_recovery_codes(c.db, user.id)
+    trusted.revoke_all(c.db, user.id)
     sessions.revoke_all(c.db, user.id)  # includes the current one: rotated below
     new = sessions.create(
         c.db,
@@ -394,6 +398,7 @@ def _set_password(c: RequestContext, user: User, new_password: str) -> None:
     now = clock.now()
     user.password_hash = password_hasher(c.settings).hash(new_password)
     user.password_changed_at, user.updated_at = now, now
+    trusted.revoke_all(c.db, user.id)
     c.db.execute(
         update(UserToken)
         # every open token (reset, email change): a password reset must also stop a pending email change

@@ -206,7 +206,7 @@ The **only** path from AI output to a financial rule is: extraction → validato
 
 ## 9. Authentication and multi-tenancy
 
-- **Auth:** server-side sessions stored in Postgres (`sessions`), opaque random 256-bit token in an `HttpOnly; Secure; SameSite=Lax` cookie, rotated at login and privilege change; idle (30 min) and absolute (12 h) timeouts; TOTP MFA; CSRF double-submit header on mutating requests. Details: `SECURITY.md`.
+- **Auth:** server-side sessions stored in Postgres (`sessions`), opaque random 256-bit token in an `HttpOnly; Secure; SameSite=Lax` cookie, rotated at login and privilege change; idle (14 d) and absolute (14 d) timeouts; TOTP MFA; CSRF double-submit header on mutating requests. Details: `SECURITY.md`.
 - **Tenancy:** shared schema; `tenant_id` on every tenant-owned table; composite foreign keys `(tenant_id, id)`; RLS policies using `current_setting('app.tenant_id')`; app role without `BYPASSRLS`. Users are global identities; `memberships` bind a user to a tenant with a role. Active tenant is chosen per session and re-validated against membership on each request.
 
 ## 10. Core data flow (end to end)
