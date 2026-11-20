@@ -111,6 +111,10 @@ def create_workspace(db: Session, *, name: str, admin_user_id: UUID, meta: dict[
     return tenant_id
 
 
+def is_active(db: Session, tenant_id: UUID) -> bool:
+    return db.scalar(select(Tenant.status).where(Tenant.id == tenant_id)) == "active"
+
+
 def tenant_name(db: Session, tenant_id: UUID) -> str:
     name = db.scalar(select(Tenant.name).where(Tenant.id == tenant_id))
     if name is None:
@@ -351,6 +355,8 @@ def open_invitation(db: Session, token: str) -> Invitation:
         raise InvitationExpired()
     tenant_id, invitation_id = found
     set_tenant(db, tenant_id)
+    if not is_active(db, tenant_id):
+        raise InvitationExpired()  # same generic 410: no oracle on a suspended workspace
     inv = db.scalar(
         select(Invitation)
         .where(Invitation.tenant_id == tenant_id, Invitation.id == invitation_id)

@@ -89,7 +89,10 @@ def _upload_caller(request: Request) -> JSONResponse | None:
     if not token:
         return _error(Unauthenticated(), rid)
     with transaction(request.app.state.engine) as db:
-        principal, _ = identity.resolve_principal(db, settings, token)
+        try:
+            principal, _ = identity.resolve_principal(db, settings, token)
+        except DomainError as exc:
+            return _error(exc, rid)
         if principal is None:
             return _error(Unauthenticated(), rid)
         if not hmac.compare_digest(sent, identity.csrf_for(settings, principal.session_id)):
