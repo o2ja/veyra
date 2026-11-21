@@ -1,6 +1,6 @@
 # syntax=docker/dockerfile:1
 # Targets: `dev` (Vite dev server, source bind-mounted) and `static` (built SPA served by Caddy).
-FROM node:24.22.1-trixie-slim@sha256:89c5244bc22a9bc3287d89ebc7e49b9cb5bb84cd40e6175ac3421d5a9f68b95a AS deps
+FROM node:26.13.1-trixie-slim@sha256:e6bedef217677b276c591795e169840edd9096dbf13f29df8ef8d1856b8820bc AS deps
 WORKDIR /app
 COPY package.json package-lock.json ./
 RUN npm ci --no-fund --no-audit
@@ -15,5 +15,5 @@ FROM deps AS build
 COPY . .
 RUN npm run build
 
-FROM caddy:2.11.9-alpine@sha256:0bbb055bda6793c999bde78b1b5ce3e89f829fb031af2cf50056ea1246559fee AS static
+FROM caddy:2.11.9-alpine@sha256:003a97808e781aa9f7e75cc2f43d34d461099031faf5e20faefb9f61126836f0 AS static
 COPY --from=build /app/dist /srv/frontend
