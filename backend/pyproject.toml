@@ -5,26 +5,26 @@ description = "Veyra Recover backend (API, worker, pure engine and matching pack
 requires-python = ">=3.14,<3.15"
 dependencies = [
     "alembic==1.20.1",
-    "anthropic==2.7.0",
+    "anthropic==2.10.0",
     "argon2-cffi==25.1.0",
-    "boto3==1.43.127",
+    "boto3==1.44.5",
     "charset-normalizer==3.5.2",
     "cryptography==50.0.2",
     "defusedxml>=0.7.1",
-    "fastapi==0.162.2",
-    "gunicorn==26.2.0",
+    "fastapi==0.163.2",
+    "gunicorn==27.0.1",
     "httpx==0.28.1",
     "openpyxl==3.1.5",
     "pdfplumber==0.11.10",
-    "psycopg[binary]==3.3.8",
+    "psycopg[binary]==3.3.9",
     "pydantic==2.14.3",
-    "pydantic-settings==2.16.2",
-    "pyotp==2.10.0",
+    "pydantic-settings==2.16.3",
+    "pyotp==2.12.0",
     "pypdfium2==5.15.2",
     "python-magic==0.4.27",
-    "python-multipart==0.0.33",
+    "python-multipart==0.0.34",
     "segno==1.6.6",
-    "sqlalchemy==2.1.8",
+    "sqlalchemy==2.1.9",
     "structlog==26.1.0",
     "tenacity==9.2.1",
     "uuid-utils==1.2.0",
@@ -34,7 +34,7 @@ dependencies = [
 [dependency-groups]
 dev = [
     "bandit==1.9.4",
-    "boto3-stubs[s3]==1.43.126",
+    "boto3-stubs[s3]==1.44.5",
     "hypothesis==6.170.15",
     "import-linter==2.16",
     "mypy==2.4.1",
@@ -42,7 +42,7 @@ dev = [
     "pre-commit==4.7.0",
     "pytest==9.2.0",
     "pytest-cov==7.1.0",
-    "ruff==0.17.4",
+    "ruff==0.17.5",
 ]
 
 [build-system]
